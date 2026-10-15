@@ -14,11 +14,11 @@
   --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
 body{margin:0;background:var(--bg);color:var(--tx);
   font:15px/1.7 "Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif}
 a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
-code,kbd{font-family:var(--mono)}
+code,kbd{font-family:var(--mono);overflow-wrap:anywhere}
 .wrap{max-width:1200px;margin:0 auto;padding:0 24px}
 
 /* 顶栏 */
@@ -64,7 +64,13 @@ label.chk input{accent-color:var(--blu);padding:0}
 .stat{color:var(--dim);font-size:13px;white-space:nowrap;margin-left:auto}
 .stat b{color:var(--tx)}
 
-.tablewrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:66vh;overflow-y:auto}
+.tablewrap{border:1px solid var(--line);border-radius:12px;max-height:66vh;overflow:auto;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.tablewrap::-webkit-scrollbar{width:9px;height:9px}
+.tablewrap::-webkit-scrollbar-track{background:transparent}
+.tablewrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:5px}
+.tablewrap::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
+.tablewrap::-webkit-scrollbar-corner{background:transparent}
 table.data{width:100%;border-collapse:collapse}
 table.data th{position:sticky;top:0;z-index:2;background:var(--pnl);text-align:left;font-weight:600;
   font-size:11.5px;color:var(--dim);padding:10px 13px;border-bottom:1px solid var(--line);
@@ -87,18 +93,25 @@ section.disc{padding:44px 0 6px;border-top:1px solid var(--line)}
 .disc-h span{font-size:12.5px;color:var(--dim2);letter-spacing:1px}
 .disc .sub{color:var(--dim);font-size:14px;margin:8px 0 20px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid2 > *{min-width:0}
 @media(max-width:860px){.grid2{grid-template-columns:1fr}}
-.box{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:17px 19px}
+.box{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:17px 19px;min-width:0}
 .box h3{margin:0 0 8px;font-size:15px}
 .box p{margin:6px 0;color:var(--dim);font-size:14px}
 .box p b{color:var(--tx)}
+.box pre{overflow:auto;max-width:100%}
 pre{margin:0;background:#0a0f16;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
-  overflow:auto;font-family:var(--mono);font-size:12.8px;line-height:1.65;color:#cfe0f2}
+  overflow:auto;font-family:var(--mono);font-size:12.8px;line-height:1.65;color:#cfe0f2;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+pre::-webkit-scrollbar{width:8px;height:8px}
+pre::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:4px}
+pre::-webkit-scrollbar-track{background:transparent}
 pre .c{color:var(--dim2)}pre .k{color:var(--red2)}pre .s{color:var(--grn)}pre .f{color:var(--gold)}
-table.kind{width:100%;border-collapse:collapse;font-size:13.5px}
-table.kind th,table.kind td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2)}
+table.kind{width:100%;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
+table.kind th,table.kind td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2);
+  overflow-wrap:anywhere}
 table.kind th{color:var(--dim);font-weight:600;font-size:12px}
-table.kind code{color:var(--gold);font-size:12.5px}
+table.kind code{color:var(--gold);font-size:12.5px;word-break:break-all;white-space:normal}
 .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
 .step{flex:1 1 180px;background:var(--pnl);border:1px solid var(--line);border-radius:10px;padding:13px 15px;min-width:170px}
 .step .s-n{font-family:var(--mono);font-size:11px;color:var(--red2);letter-spacing:1px}
@@ -114,9 +127,26 @@ footer b{color:var(--dim)}
   background:#1c2736;border:1px solid var(--line);color:var(--tx);border-radius:999px;
   padding:9px 18px;font-size:13px;transition:.25s;pointer-events:none;z-index:50}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* 顶部阅读进度 + 滚动进场 */
+.progress{position:fixed;top:0;left:0;height:2px;width:100%;z-index:60;pointer-events:none;
+  transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,var(--red),var(--red2))}
+html.js .reveal{opacity:0;transform:translateY(12px);
+  transition:opacity .6s cubic-bezier(.2,.7,.3,1),transform .6s cubic-bezier(.2,.7,.3,1)}
+html.js .reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){html.js .reveal{opacity:1;transform:none;transition:none}}
+@media(max-width:820px){
+  .top .wrap{height:auto;padding-top:8px;padding-bottom:8px}
+  .top nav{overflow-x:auto;max-width:100%;scrollbar-width:none}
+  .top nav::-webkit-scrollbar{display:none}
+  .qhead h1{font-size:24px}
+  .out{font-size:22px}
+}
 </style>
 </head>
 <body>
+
+<div class="progress" id="pg"></div>
 
 <div class="top"><div class="wrap">
   <span class="brand"><img src="assets/emblem.png" alt=""><i></i>单位代码</span>
@@ -442,6 +472,38 @@ tb.addEventListener('click', e => {
     () => showToast('已复制 ' + code), () => showToast(code));
   else showToast(code);
 });
+
+/* 顶部阅读进度 */
+(function(){
+  var pg = document.getElementById('pg'), raf = 0;
+  function onScroll(){
+    var de = document.documentElement, max = de.scrollHeight - de.clientHeight;
+    var r = max > 0 ? de.scrollTop / max : 0;
+    pg.style.transform = 'scaleX(' + Math.min(Math.max(r, 0), 1).toFixed(4) + ')';
+  }
+  window.addEventListener('scroll', function(){
+    if (raf) return;
+    raf = requestAnimationFrame(function(){ raf = 0; onScroll(); });
+  }, {passive:true});
+  onScroll();
+})();
+
+/* 滚动进场 */
+(function(){
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+  document.documentElement.classList.add('js');
+  var els = [].slice.call(document.querySelectorAll('.disc-h,.disc .sub,.box,.step,.flow,.panel,.res'));
+  els.forEach(function(el){
+    el.classList.add('reveal');
+    var sibs = el.parentElement ? [].indexOf.call(el.parentElement.children, el) : 0;
+    el.style.transitionDelay = Math.min(Math.max(sibs, 0) * 60, 360) + 'ms';
+  });
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {rootMargin:'0px 0px -6% 0px', threshold:.06});
+  els.forEach(function(el){ io.observe(el); });
+})();
 </script>
 </body>
 </html>

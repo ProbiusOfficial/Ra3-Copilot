@@ -39,6 +39,8 @@ JOBS = {
     'character_bust.png':       (TOL, 'flood'),
     'character_chibi.png':      (TOL, 'flood'),
     'character_silhouette.png': (TOL, 'flood'),
+    'character_shadow.png':     (TOL, 'flood'),
+    'character_dark.png':       (20,  'flood'),   # 黑底：小容差，护住深色围巾/耳机
     # ---- 徽记 / 字标 / 图标（白底产品图）----
     'logo_ra3copilot.png':      (TOL_T, 'flood'),
     'emblem.png':               (TOL_T, 'flood'),
