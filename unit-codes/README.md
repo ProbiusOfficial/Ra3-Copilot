@@ -4,7 +4,7 @@
 > 一句话结论：**单位代码 = SAGE 对象类型哈希 = `StringHasher.Hash(对象模板名.lower())`**，
 > 已用 408 条运行时实测 + 社区《增援代码》表 + 官方单位图鉴三方交叉核对通过，**可以离线算，不再需要查表**。
 
-当前状态（2026-10-15）：**可召唤且能用 = 408 条单位 + 54 个箱子**，已刷新进 `trainer-v2/src/units_corona.h`。
+当前状态（2026-10-15）：**可召唤且能用 = 408 条单位 + 54 个箱子**，已刷新进 `ra3-copilot/src/units_corona.h`。
 
 > 🌐 **查询器**：站点在仓库根 `site/` —— 浏览器打开 **`site/units.html`**（主体是「按名字离线算代码 + 全量检索」，下方附研究过程披露）。
 
@@ -145,13 +145,13 @@ unit-codes/data/source/game_objects.jsonl
         │
         ├─ gen_unit_codes.py ─→ unit_codes_all.tsv / unit_codes_trainer.tsv（全量候选）
         │
-        │  trainer-v2/tools/probe_callable.py     ← 逐条 ThingFactory::Find 实测"模板存不存在"
-        │  trainer-v2/tools/fix_callable.py       ← 变体替换 + ★ 可用性过滤（SELECTABLE）
+        │  ra3-copilot/tools/probe_callable.py     ← 逐条 ThingFactory::Find 实测"模板存不存在"
+        │  ra3-copilot/tools/fix_callable.py       ← 变体替换 + ★ 可用性过滤（SELECTABLE）
         ▼
 unit-codes/data/callable_final.tsv        （410 条：能创建 + 能用）
-        │  trainer-v2/tools/gen_units_corona.py
+        │  ra3-copilot/tools/gen_units_corona.py
         ▼
-trainer-v2/src/units_corona.h             （408 单位 + 54 箱子）
+ra3-copilot/src/units_corona.h             （408 单位 + 54 箱子）
 ```
 
 ### 4.2 单独重跑某一步
@@ -167,7 +167,7 @@ python gen_site.py                                      # 生成 仓库根 site/
 python filter_usable.py            # 就地过滤 callable_final.tsv，原文件自动备份
 
 # 需要游戏运行 + 修改器已注入
-cd ../../trainer-v2/tools
+cd ../../ra3-copilot/tools
 python probe_callable.py           # 逐条实测
 python fix_callable.py             # 变体替换 + 可用性过滤
 python gen_units_corona.py         # 刷新 units_corona.h

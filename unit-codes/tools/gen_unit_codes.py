@@ -9,7 +9,7 @@ Source files (all under ../data/source/)
   data_mod.str             Cor_ENG.big    -> NAME/DESC/TYPE  (驼峰键；英文包)
   gamestrings_cn.csf       Lang-ChineseT13.big -> NAME/DESC/TYPE (全大写键；中文)
 Ground truth
-  ../../trainer-v2/src/units_corona.h  -> 436 条实机验证过的 名字 -> 代码
+  ../../ra3-copilot/src/units_corona.h  -> 436 条实机验证过的 名字 -> 代码
 
 Code algorithm
   code = StringHasher.Hash(name.lower())     (SuperFastHash 变体)
@@ -29,7 +29,7 @@ from sage_hash import sage_hash
 SRC = os.path.join(ARCHIVE, 'data', 'source')
 DATA = os.path.join(ARCHIVE, 'data')
 ROOT = os.path.abspath(os.path.join(ARCHIVE, '..'))
-CORONA_H = os.path.join(ROOT, 'trainer-v2', 'src', 'units_corona.h')
+CORONA_H = os.path.join(ROOT, 'ra3-copilot', 'src', 'units_corona.h')
 
 TYPE_ALT = (r'GameObject|WeaponTemplate|UpgradeTemplate|SpecialPowerTemplate|ObjectCreationList|'
             r'FXList|LocomotorTemplate|ArmorTemplate|PlayerTemplate|FXParticleSystemTemplate|'

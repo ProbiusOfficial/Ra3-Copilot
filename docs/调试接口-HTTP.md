@@ -3,7 +3,7 @@
 > 目的：**不用退游戏**就能验证功能。修改器 DLL 内部起一个只在 `127.0.0.1` 监听的 HTTP 服务，
 > 用 `curl` 就能读状态、改内存、调游戏函数、触发功能。
 >
-> 端口：**17832** ｜ 实现：`trainer-v2/src/httpapi.cpp` ｜ 接线：`OverlayInit()` 启动、`BuildUI()` 每帧 `HttpApiPump()`
+> 端口：**17832** ｜ 实现：`ra3-copilot/src/httpapi.cpp` ｜ 接线：`OverlayInit()` 启动、`BuildUI()` 每帧 `HttpApiPump()`
 
 ---
 
@@ -106,7 +106,7 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 
 ## 六、当前状态
 
-- 端点已全部实现并**编译通过**，DLL 已同步到 `trainer-v2\ra3trainer.dll`（md5 `2eae16fb…`, 745984 B）。
+- 端点已全部实现并**编译通过**，DLL 已同步到 `ra3-copilot\ra3copilot.dll`（md5 `2eae16fb…`, 745984 B）。
 - 游戏未启动；**下次进对局注入后即可直接用**。
 
 ---

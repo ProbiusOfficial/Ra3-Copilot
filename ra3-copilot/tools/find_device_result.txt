@@ -1,0 +1,13 @@
+[*] pid=62448 d3d9.dll base=0x66410000 size=1548288
+[*] scanned 1522 MB, candidates=46475
+[+] device obj=0x011ed000 vtable=0x66412c88 Present=0x664c39a0 EndScene=0x664df5d0
+[+] device obj=0x0120ceb4 vtable=0x66411324 Present=0x66486690 EndScene=0x66491be0
+[+] device obj=0x0120ceb8 vtable=0x66411308 Present=0x66548410 EndScene=0x66486220
+[+] device obj=0x13671100 vtable=0x66414804 Present=0x6646b9d0 EndScene=0x66492000
+[+] device obj=0x17251040 vtable=0x6641170c Present=0x66491ae0 EndScene=0x6653b850
+[+] device obj=0x172f6980 vtable=0x66411794 Present=0x66494790 EndScene=0x66543d60
+[+] device obj=0x172f6c40 vtable=0x664126bc Present=0x66493d00 EndScene=0x66417698
+[+] device obj=0x1732e080 vtable=0x664126a0 Present=0x66493840 EndScene=0x66493d00
+[+] device obj=0x1be00120 vtable=0x664124c0 Present=0x66494790 EndScene=0x66494790
+[+] device obj=0x1be00124 vtable=0x664124b8 Present=0x66494790 EndScene=0x66494790
+[*] distinct vtables: 10

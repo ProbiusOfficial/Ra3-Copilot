@@ -35,7 +35,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
   "mcpServers": {
     "ra3-copilot": {
       "command": "python",
-      "args": ["<绝对路径>\\trainer-v2\\mcp\\ra3_mcp.py"]
+      "args": ["<绝对路径>\\ra3-copilot\\mcp\\ra3_mcp.py"]
     }
   }
 }
@@ -198,7 +198,7 @@ python auto_attack.py --loop 20         # 每 20 秒重新分析、分配
 
 ---
 
-## 6. MCP 工具清单（`trainer-v2/mcp/ra3_mcp.py`）
+## 6. MCP 工具清单（`ra3-copilot/mcp/ra3_mcp.py`）
 
 | 工具 | 作用 |
 |---|---|

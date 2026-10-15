@@ -65,7 +65,7 @@ if __name__ == '__main__':
                 pairs.append((c[2], int(c[3], 16)))
 
     # 真值 2：修改器头文件里的条目（兼容两代格式）
-    hdr = os.path.join(arch, '..', 'trainer-v2', 'src', 'units_corona.h')
+    hdr = os.path.join(arch, '..', 'ra3-copilot', 'src', 'units_corona.h')
     if os.path.exists(hdr):
         txt = io.open(hdr, encoding='utf-8').read()
         for m in re.finditer(r'"([A-Za-z][A-Za-z0-9_]*)"[^"]*",\s*(?:u8")?[^"]*"?,?\s*(0x[0-9A-Fa-f]+)u', txt):

@@ -17,7 +17,7 @@
 | 单位 | 选中单位变速 / 改血 / 收编 / 摧毁 / 满级；召唤单位与基地车；空投箱子（支持按周期自动空投） |
 | 感知 | 全图活体对象枚举（单位 / 建筑 / AI / 坐标 / 血量，按归属分组，零人工点选）；`/objects` `/obj` 即席查询 |
 | 指挥 | AIUpdate 直调：移动 / 攻击 / 建造（`/aicall`，均已实机验证） |
-| 接口 | MCP stdio 服务器（`trainer-v2/mcp/`）：AI 看局势、查单位、召唤、空投、动单位、改全局；面板总闸默认关闭，打开才允许变更 |
+| 接口 | MCP stdio 服务器（`ra3-copilot/mcp/`）：AI 看局势、查单位、召唤、空投、动单位、改全局；面板总闸默认关闭，打开才允许变更 |
 | 辅助 | 光标落点（真实世界坐标）、本地玩家追踪、实时资金显示、带时间戳的操作日志区 |
 | 调试 | 进程内 HTTP 接口 `127.0.0.1:17832`（`/state` `/read` `/peek` `/summon` `/poke` `/call` `/aicall` …） |
 
@@ -26,12 +26,12 @@
 要求：**VS2019 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.19041**
 
 ```bat
-trainer-v2\build.bat
+ra3-copilot\build.bat
 ```
 
 产物（均为 x86——游戏是 32 位进程，注入器必须同位数）：
 
-- `ra3trainer.dll` —— 注入模块
+- `ra3copilot.dll` —— 注入模块
 - `injector.exe` —— 注入器
 
 > `build.bat` 不调用 `vcvars32.bat`（其内部调用的 `reg.exe` 会被部分环境的安全策略拦截），改为显式设置 `PATH/INCLUDE/LIB`。
@@ -40,14 +40,14 @@ trainer-v2\build.bat
 改钩子 / 改 AOB 后，交付前先用真实游戏 exe 做字节级预检：
 
 ```bat
-python trainer-v2\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
+python ra3-copilot\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
 rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ```
 
 ## 使用
 
 1. 启动游戏并进入对局（遭遇战 / 战役均可）
-2. 运行 `trainer-v2\deploy.bat`（自动 UAC 提权 → 注入 → 打印诊断；Python 仅用于只读诊断，可用 `RA3_PY` 指定解释器）
+2. 运行 `ra3-copilot\deploy.bat`（自动 UAC 提权 → 注入 → 打印诊断；Python 仅用于只读诊断，可用 `RA3_PY` 指定解释器）
 3. 游戏内 `INSERT` 显示 / 隐藏菜单，`F7` 加钱
 4. 需要 AI 接入时，在面板打开「脑机接口」总闸（详见 `docs/MCP开放-脑机接口.md`）
 
@@ -58,7 +58,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 │   ├── index.html         首页
 │   ├── units.html         单位代码查询器（全量检索 + 离线复算）
 │   └── assets/            全套美术资源
-├── trainer-v2/            产品本体
+├── ra3-copilot/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions
 │   │                      aicmd（AIUpdate 直调）/ battlefield（战场枚举）/ httpapi / symres（符号解析）
 │   │                      stubs.asm（MASM 壳）/ units_corona.h（可召唤单位代码表）
@@ -91,11 +91,11 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 
 ## 第三方组件
 
-- [MinHook](https://github.com/TsudaKageyu/minhook) 1.3.3 —— BSD-2-Clause（`trainer-v2/third_party/`）
-- [Dear ImGui](https://github.com/ocornut/imgui) v1.91.4 —— MIT（`trainer-v2/imgui/`）
+- [MinHook](https://github.com/TsudaKageyu/minhook) 1.3.3 —— BSD-2-Clause（`ra3-copilot/third_party/`）
+- [Dear ImGui](https://github.com/ocornut/imgui) v1.91.4 —— MIT（`ra3-copilot/imgui/`）
 
 ## 仓库边界
 
-本仓库收录 **Ra3-Copilot 官网（`site/`，已部署 GitHub Pages）、产品本体（`trainer-v2/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
+本仓库收录 **Ra3-Copilot 官网（`site/`，已部署 GitHub Pages）、产品本体（`ra3-copilot/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
 
 游戏原始数据抽取物与第三方图鉴数据（`unit-codes/data/source/`）亦不随仓库分发，可由 `unit-codes/tools/` 自行重新生成。

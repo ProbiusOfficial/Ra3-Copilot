@@ -333,7 +333,7 @@ footer .fbase b{color:var(--dim);font-weight:600}
 <section id="arch">
   <div class="sec-h"><span class="no">/ 03</span><h2>系统架构</h2><span class="line"></span></div>
   <p class="sec-sub">功能核（内存挂钩）+ 渲染层（inline-hook）+ 副官接口，三层协作。</p>
-  <div class="arch"><pre>injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► <i>ra3trainer.dll</i> (in-game)
+  <div class="arch"><pre>injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► <i>ra3copilot.dll</i> (in-game)
                                                             │
                      ┌──────────────────────────────────────┼────────────────────────┐
                      ▼                                      ▼                        ▼
@@ -351,7 +351,7 @@ footer .fbase b{color:var(--dim);font-weight:600}
   <p class="sec-sub">需要先进入对局；注入器与游戏同为 32 位。</p>
   <div class="steps">
     <div class="step"><div class="n">STEP 01</div><h3>启动游戏</h3><p>通过启动器进入对局（遭遇战 / 战役均可）。</p></div>
-    <div class="step"><div class="n">STEP 02</div><h3>注入</h3><p>运行 <code>trainer-v2\deploy.bat</code>，自动提权并注入，随后打印诊断。</p></div>
+    <div class="step"><div class="n">STEP 02</div><h3>注入</h3><p>运行 <code>ra3-copilot\deploy.bat</code>，自动提权并注入，随后打印诊断。</p></div>
     <div class="step"><div class="n">STEP 03</div><h3>呼出面板</h3><p>游戏内按 <code>INSERT</code> 显示菜单，<code>F7</code> 加钱。</p></div>
   </div>
 </section>
@@ -380,7 +380,7 @@ footer .fbase b{color:var(--dim);font-weight:600}
   "mcpServers": {
     "ra3-copilot": {
       "command": "python",
-      "args": ["&lt;仓库&gt;/trainer-v2/mcp/ra3_mcp.py"]
+      "args": ["&lt;仓库&gt;/ra3-copilot/mcp/ra3_mcp.py"]
     }
   }
 }</pre></div>
