@@ -1,8 +1,11 @@
 # Ra3-Copilot
 
-红色警戒 3 日冕 Mod（`ra3_1.12.game`，v1.12.3444.25830，32 位）的**注入型进程内修改器**——以局内覆盖层（overlay）形式接入游戏，按 `INSERT` 呼出菜单，提供资源 / 战斗 / 单位 / 召唤 / 空投等辅助能力。
+红色警戒 3 日冕 Mod（`ra3_1.12.game`，v1.12.3444.25830，32 位）的**注入型进程内作战辅助系统**——以局内覆盖层（overlay）形式接入游戏，按 `INSERT` 呼出菜单，提供资源 / 战斗 / 单位 / 召唤 / 空投等辅助能力，并通过 **MCP 脑机接口**把战局开放给 AI。
 
 > 仅用于单机学习与研究。**版本强绑定**：钩子 RVA 硬编码于 v1.12.3444.25830，注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
+> 适配基线：日冕 Mod v1.12；其他版本需重新定位 RVA / AOB。
+
+**官网** → <https://probiusofficial.github.io/Ra3-Copilot/>
 
 ## 功能一览
 
@@ -11,11 +14,14 @@
 | 渲染 | MinHook inline-hook d3d9 `Present/EndScene`，ImGui 直接画在游戏画面内（不抢焦点、切窗口不静默） |
 | 资源 | 加钱 / 设置资金、电力满、科技点满、全科技、快速建造、敌方无法建造 |
 | 战斗 | 玩家无敌、选中单位弹药满、超武就绪 / 禁用敌方超武、危险等级干预、全图去迷雾 |
-| 单位 | 选中单位变速 / 改血 / 收编 / 摧毁；召唤单位与基地车；空投箱子（支持按周期自动空投） |
+| 单位 | 选中单位变速 / 改血 / 收编 / 摧毁 / 满级；召唤单位与基地车；空投箱子（支持按周期自动空投） |
+| 感知 | 全图活体对象枚举（单位 / 建筑 / AI / 坐标 / 血量，按归属分组，零人工点选）；`/objects` `/obj` 即席查询 |
+| 指挥 | AIUpdate 直调：移动 / 攻击 / 建造（`/aicall`，均已实机验证） |
+| 接口 | MCP stdio 服务器（`trainer-v2/mcp/`）：AI 看局势、查单位、召唤、空投、动单位、改全局；面板总闸默认关闭，打开才允许变更 |
 | 辅助 | 光标落点（真实世界坐标）、本地玩家追踪、实时资金显示、带时间戳的操作日志区 |
-| 调试 | 进程内 HTTP 接口 `127.0.0.1:17832`（`/state` `/read` `/peek` `/summon` `/poke` `/call` …） |
+| 调试 | 进程内 HTTP 接口 `127.0.0.1:17832`（`/state` `/read` `/peek` `/summon` `/poke` `/call` `/aicall` …） |
 
-## 构建
+## 快速开始
 
 要求：**VS2019 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.19041**
 
@@ -28,21 +34,34 @@ trainer-v2\build.bat
 - `ra3trainer.dll` —— 注入模块
 - `injector.exe` —— 注入器
 
-> `build.bat` 不调用 `vcvars32.bat`（其内部调用的 `reg.exe` 会被本机安全策略拦截），改为显式设置 `PATH/INCLUDE/LIB`。
+> `build.bat` 不调用 `vcvars32.bat`（其内部调用的 `reg.exe` 会被部分环境的安全策略拦截），改为显式设置 `PATH/INCLUDE/LIB`。
 > `.bat` 必须保持 CRLF 行尾 + 纯 ASCII 内容，仓库已通过 `.gitattributes` 保证检出为 CRLF。
+
+改钩子 / 改 AOB 后，交付前先用真实游戏 exe 做字节级预检：
+
+```bat
+python trainer-v2\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
+rem 也可用环境变量 RA3_GAME_EXE 指定路径
+```
 
 ## 使用
 
 1. 启动游戏并进入对局（遭遇战 / 战役均可）
-2. 运行 `trainer-v2\deploy.bat`（自动 UAC 提权 → 注入 → 打印诊断）
+2. 运行 `trainer-v2\deploy.bat`（自动 UAC 提权 → 注入 → 打印诊断；Python 仅用于只读诊断，可用 `RA3_PY` 指定解释器）
 3. 游戏内 `INSERT` 显示 / 隐藏菜单，`F7` 加钱
+4. 需要 AI 接入时，在面板打开「脑机接口」总闸（详见 `docs/MCP开放-脑机接口.md`）
 
 ## 目录
 
 ```
-├── site/                  项目官网（index.html 首页 + units.html 单位代码子页面 + assets/）
+├── site/                  项目官网（已部署 GitHub Pages）
+│   ├── index.html         首页
+│   ├── units.html         单位代码查询器（全量检索 + 离线复算）
+│   └── assets/            全套美术资源
 ├── trainer-v2/            产品本体
-│   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions / stubs.asm（MASM 壳）
+│   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions
+│   │                      aicmd（AIUpdate 直调）/ battlefield（战场枚举）/ httpapi / symres（符号解析）
+│   │                      stubs.asm（MASM 壳）/ units_corona.h（可召唤单位代码表）
 │   ├── imgui/             Dear ImGui v1.91.4（MIT）
 │   ├── third_party/       MinHook 1.3.3（BSD-2-Clause）
 │   ├── tools/             AOB 预检 / 注入诊断 / 渲染探针等脚本
@@ -53,15 +72,9 @@ trainer-v2\build.bat
 │   ├── README.md / 单位代码与哈希算法.md   结论与完整报告
 │   ├── data/              派生清单（.tsv / .h）
 │   └── tools/             提取逻辑：哈希算法 / 图鉴拉取 / 清单生成 / 建站
-└── docs/                  局内渲染方案 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口 / 美术资源清单
+└── docs/                  局内渲染 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口
+                           MCP 脑机接口 / AIUpdate 直调指挥方案 / 美术资源清单
 ```
-
-## 站点
-
-- **官网首页** → `site/index.html`（视觉优先；立绘资源见 `docs/美术资源清单.md`）
-- **单位代码查询器** → `site/units.html`（名字→代码离线计算 + 全量检索；下方附研究过程披露）
-
-均为纯静态页面，浏览器直接打开即可，无需服务器。
 
 ## 单位代码
 
@@ -72,7 +85,9 @@ trainer-v2\build.bat
 ```
 
 本项目把日冕全量 **5461 条**对象代码整理成表并可离线复算，其中「可召唤且能用」**410 条**。
-查询器：用浏览器打开 **`unit-codes/site/index.html`**（纯静态、离线可用，支持按名字离线算代码）。
+
+- 在线查询 → <https://probiusofficial.github.io/Ra3-Copilot/units.html>
+- 本地查询 → `site/units.html`（纯静态、离线可用，支持按名字离线算代码）
 
 ## 第三方组件
 
@@ -81,6 +96,6 @@ trainer-v2\build.bat
 
 ## 仓库边界
 
-本仓库收录 **Ra3-Copilot 产品本体（`trainer-v2/`）、项目官网（`site/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
+本仓库收录 **Ra3-Copilot 官网（`site/`，已部署 GitHub Pages）、产品本体（`trainer-v2/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
 
 游戏原始数据抽取物与第三方图鉴数据（`unit-codes/data/source/`）亦不随仓库分发，可由 `unit-codes/tools/` 自行重新生成。
