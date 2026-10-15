@@ -131,17 +131,19 @@ section{padding:96px 0;border-top:1px solid var(--line2);position:relative}
 .fcard h3{margin:0 0 8px;font-size:15.5px;font-weight:700}
 .fcard p{margin:0;color:var(--dim);font-size:13.5px;line-height:1.7}
 
-/* 立绘展示 */
-.artwall{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.artwall .cell{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;
-  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(217,117,123,.05));min-height:400px;
-  display:flex;align-items:flex-end;justify-content:center}
-.artwall .cell img{width:100%;display:block;transition:.4s}
-.artwall .cell:hover img{transform:translateY(-6px) scale(1.02)}
-.artwall .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;font-size:12.5px;
-  background:linear-gradient(180deg,transparent,rgba(0,0,0,.72));color:var(--dim)}
-.artwall .cap b{color:var(--tx);display:block;font-size:13.5px}
-@media(max-width:900px){.artwall{grid-template-columns:1fr}}
+/* 副官档案 */
+.charwrap{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start}
+.char-main{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(217,117,123,.06))}
+.char-main img{width:100%;display:block}
+.char-main .tagname{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:11px;
+  letter-spacing:2px;color:var(--dim2)}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.slot{aspect-ratio:4/5;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:flex-end;
+  padding:8px;font-family:var(--mono);font-size:10px;line-height:1.4;color:var(--dim2);
+  background:rgba(255,255,255,.02);word-break:break-all}
+.note-line{color:var(--dim2);font-size:12.5px;margin:14px 0 0}
+@media(max-width:900px){.charwrap{grid-template-columns:1fr}}
 
 /* 架构 */
 .arch{border:1px solid var(--line);border-radius:4px;background:#0b0d10;padding:22px 24px;overflow:auto}
@@ -214,9 +216,9 @@ footer b{color:var(--dim)}
     <div class="hero-art">
       <div class="frame"></div>
       <div class="ph">
-        <img src="assets/character_full.png" alt="RA3-COPILOT 副官"
-             onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_final.png';this.classList.add('softmask');}else{this.style.display='none';this.parentNode.classList.add('isph');}">
-        <span class="phlabel">assets/character_full.png</span>
+        <img src="assets/character_base.png" alt="RA3-COPILOT 副官" class="softmask"
+             onerror="this.style.display='none';this.parentNode.classList.add('isph');">
+        <span class="phlabel">assets/character_base.png</span>
       </div>
     </div>
   </div>
@@ -281,13 +283,31 @@ footer b{color:var(--dim)}
 <section id="gallery">
   <div class="sec-h"><span class="no">/ 03</span><h2>副官档案</h2><span class="line"></span></div>
   <p class="sec-sub">RA3-COPILOT 的视觉形象：一名在指挥所待命的技术副官。</p>
-  <div class="artwall">
-    <div class="cell"><img src="assets/character_full.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_final.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_full.png</span>'}))}">
-      <div class="cap"><b>基准立绘</b>白发猫耳 · 指挥所待命</div></div>
-    <div class="cell"><img src="assets/character_alt_1.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_arknights.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_1.png</span>'}))}">
-      <div class="cap"><b>差分 · 冷调</b>灰发蓝瞳 · 同制服</div></div>
-    <div class="cell"><img src="assets/character_alt_2.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_loli.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_2.png</span>'}))}">
-      <div class="cap"><b>差分 · 作战室</b>全息战术地图</div></div>
+  <div class="charwrap">
+    <div class="char-main">
+      <img src="assets/character_base.png" class="softmask" alt="RA3-COPILOT 副官">
+      <span class="tagname">CHARACTER_BASE // 基准立绘</span>
+    </div>
+    <div class="char-info">
+      <div class="kvbox">
+        <h4>档案 / PROFILE</h4>
+        <dl>
+          <dt>身份</dt><dd>技术副官 · 战术操作员</dd>
+          <dt>发色</dt><dd>银白短发 · 白色猫耳</dd>
+          <dt>瞳色</dt><dd>红</dd>
+          <dt>制服</dt><dd>灰白双排扣军装</dd>
+          <dt>配件</dt><dd>头戴式耳机 · 皮质文件夹</dd>
+          <dt>气质</dt><dd>冷静 · 克制 · 话少</dd>
+        </dl>
+      </div>
+      <div class="mini">
+        <div class="slot">assets/character_alt_1.png · 差分「作战中」</div>
+        <div class="slot">assets/character_alt_2.png · 差分「联络」</div>
+        <div class="slot">assets/character_chibi.png · Q 版</div>
+      </div>
+      <p class="note-line">整站美术围绕她展开；待补差分与场景资源的**提示词**见
+        <code>docs/美术资源清单.md</code>。生成后按文件名丢进 <code>site/assets/</code> 即自动点亮。</p>
+    </div>
   </div>
 </section>
 
