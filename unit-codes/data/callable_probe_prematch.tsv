@@ -1,0 +1,719 @@
+faction	chinese_name	id	code_hex	callable
+神州	量子建造核心	CC_CoreObject	0xE3B410D9	1
+神州	神州战术核弹信标	Celestial_Ship_Missile_Target	0x7B967C6A	1
+神州	摇光巡天炮	CelestialAdvanceAircraftTech4	0x2A12E0C1	1
+神州	摇光瞄准信标	CelestialAdvanceAircraftTech4Target	0x3D2314C1	1
+神州	迅雷天罡	CelestialAIIT3_S01	0x01C0AF92	1
+神州	凌波护卫战车	CelestialAirDrop_Land	0x2A2CC306	1
+神州	Air Force Airpad	CelestialAirfield	0x91A6C260	1
+神州	计蒙驱逐舰	CelestialAlmightlyShip	0x2A955297	1
+神州	磁弩防空系统	CelestialAntiAirShip	0x9C6C7CE6	1
+神州	Magbow Tank Destroyer	CelestialAntiAirShip_EMC	0x5E105EE4	0
+神州	磁弩高射炮	CelestialAntiAirVehicle	0x8C9004A3	0
+神州	龙炎军	CelestialAntiInfantryInfantry	0x51A8FBE1	1
+神州	迅雷天罡	CelestialAntiInfantryInfantryAdvanced	0x1DC3F329	1
+神州	凌波护卫战车	CelestialAntiInfantryVehicle	0x31AC0A98	1
+神州	乌篷猎船	CelestialAntiNavyShipTech1	0x5A436CDB	1
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3	0xF48E750F	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip	0x475F7CF6	1
+神州	白虎量子重炮运载车	CelestialAntiStructureVehicle	0x9727F012	1
+神州	破甲铁卫	CelestialAntiVehicleInfantry	0x6C3AF682	1
+神州	麒麟破阵战车	CelestialAntiVehicleVehicleTech1	0x437A547A	1
+神州	祝融攻坚战车	CelestialAntiVehicleVehicleTech3	0xC70DBDA9	1
+神州	破军金甲	CelestialAntiVehicleVehicleTech4	0x703BAB39	1
+神州	朱雀攻击机	CelestialAttackerAircraft	0x6343827B	1
+神州	Celestial Embodiment	CelestialAVVT4AntiEMP	0xCB0D48FE	0
+神州	Deploy Breathing Cannon	CelestialBarracksWeapon	0x7A51D4E4	0
+神州	Deposit Ding	CelestialBattery	0x10DC4637	1
+神州	金乌轰炸机	CelestialBomberAircraft	0x41F44EF3	1
+神州	Centurion	CelestialCenturion	0x084EE567	0
+神州	Construction Yard	CelestialConstructionYard	0x1C5EE05B	1
+神州	东风洲际导弹发射车	CelestialDF41	0x25241CE6	1
+神州	Piercing Thunderbolt	CelestialEMGUpgrade	0xFA2808E3	0
+神州		CelestialEMSuppressField	0xD9EA7BFF	0
+神州	Descending Flames	CelestialEMTurretDrop	0x8211099D	0
+神州	Swift Thunder Guntower	CelestialEnergyGatlingTower	0xF84AA5E2	1
+神州	Heavenly Arc	CelestialEnergyRailgunBase	0xCCA5F13A	1
+神州	军部司械	CelestialEngineer	0x33DFE2A4	1
+神州	Repair Lantern	CelestialEngineerDrone	0xBB4F4FD7	1
+神州	维修天灯	CelestialEngineerRepairDrone	0xF468932E	1
+神州	中型维修天灯	CelestialEngineerRepairDroneLv2	0xAFE3F1F4	1
+神州	大型维修天灯	CelestialEngineerRepairDroneLv3	0x691BDF83	1
+神州	凤凰战机	CelestialFighterAircraft	0x0945F8BD	1
+神州	天眼哨机	CelestialFireworkTrigger	0x19419824	1
+神州	神州军用叉车	CelestialForkLiftVehicle	0x3B2F6E33	1
+神州	祝融雷铳战车	CelestialHeavyAntiAirVehicleTech3	0x6ECEAEBD	1
+神州	Qingfeng ATGM Launcher	CelestialHJ-10	0x1855E75A	0
+神州	Seeker Missiles	CelestialHuntingMissile	0xD746503B	0
+神州	Crushing Battery	CelestialHuntingMissileOff	0x480C97C5	0
+神州	岚影刺	CelestialInfiltrationInfantry	0x948C8A98	1
+神州	岚影刺	CelestialInfiltrationInfantryBase	0xD425C8E8	1
+神州	重明截击机	CelestialInterceptorAircraft	0x0D0CCC90	1
+神州	Aeroflamma	CelestialLaserTower	0x01627771	1
+神州	Celestial Blessing	CelestialLightningTroop	0x75E88F09	0
+神州	青锋导弹车	CelestialLongRangeMissileVehicle	0x1726289A	1
+神州	Robotic Arm	CelestialMachineArm	0x6C96ED99	1
+神州	貔貅破阵战车—甲型	CelestialMBT99A	0x63DC81C4	1
+神州	貔貅破阵战车—乙型	CelestialMBT99B	0x8F2A3EBB	1
+神州	青龙战斗核心舰	CelestialMCV	0xC33CCE67	1
+神州	磁浮矿机	CelestialMiner	0x6AFB800D	1
+神州	Deploy AShM Turret	CelestialNavalYardMissileTower	0x0C4D50B2	0
+神州	Intermediate Guiding Centre	CelestialOutPost	0x03EFB861	1
+神州	Armistice Field	CelestialPlayerPowerPause	0x4DF095D6	0
+神州	Fusion Gloriette	CelestialPowerPlant	0xE7B1F1F5	1
+神州	Diversion Spire	CelestialPowerPlantAdvanced	0xB73ECE1D	1
+神州	Sparking Revelation	CelestialPowerPlantDetection	0x9DA583DD	0
+神州	Power Tribute	CelestialPowerSealOff	0x0DED731D	0
+神州	Roar of Suppression	CelestialQuantumBreak	0x8AB47846	0
+神州	Quantum Entanglement	CelestialQuantumLink	0xFF50FFD6	0
+神州	Qu'est-ce que la libération des nuages???	CelestialRailDeliveryBase	0xBF66882D	0
+神州	Ore Furnace	CelestialRefinery	0xCD6164E6	1
+神州	神州礼炮	CelestialSaluteGun	0x9536F4F5	1
+神州		CelestialSatelliteLaserSweep	0xA4F62BB7	0
+神州	天眼哨机	CelestialScoutDrone	0x727FF6F5	1
+神州	一式磁轨炮重巡	CelestialSeized_JapanAntiNavyShipTech3	0x87711A73	1
+神州	磁弩高射炮	CelestialShipNearDefenseMissileTurret	0xBE66759B	0
+神州	Lotus Beacon	CelestialSonarBuoyObject	0x16C33B74	0
+神州	Alekhine's Gun	CelestialSpaceReinforce	0x8E7D6EB6	0
+神州	Array of Sundial	CelestialSuperWeapon	0xA2700E2C	1
+神州	毕方支援机	CelestialSupportAircraft	0x6B7D23B1	1
+神州	Flying Power Transmitter	CelestialSupportAircraftBuff	0xE553D983	0
+神州	运输无人机	CelestialTransportUAV	0xDA04E7DD	1
+神州	Ironside	CelestialWallPiece	0xE801D717	1
+神州	Deploy Ion Cannons	CelestialWarFactoryWeapon	0x7A2D8EA4	0
+神州	青锋两栖导弹战车	CelestialWaveriderIFV_ATGM	0x5172A12A	1
+神州	凌波龙息炮重型战车	CelestialWaveriderIFV_DragonBreathe	0x9AEA1326	1
+神州	凌波火力支援战车	CelestialWaveriderIFV_Mortar	0xB57F7FFF	1
+神州	凌波护卫战车	CelestialWaveriderIFV_Water	0x819BF149	1
+神州	玄铁歼击车	CelestialWheeledAssaultVehicle	0x6E2F0C35	1
+神州	Black Iron Tank Destroyer	CelestialWheeledAssualtGun	0x53C3CD79	0
+神州	守护者坦克	CUAntiVehicleVehicleTech0	0x19CE7A0E	0
+神州	麒麟破阵战车	qilintank	0x6723D3D6	1
+神州	神州战术核弹信标	Celestial_Ship_Missile_Target_New	0xC390DE7B	1
+神州	摇光巡天炮	CelestialAdvanceAircraftTech4_Enhanced	0x518E4927	1
+神州	摇光瞄准信标	CelestialAdvanceAircraftTech4Target_SP	0x8DB34180	1
+神州	计蒙驱逐舰	CelestialAlmightlyShip_AA	0x14B327AF	1
+神州	计蒙驱逐舰	CelestialAlmightlyShip_Enhanced	0xF4B96936	1
+神州	计蒙驱逐舰	CelestialAlmightlyShip_FireWork	0xD76C2AA8	1
+神州	计蒙驱逐舰	CelestialAlmightlyShip_Old	0xF72698B1	0
+神州	磁弩防空系统	CelestialAntiAirShip_Enhanced	0x9D207C7F	1
+神州	磁弩防空系统	CelestialAntiAirShip_Enhanced_Water	0x2734BCF4	1
+神州	磁弩防空系统	CelestialAntiAirShip_Water	0xC0287454	1
+神州	凌波护卫战车	CelestialAntiInfantryVehicle_B	0x2ADF44D1	1
+神州	凌波护卫战车	CelestialAntiInfantryVehicle_B_Heavy	0xFA36E4A8	1
+神州	凌波护卫战车	CelestialAntiInfantryVehicle_Dropped	0xDE969062	0
+神州	凌波护卫战车	CelestialAntiInfantryVehicle_HeavyTransport	0xECCE3CA4	1
+神州	凌波护卫战车	CelestialAntiInfantryVehicle_Water	0x35BFBCE4	0
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3_EMC	0x5ADC60FE	1
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3_EMC_Enhanced	0xD15F1C58	1
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3_Enhanced	0xC4BDE3E8	1
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3_Firework	0x0EBDC8DC	1
+神州	玄冥级战列巡洋舰	CelestialAntiNavyShipTech3_Old	0x17BE023B	0
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Enhanced	0x499C2378	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Firework	0x2197B57A	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Firework_2024A	0x03675F88	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Firework_2024B	0x0C8AE019	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Firework_2024C	0x053D855B	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Firework_2024D	0x1862136F	1
+神州	玄武级攻击潜艇	CelestialAntiStructureShip_Old	0xE6453E05	0
+神州	白虎量子重炮运载车	CelestialAntiStructureVehicle_Enhanced	0x5990368F	1
+神州	破甲铁卫	CelestialAntiVehicleInfantry_EMC	0x833FF150	1
+神州	麒麟破阵战车	CelestialAntiVehicleVehicleTech1_EMC	0x8A8C08CD	1
+神州	祝融雷铳战车	CelestialAntiVehicleVehicleTech3_EMC	0xAFA3CA82	1
+神州	破军金甲	CelestialAntiVehicleVehicleTech4_Enhanced	0xE7ED9D80	1
+神州	破军金甲	CelestialAntiVehicleVehicleTech4_S01	0x43D3F71C	1
+神州	金乌轰炸机	CelestialBomberAircraft_Enhanced	0xE7C3F43A	1
+神州	凤凰战机	CelestialFighterAircraft_WithBlueTrailSomke	0xC9134307	1
+神州	凤凰战机	CelestialFighterAircraft_WithRedTrailSomke	0xB7207C1B	1
+神州	凤凰战机	CelestialFighterAircraft_WithTrailSomke	0xEA8D715E	1
+神州	凤凰战机	CelestialFighterAircraft_WithWhiteTrailSomke	0x63A6C3A8	1
+神州	岚影刺	CelestialInfiltrationInfantry_02	0x48D15832	1
+神州	岚影刺	CelestialInfiltrationInfantry_03	0x4B0619FB	1
+神州	岚影刺	CelestialInfiltrationInfantry_EMC	0x1EC5857C	1
+神州	青锋导弹车	CelestialLongRangeMissileVehicle_B	0xC4B2E7AF	1
+神州	青龙战斗核心舰	CelestialMCV_Air	0xAD16AE0F	1
+神州	青龙战斗核心舰	CelestialMCV_Enhanced	0x2CB505EA	1
+神州	青龙战斗核心舰	CelestialMCV_Enhanced_Air	0xD04D203C	1
+神州	青龙战斗核心舰	CelestialMCV_Enhanced_Ground	0xF1F06055	1
+神州	青龙战斗核心舰	CelestialMCV_Enhanced_Naval	0x90612761	1
+神州	青龙战斗核心舰	CelestialMCV_Ground	0x5575833C	1
+神州	青龙战斗核心舰	CelestialMCV_Naval	0xD26D6EBE	1
+神州	磁浮矿机	CelestialMiner_AI	0xEF5AB846	1
+神州	磁浮矿机	CelestialMiner_Naval	0x98635995	1
+神州	采矿车(散矿版)	CelestialMiner_Naval_TiberiumField	0xB94BFA98	1
+神州	磁浮矿机	CelestialMiner_NoReplace	0x2FC8B9C8	1
+神州	采矿车(散矿版)	CelestialMiner_TiberiumField	0x22FBAD10	1
+神州	神州礼炮	CelestialSaluteGun_2024A	0x81E71067	1
+神州	神州礼炮	CelestialSaluteGun_2024B	0xA62FA412	1
+神州	神州礼炮	CelestialSaluteGun_2024C	0x964E9F52	1
+神州	神州礼炮	CelestialSaluteGun_2024D	0x5DC76D85	1
+盟军	先锋武装炮艇机	AlliedAC130GunshipAircraft	0xF44268FA	1
+盟军		AlliedAegisLargeDefenseBase	0x32535841	1
+盟军	空军基地	AlliedAirField	0x5B3008B7	1
+盟军	'Pollux' Interceptor	AlliedAirForceAssualtCruise	0x0B745CDA	0
+盟军	双子星防空系统	AlliedAirForceDispatchVehicle	0x91E6C0D1	0
+盟军	Allies Air Pad	AlliedAirPad	0xEA0DD1E4	1
+盟军	水翼船	AlliedAntiAirShip	0x2E211A99	1
+盟军	多功能步兵战车	AlliedAntiAirVehicleTech1	0xBB06395A	1
+盟军	维护者轰炸机	AlliedAntiGroundAircraft	0xB74F8348	1
+盟军	维和步兵	AlliedAntiInfantryInfantry	0x139CBC97	1
+盟军	激流 ACV	AlliedAntiInfantryVehicle	0x1C331EB6	1
+盟军	海豚	AlliedAntiNavalScout	0x8ACA3F75	1
+盟军	突袭驱逐舰	AlliedAntiNavyShipTech1	0x5AE534FC	1
+盟军	波塞冬巡洋舰	AlliedAntiNavyShipTech3	0x9356389F	1
+盟军	世纪轰炸机	AlliedAntiStructureBomberAircraft	0x4FDD5A5C	1
+盟军	航空母舰	AlliedAntiStructureShip	0x09705D80	1
+盟军	雅典娜炮	AlliedAntiStructureVehicle	0xD48ED838	1
+盟军	标枪兵	AlliedAntiVehicleInfantry	0x9C5D3BB8	1
+盟军	守护者坦克	AlliedAntiVehicleVehicleTech1	0x07B91527	1
+盟军	幻影坦克	AlliedAntiVehicleVehicleTech3	0x52BFE9C5	1
+盟军	平定者	AlliedArtilleryVehicle	0xC04A61DC	1
+盟军	复仇者攻击机	AlliedAvengerAttackAircraft	0x4D55BD7C	1
+盟军	新兵训练营	AlliedBarracks	0x509BD329	1
+盟军	多功能导弹塔	AlliedBaseDefense	0xEE3E07BD	1
+盟军	光谱塔	AlliedBaseDefenseAdvanced	0x69B62705	1
+盟军	特洛伊突击要塞	AlliedBattleFortress	0x4599F5EE	1
+盟军	世纪轰炸机	AlliedBomberAircraft	0x83D5A86B	1
+盟军	航空母舰	AlliedChronoBeacon_AircraftCarrier	0x56F9E40A	1
+盟军	阿波罗战斗机	AlliedChronoBeacon_Apollo	0x2C0290FF	1
+盟军	阿瑞斯截击机	AlliedChronoBeacon_Ares	0xD3177D59	1
+盟军	突袭驱逐舰	AlliedChronoBeacon_AssaultDestroyer	0xCC7100C4	1
+盟军	雅典娜炮	AlliedChronoBeacon_AthenaCannon	0xA2FF6EC5	1
+盟军	特洛伊突击要塞	AlliedChronoBeacon_BattleFortress	0x06F6307A	1
+盟军	世纪轰炸机	AlliedChronoBeacon_CenturyBomber	0x7255015E	1
+盟军	冰冻直升机	AlliedChronoBeacon_Cryocopter	0x6C7375B1	1
+盟军	未来坦克X-1	AlliedChronoBeacon_FutureTank	0x346E8404	1
+盟军	守护者坦克	AlliedChronoBeacon_GuardianTank	0x2DAA4493	1
+盟军	先锋武装炮艇机	AlliedChronoBeacon_Harbinger	0x2A62F22F	1
+盟军	水翼船	AlliedChronoBeacon_Hydrofoil	0xCB7D1820	1
+盟军	多功能步兵战车	AlliedChronoBeacon_IFV	0x717292FC	1
+盟军	基地车	AlliedChronoBeacon_MCV	0x3D301335	1
+盟军	采矿车	AlliedChronoBeacon_Miner	0x3ABE7892	1
+盟军	幻影坦克	AlliedChronoBeacon_MirageTank	0xC066F9D1	1
+盟军	波塞冬巡洋舰	AlliedChronoBeacon_Poseidon	0xDB5A5941	1
+盟军	光棱坦克	AlliedChronoBeacon_PrismTank	0xA4143C83	1
+盟军	激流 ACV	AlliedChronoBeacon_Riptide	0x6D526B63	1
+盟军	维护者轰炸机	AlliedChronoBeacon_Vindicator	0xBADE039E	1
+盟军	谭雅	AlliedCommandoTech1	0x53E0EB12	1
+盟军	建造场	AlliedConstructionYard	0x61A093F6	1
+盟军	起重机	AlliedCrane	0x5ACD7C88	0
+盟军	冰冻军团	AlliedCryoLegionnaire	0x5F1F0E08	1
+盟军	中继站	AlliedDisruptorStation	0xAE969DCF	0
+盟军	工兵	AlliedEngineer	0xE1E9179B	1
+盟军	阿波罗战斗机	AlliedFighterAircraft	0x3C82B910	1
+盟军	未来坦克X-1	AlliedFutureTank	0x8BEAB78D	1
+盟军	Olympus Class Aircraft Carrier	AlliedGaintAirCraftCarrier	0x7918266E	0
+盟军	灰熊坦克	AlliedGrizzlyMainBattleTank	0xF3930092	1
+盟军	先锋武装炮艇机	AlliedGunshipAircraft	0x3D6832A4	1
+盟军	Schneider Grand Cannon	AlliedHeavyArtilleryDefenseBase	0x19681796	1
+盟军	机枪悍马	AlliedHumveeVehicle	0x4524E346	1
+盟军	间谍	AlliedInfiltrationInfantry	0x4AA5D515	1
+盟军	阿瑞斯截击机	AlliedInterceptorAircraft	0x4F0B5B47	1
+盟军	气垫登陆舰	AlliedLandingCraftAirCushion	0xE35CB7B3	1
+盟军	冷冻军团兵	AlliedLegionnaireInfantry	0xEA8F676B	0
+盟军	Information Centre	AlliedLowTechStructure	0xD41C8C0E	1
+盟军	总统的直升机	AlliedMarine1	0x352B29C4	0
+盟军	基地车	AlliedMCV	0x28DA574E	1
+盟军	采矿车	AlliedMiner	0x2A196E71	1
+盟军	海港	AlliedNavalYard	0x7848F598	1
+盟军	夜莺直升机	AlliedNightinaleHelicopter	0xE815CE45	1
+盟军	中继指挥站	AlliedOutpost	0x0C3040FF	1
+盟军	平定者	AlliedPacifierFAV	0x5E606FD6	1
+盟军	发电厂	AlliedPowerPlant	0x89B86E3D	1
+盟军	涡轮	AlliedPowerPlantTurbine	0xE6A2CCE9	1
+盟军	Prism Tank	AlliedPrismTank	0xF3335396	0
+盟军	游骑兵	AlliedRangerInfantry	0xF2B528B4	1
+盟军	矿石精炼厂	AlliedRefinery	0x8ECE261C	1
+盟军	打捞船	AlliedSalvageShip	0x4765F576	0
+盟军	科研设施	AlliedScienceLab	0x333FD09F	0
+盟军	警犬	AlliedScoutInfantry	0xDDFC28DE	1
+盟军	超时空传送仪	AlliedSuperWeapon	0xFD87E82A	1
+盟军	质子撞击炮	AlliedSuperWeaponAdvanced	0x95D6E965	1
+盟军	补给港务局	AlliedSupplyPort	0xA0B60CEC	0
+盟军	冰冻直升机	AlliedSupportAircraft	0x509D5101	1
+盟军	科技抑制器	AlliedTechScrambler	0x77986DF3	0
+盟军	防卫局	AlliedTechStructure	0xCA9257EB	1
+盟军	忒提斯战列舰	AlliedThetisBattleShip	0xC525F7EC	1
+盟军	城墙	AlliedWallPiece	0x296799CF	1
+盟军	装甲车辆厂	AlliedWarFactory	0x8209C058	1
+盟军	光棱坦克	PrismTank	0xBC8AAB80	1
+盟军	莱茵豹主战坦克	RheinEntenteNimravusMBT	0x1F829DA5	1
+盟军	菱齿象坦克歼击车	RheinEntentePalaeoloxodonTD	0x4AE1512A	1
+盟军	水翼船	AlliedAntiAirShip_Enhanced	0xF5581A9A	1
+盟军	激流 ACV	AlliedAntiInfantryVehicle_Ground	0x4068B3D7	1
+盟军	激流 ACV	AlliedAntiInfantryVehicle_Transport	0x79C256EB	1
+盟军	突袭驱逐舰	AlliedAntiNavyShipTech1_Enhanced	0xD204810B	1
+盟军	波塞冬巡洋舰	AlliedAntiNavyShipTech3_Enhanced	0xEEB157C1	1
+盟军	世纪轰炸机	AlliedAntiStructureBomberAircraft_Enhanced	0xDAFF9AEF	1
+盟军	雅典娜炮	AlliedAntiStructureVehicle_Enhanced	0xF20D1A21	1
+盟军	守护者坦克	AlliedAntiVehicleVehicleTech1_Enhanced	0xCBD60D8C	1
+盟军	幻影坦克	AlliedAntiVehicleVehicleTech3_Enhanced	0xDEE3DDCF	1
+盟军	基地车	AlliedChronoBeacon_MCV_Naval	0x0FDDCEAC	1
+盟军	采矿车	AlliedChronoBeacon_Miner_Naval	0xC780A559	1
+盟军	激流 ACV	AlliedChronoBeacon_Riptide_Naval	0xE7D3AC17	1
+盟军	阿波罗战斗机	AlliedFighterAircraft_Enhanced	0x5ADD5E72	1
+盟军	阿波罗战斗机	AlliedFighterAircraft_WithTrailSomke	0xE7122CA0	1
+盟军	奥林匹斯级航空母舰	AlliedGaintAirCraftCarrier_B	0x5AEB512A	1
+盟军	先锋武装炮艇机	AlliedGunshipAircraft_Enhanced	0x974A13D3	1
+盟军	机枪悍马	AlliedHumveeVehicle_Ranger	0x486527C9	1
+盟军	气垫登陆舰	AlliedLandingCraftAirCushion_Ranger	0xBEC6EFE9	1
+盟军	基地车	AlliedMCV_Enhanced	0x2E73B888	1
+盟军	基地车	AlliedMCV_Enhanced_Naval	0x2A64E893	1
+盟军	基地车	AlliedMCV_Naval	0x648D1440	1
+盟军	采矿车	AlliedMiner_AI	0x66C64A19	1
+盟军	采矿车	AlliedMiner_Naval	0x75288D70	1
+盟军	采矿车(散矿版)	AlliedMiner_Naval_TiberiumField	0x40C179CF	1
+盟军	采矿车	AlliedMiner_NoReplace	0xE0F23684	1
+盟军	采矿车(散矿版)	AlliedMiner_TiberiumField	0x5AC6B7C9	1
+盟军	光棱坦克	AlliedPrismTank_Enhanced	0x6D79199E	1
+盟军	游骑兵	AlliedRangerInfantry_AirAssault	0x8E5B3D9C	1
+盟军	冰冻直升机	AlliedSupportAircraft_Enhanced	0xFC7EFFC6	1
+苏联	磁力卫星	MagneticSatelliteEffectLvl1	0xA7DB9E71	1
+苏联	超级磁力卫星	MagneticSatelliteEffectLvl2	0x5D6DEC69	1
+苏联	终极磁力卫星	MagneticSatelliteEffectLvl3	0x2408DA8B	1
+苏联	联盟重型坦克	Overlordtank	0x91578776	1
+苏联	獾式轰炸机	S02_ExplodingMig	0x6EBA4F44	1
+苏联	苏联特使	S08_SovietAntiStructureShip	0xCCC0438C	1
+苏联	战争工厂	S08_SovietWarFactory	0x1894B5E9	1
+苏联	机场	SovietAirField	0xD25BB962	1
+苏联	牛蛙战车	SovietAntiAirShip	0xCCBD2C91	1
+苏联	石勒喀河自行高射炮	SovietAntiAirVehicle	0xAFBF713B	1
+苏联	双刃直升机	SovietAntiGroundAircraft	0x40ACAD6D	1
+苏联	伊尔攻击机	SovietAntiGroundAttacker	0x95826617	1
+苏联	征召兵	SovietAntiInfantryInfantry	0x19AB11AF	1
+苏联	镰刀机甲	SovietAntiInfantryVehicle	0x60F0B4E9	1
+苏联	磁爆快艇	SovietAntiNavyShipTech1	0xAFF62E78	1
+苏联	阿库拉攻击潜艇	SovietAntiNavyShipTech2	0x8D0A384A	1
+苏联	光荣级导弹巡洋舰	SovietAntiNavyShipTech3	0x0430257C	1
+苏联	卡莫夫直升机	SovietAntiNavyShipTech3Aircraft	0x9E4B5E39	1
+苏联	无畏级武库舰	SovietAntiStructureShip	0xBCEF51B9	1
+苏联	V4 导弹发射车	SovietAntiStructureVehicle	0x821381DE	1
+苏联	防空部队	SovietAntiVehicleInfantry	0x2C358C61	1
+苏联	铁锤坦克	SovietAntiVehicleVehicleTech1	0x94B3590B	1
+苏联	磁爆坦克	SovietAntiVehicleVehicleTech2	0x911C7E98	1
+苏联	天启坦克	SovietAntiVehicleVehicleTech3	0x9E45383C	1
+苏联	联盟重型坦克	SovietAntiVehicleVehicleTech4	0x20502281	1
+苏联	全自动哨戒机炮	SovietAutoSentryGunDefense	0xA7F3C6F0	1
+苏联	兵营	SovietBarracks	0x80D4EA1E	1
+苏联	特斯拉线圈	SovietBaseDefenseAdvanced	0xFA1F6466	1
+苏联	防空炮	SovietBaseDefenseAir	0x1769BE29	1
+苏联	哨戒机枪	SovietBaseDefenseGround	0x4DF5F9C1	1
+苏联	基洛夫飞艇	SovietBomberAircraft	0xFFA811AE	1
+苏联	战斗碉堡	SovietBunker	0xE980BF64	1
+苏联	娜塔莎	SovietCommandoTech1	0x174F874F	1
+苏联	V4\"远征\"导弹发射车	SovietConquerorTEL	0x89A885DA	0
+苏联	建造场	SovietConstructionYard	0xC16FF13F	1
+苏联		SovietConstructionYardSalvageYard	0xFC75DD90	0
+苏联	研磨起重机	SovietCrane	0xA01D437D	1
+苏联	生化步兵	SovietDesolatorInfantry	0x59052E2F	0
+苏联	礁石岸防导弹要塞	SovietDualPurposeCruiseMissileTurret	0x2D270F77	1
+苏联	松树综合电子战系统	SovietElectronicRadarTruck	0x793D7D43	0
+苏联	战斗工兵	SovietEngineer	0xA08AABD3	1
+苏联	米格战斗机	SovietFighterAircraft	0x7F54CED1	1
+苏联	粉碎者	SovietGrinderVehicleCorona	0x93FF3DB6	1
+苏联	胡杨防空导弹系统	SovietHeavyAntiAirMissileTurret	0x6094F50D	1
+苏联	ZSU-85自行防空炮	SovietHeavyAntiAirVehicleTech2	0x3EE3BF3D	1
+苏联	磁爆部队	SovietHeavyAntiVehicleInfantry	0x3E11865D	1
+苏联	犀牛坦克	SovietHeavyAntiVehicleVehicleTech2	0xB1E56042	1
+苏联	粉碎者	SovietHeavyGrinder	0x1CC60024	1
+苏联	郁金香自行迫击炮	SovietHeavyMortarVehicle	0xC1E2C163	1
+苏联	鲁斯兰大型运输机	SovietHeavyTransportAircraft	0x12E6F290	1
+苏联	Combat Command Fort	SovietHighTechStructure	0x70B6424D	1
+苏联	苏霍伊截击机	SovietInterceptorAircraft	0x840270E4	1
+苏联	基地车	SovietMCV	0xAF4C0DA5	1
+苏联	采矿车	SovietMiner	0xF6DAC2A4	1
+苏联	火炮机车	SovietMortarcycle	0x8E9ED5CC	1
+苏联	造船厂	SovietNavalYard	0x6E1ABB35	1
+苏联	回收粉碎机	SovietNavalYardSalvageYard	0x8EAF08FE	0
+苏联	前哨	SovietOutpost	0x09442731	1
+苏联	Union Heavy Tank	SovietOverlordtank	0xE704FA62	0
+苏联	空降兵	Sovietparadrop	0xDAB73A52	0
+苏联	发电站	SovietPowerPlant	0xCF8D9F20	1
+苏联	超级发电站	SovietPowerPlantAdvanced	0x524BBD01	1
+苏联	矿石精炼厂	SovietRefinery	0xC45AAEAB	1
+苏联	哨兵枪	SovietRhinoTankMine	0x24D315C7	1
+苏联	战熊	SovietScoutInfantry	0x33026FA1	1
+苏联	恐怖机器人	SovietScoutVehicle	0xD741D327	1
+苏联	重锤突击炮	SovietSledgehammerSPG	0xE78CA44E	1
+苏联	重锤突击炮	SovietSPG	0xF918FB5A	0
+苏联	苏维埃纪念碑	SovietStatue	0xF83177F8	0
+苏联	铁幕装置	SovietSuperWeapon	0xD20552E1	1
+苏联	真空聚爆弹发射井	SovietSuperWeaponAdvanced	0x856C9DD6	1
+苏联	史普尼克勘查车	SovietSurveyor	0xBB686AE1	1
+苏联	作战实验室	SovietTechStructure	0xB7377639	1
+苏联	纤夫运输直升机	SovietTeslaAirAssault	0x5953C7A1	1
+苏联	纤夫运输直升机	SovietTeslaAirAssaultExpand	0xBE0DDEA7	1
+苏联	纤夫运输直升机	SovietTransportAircraft	0x6D9F8A98	1
+苏联	苏联要员堡垒	SovietVIPBunker	0x9BD6F404	0
+苏联	城墙	SovietWallPiece	0xA82CF003	1
+苏联	军工厂	SovietWarfactory	0xD50C222E	1
+苏联	回收粉碎机	SovietWarfactorySalvageYard	0x97D3B471	0
+苏联	民用气象飞艇	SovietWeatherBalloon	0xD293353B	1
+苏联	“偏流”两栖高射炮	VUAntiAirVehicleTech1	0xA33B2EEB	1
+苏联	“蝾螈”步兵战车	VUAntiInfantryVehicleTech1	0x85CB288F	1
+苏联	“章鱼”突击炮	VUAntiVehicleVehicleTech1	0x2859A51F	1
+苏联	BMPT坦克支援车	VUBmptVehicle	0xFB4B3DBD	1
+苏联	“菊花”导弹车	VUMissileAntiVehicleVehicleTech1	0xB5376CCE	1
+苏联	蜂鸟侦查无人机	WinterArmyKoelAttackUAV	0xAD17BDA8	1
+苏联	收割机甲	winterarmyreaperheavymecha	0x0CB749FE	1
+苏联	勘察飞轮	WinterArmyScoutVehicle	0x8ABE6B1D	1
+苏联	联盟重型坦克	Overlordtank_SpitfireEngineer	0x665F47D6	1
+苏联	牛蛙战车	SovietAntiAirShip_Ground	0x522BCB61	1
+苏联	石勒喀河自行高射炮	SovietAntiAirVehicle_Transport	0xAD485858	1
+苏联	双刃直升机	SovietAntiGroundAircraft_Enhanced	0xAA672693	1
+苏联	伊尔攻击机	SovietAntiGroundAttacker_Enhanced	0xF68B7D15	1
+苏联	磁爆快艇	SovietAntiNavyShipTech1_AirAssault	0x5CA2BA5D	1
+苏联	磁爆快艇	SovietAntiNavyShipTech1_Enhanced	0x6EFA5243	1
+苏联	阿库拉攻击潜艇	SovietAntiNavyShipTech2_Enhanced	0xED23C07C	1
+苏联	无畏级武库舰	SovietAntiStructureShip_Enhanced	0xA74555B0	1
+苏联	V4 导弹发射车	SovietAntiStructureVehicle_Enhanced	0x111A74C7	1
+苏联	磁爆坦克	SovietAntiVehicleVehicleTech2_AirAssault	0xA56E3D06	0
+苏联	磁爆坦克	SovietAntiVehicleVehicleTech2_Enhanced	0x82EDE5D3	1
+苏联	天启坦克	SovietAntiVehicleVehicleTech3_Enhanced	0x9F0344B9	1
+苏联	天启坦克	SovietAntiVehicleVehicleTech3_WOT	0x9EE5F8A2	1
+苏联	联盟重型坦克	SovietAntiVehicleVehicleTech4_Enhanced	0x7EE484B4	1
+苏联	基洛夫飞艇	SovietBomberAircraft_Movie	0x440FE7FF	1
+苏联	磁爆部队	SovietHeavyAntiVehicleInfantry_Enhanced	0xDFB83E95	1
+苏联	犀牛坦克	SovietHeavyAntiVehicleVehicleTech2_Enhanced	0x6EEB1938	1
+苏联	基地车	SovietMCV_Enhanced	0x40EF4DC7	1
+苏联	基地车	SovietMCV_Enhanced_Naval	0x1960AA4A	1
+苏联	基地车	SovietMCV_Naval	0x1545FAC2	1
+苏联	采矿车	SovietMiner_Naval	0x951764B9	1
+苏联	采矿车(散矿版)	SovietMiner_Naval_TiberiumField	0x62F058BF	1
+苏联	采矿车	SovietMiner_NoReplace	0x438DC608	1
+苏联	采矿车(散矿版)	SovietMiner_TiberiumField	0x989D88E8	1
+苏联	重锤突击炮	SovietSledgehammerSPG_Enhanced	0xDAACBC0C	1
+苏联	史普尼克勘查车	SovietSurveyor_Naval	0x92718B35	1
+苏联	纤夫运输直升机	SovietTeslaAirAssault_Naval	0x1387A870	1
+苏联	纤夫运输直升机	SovietTeslaAirAssaultExpand_Naval	0xFC40D256	1
+苏联	纤夫武装运输直升机	SovietTransportAircraft_HeavyCannon	0x80E237CD	1
+帝国	海翼	JapanAntiAirShip	0xB142DEC6	1
+帝国	打击者-VX	JapanAntiAirVehicleTech1	0x6E8C5FFF	1
+帝国	帝国武士	JapanAntiInfantryInfantry	0x0FB02C55	1
+帝国	天狗机器人	JapanAntiInfantryVehicle	0xC3986ED4	1
+帝国	太刀重巡洋舰	JapanAntiNavyShipTech3	0x99F5113D	1
+帝国	将军战列舰	JapanAntiStructureShip	0xFC5E3314	1
+帝国	波能坦克	JapanAntiStructureVehicle	0x90B81D3C	1
+帝国	坦克杀手	JapanAntiVehicleInfantry	0x7D0549DD	1
+帝国	火箭天使	JapanAntiVehicleInfantryTech3	0xD81C1012	1
+帝国	薙刀驱逐舰	JapanAntiVehicleShip	0x1A2CA9AB	1
+帝国	海啸坦克	JapanAntiVehicleVehicleTech1	0xCEB7DA1F	1
+帝国	鬼王	JapanAntiVehicleVehicleTech3	0x59908E62	1
+帝国	弓箭少女	JapanArcherInfantry	0xC9E24BAF	1
+帝国	气球炸弹	JapanBalloonBombBalloon	0x4B688D52	0
+帝国	速成道场	JapanBarracks	0x04F32965	1
+帝国	道场核心	JapanBarracksEgg	0x57F07A3A	1
+帝国	高阶道场核心	JapanBarracksEgg_T3	0x69919CB5	1
+帝国	VX防御炮台	JapanBaseDefense	0x89AE48EA	1
+帝国	波动炮塔	JapanBaseDefenseAdvanced	0x2D795EEA	1
+帝国	塔楼核心	JapanBaseDefenseAdvancedEgg	0x2412FB82	1
+帝国	防卫者核心	JapanBaseDefenseEgg	0x1F496B6B	1
+帝国	将军战列舰	JapanBattleShipOld	0x6ECA5F9A	1
+帝国	富山高级指挥部	JapanCommandHQ	0x8C70B64B	0
+帝国	欧米伽百合子	JapanCommandoTech1	0x6586A5A0	1
+帝国	百合子(完整)	JapanCommandoTech1_Complete	0x598FC0D4	1
+帝国	建造场	JapanConstructionYard	0x356FA3A9	1
+帝国	建造场	JapanConstructionYardEgg	0x9F2DBD10	0
+帝国	吉朗天皇	JapanEmperor	0x59DBBBBA	0
+帝国	动画片看多了的吉朗天皇	JapanEmperorMecha	0xCC023E30	0
+帝国		JapanEmperorMecha02	0x77175549	0
+帝国	工兵	JapanEngineer	0x20DBDFCC	1
+帝国	超级要塞	JapanFortressShip	0x30A862D6	1
+帝国		JapanFortressShip_Air	0x689F2FA1	0
+帝国	超级要塞	JapanGigaFortress_Land	0x2F03D2E1	1
+帝国	超级要塞	JapanGigaFortressShip	0xAAE5C03C	1
+帝国	超级要塞	JapanGigaFortressShipDummy	0xD0390DB1	1
+帝国	超级要塞核心	JapanGigaFortressShipEgg	0x5066384B	1
+帝国	Imperial V.I.P Fortress	JapanHighTechStructure	0x5EA380F2	1
+帝国	V.I.P要塞核心	JapanHighTechStructureEgg	0xB5E3C722	1
+帝国	忍者	JapanInfiltrationInfantry	0xA768E216	1
+帝国	樱花回天雷	JapanInterceptorAircraft	0x4605B1F6	1
+帝国	Sakura Kaiten Torpedo	JapanInterceptorSubmrine	0x16796391	0
+帝国	樱花井	JapanKamikazeCommandTower	0xD8CDF55B	1
+帝国	樱花井核心	JapanKamikazeCommandTowerEgg	0x7117987E	1
+帝国	狂热帝国武士	JapanKamikazeInfantry	0xF67311D3	1
+帝国	鬼王X	JapanKingOniXMecha_Enhanced	0x2C39DAC5	1
+帝国	迅雷运输艇	JapanLightTransportVehicle	0x1791E072	1
+帝国	基地车	JapanMCV	0x1C2EF767	1
+帝国	处刑大将军	JapanMechaKing	0x450BD734	0
+帝国	鬼王X	JapanMechaX	0x1581883A	1
+帝国	采矿车	JapanMiner	0x92CDE50F	1
+帝国	心神机甲	JapanMissileMechaAdvanced	0x57B88B60	1
+帝国	Shinshin Interceptor	JapanMissileMechaAdvancedAir	0x1BD04F0B	0
+帝国	Fabricator-DX	JapanNanoEnhanceControlTower	0x19AC7448	0
+帝国	Fabricator Core	JapanNanoEnhanceControlTowerEgg	0x81719753	0
+帝国	帝国船坞	JapanNavalYard	0x263DA9AF	1
+帝国	码头核心	JapanNavalYardEgg	0xF0455D99	1
+帝国	高阶码头核心	JapanNavalYardEgg_T3	0xF447DCB8	1
+帝国	长枪迷你潜艇	JapanNavyScoutShip	0xCEDA61FD	1
+帝国	货物运输船	JapanOdessaSpecialTransportVehicle	0xB9A034A9	0
+帝国	湮灭炸弹	JapanOmegaOblivionBomb	0xF03A09A7	1
+帝国	湮灭炸弹核心	JAPANOMEGAOBLIVIONBOMBEGG	0x078AB8D6	1
+帝国	瞬息纳米护盾投射塔	JapanPointShieldControlTower	0x5BA365EB	1
+帝国	投射塔核心	JapanPointShieldControlTowerEgg	0xF6CAF260	1
+帝国	速成发电机	JapanPowerPlant	0x309480DD	1
+帝国	发电机核心	JapanPowerPlantEgg	0xC6B3F8AA	1
+帝国	发电机	JapanPowerPlantTurbine	0x80C3022B	1
+帝国	帝国雷达舰	JapanRadarShip	0x77CF0352	0
+帝国	矿石精炼厂	JapanRefinery	0x5D02B20C	1
+帝国	矿石精炼厂核心	JapanRefineryEgg	0xFF4A8B60	1
+帝国	天斋机器人企业	JapanRoboticsLab	0x00BA8D81	0
+帝国	鬼樱特攻机	JapanSakuraAttackRocket	0xEA8BE878	1
+帝国	爆裂机器人	JapanScoutInfantry	0x12E7D7A4	1
+帝国	钢铁浪人	JapanSentinelVehicle	0x7B862459	1
+帝国	钢铁浪人	JapanSteelRoninMecha	0xE5EC3883	1
+帝国	纳米蜂箱	JapanSuperWeapon	0xD6D22475	1
+帝国	超能力大杀器	JapanSuperWeaponAdvanced	0x1AFC9A6E	1
+帝国	毁灭装置核心	JapanSuperWeaponAdvancedEgg	0x5C1C0F0F	1
+帝国	纳米虫群核心	JapanSuperWeaponEgg	0x5FC93021	1
+帝国	纳米科技主机	JapanTechStructure	0xD20CC8DE	1
+帝国	电脑主机核心	JapanTechStructureEgg	0x78D3E32C	1
+帝国	海啸坦克	JapanTsunamiAssaultTank	0x1A0E0D72	1
+帝国	城墙	JapanWallPiece	0xF8C50039	1
+帝国	机械工房	JapanWarFactory	0xA689B39A	1
+帝国	机甲工厂核心	JapanWarFactoryEgg	0xA02E31D3	1
+帝国	高阶机甲工厂核心	JapanWarFactoryEgg_T3	0x5AE2245E	1
+帝国	飞燕特攻机	JapanYumiAircraft	0xBD2690DD	1
+帝国	千鸟特攻母舰	JapanYumiAircraftCarrier	0x1EB5C3E8	1
+帝国	海翼	JapanAntiAirShip_Enhanced	0xF3439735	1
+帝国	打击者-VX	JapanAntiAirVehicleTech1_Enhanced	0x02B0E053	1
+帝国	打击者-VX	JapanAntiAirVehicleTech1_Enhanced_Water	0x9F67C5D6	1
+帝国	天狗机器人	JapanAntiInfantryVehicle_Enhanced	0x3F06C283	1
+帝国	天狗机器人	JapanAntiInfantryVehicle_Enhanced_Water	0xC1BDDB5C	1
+帝国	太刀重巡洋舰	JapanAntiNavyShipTech3_Enhanced	0x40976C20	1
+帝国	将军战列舰	JapanAntiStructureShip_Enhanced	0x726BF680	1
+帝国	波能坦克	JapanAntiStructureVehicle_Enhanced	0xD39025CA	1
+帝国	坦克杀手	JapanAntiVehicleInfantry_Ambush	0xDDACA5DD	1
+帝国	薙刀驱逐舰	JapanAntiVehicleShip_Enhanced	0x79B1C957	1
+帝国	海啸坦克	JapanAntiVehicleVehicleTech1_Naval	0xBA8E535F	1
+帝国	鬼王	JapanAntiVehicleVehicleTech3_Movie	0x4FE689E2	1
+帝国	防卫者-VX	JapanBaseDefense_S07	0x45DDE2DB	1
+帝国	防卫者核心	JapanBaseDefenseEgg_Enhanced	0x9284877E	1
+帝国	防卫者核心	JapanBaseDefenseEgg_S07	0xD372437F	1
+帝国	樱花回天雷	JapanInterceptorAircraft_Ground	0x0A9D011A	1
+帝国	樱花回天雷	JapanInterceptorAircraft_WarfactoryWater	0xCDEF1FC2	1
+帝国	迅雷运输艇	JapanLightTransportVehicle_AntiTank	0x0A4E80A3	1
+帝国	迅雷运输艇	JapanLightTransportVehicle_Kamikaze	0x7924346B	1
+帝国	基地车	JapanMCV_Enhanced	0x5E5CF68F	1
+帝国	基地车	JapanMCV_Enhanced_Naval	0x16EAABFD	1
+帝国	基地车	JapanMCV_Naval	0xD2ECDA2C	1
+帝国	采矿车	JapanMiner_Naval	0xE27A88A0	1
+帝国	采矿车(散矿版)	JapanMiner_Naval_TiberiumField	0xBAC77782	1
+帝国	采矿车	JapanMiner_NoReplace	0x4B1B5EDE	1
+帝国	采矿车(散矿版)	JapanMiner_TiberiumField	0x086E655C	1
+帝国	心神机甲	JapanMissileMechaAdvanced_Enhanced	0x3450A0C2	1
+帝国	心神机甲	JapanMissileMechaAdvanced_Enhanced_Water	0xDF391F7C	1
+帝国	电脑主机核心	JapanTechStructureEgg_Enhanced	0x5E986303	1
+帝国	海啸坦克	JapanTsunamiAssaultTank_Naval	0x59025164	1
+帝国	机甲工厂核心	JapanWarFactoryEgg_Enhanced	0xDDCBCCF9	1
+帝国	高阶机甲工厂核心	JapanWarFactoryEgg_T3_Enhanced	0xD173F397	1
+帝国	飞燕特攻机	JapanYumiAircraft_Kamikaze	0xCCB16783	1
+中立	信标	AIAssaultBeacon	0x7C9CF9EF	1
+中立	信标	AIAssaultBeaconAttached	0x3C238DD1	1
+中立	信标	AIHoldBeacon	0x954E03AD	1
+中立	信标	AIHoldBeaconAttached	0xF3E8FCB6	1
+中立	空降兵	alliedparadrop	0x4B0DF89B	0
+中立	雷达天线	ALLIEDRADARDISH	0xB5F5DF39	0
+中立		AmmoCaison	0xC8611762	0
+中立	属性箱	AreaOfEffectDownAttributeCrate	0xF07B59A0	1
+中立	属性箱	AreaOfEffectUpAttributeCrate	0x9671FA02	1
+中立	属性箱	ArmorDownAttributeCrate	0xCDB07511	1
+中立	属性箱	ArmorUpAttributeCrate	0x87A97ACD	1
+中立	属性箱	AttackSuperDownAttributeCrate	0x634174A0	1
+中立	属性箱	AttackSuperUpAttributeCrate	0xE680ECB5	1
+中立	属性箱	AttributeCrate	0x0CD4D09B	1
+中立	属性箱	BaseAttributeCrate	0x50D268EC	1
+中立	炸弹箱	BaseBombCrate	0xE6C2D995	1
+中立	祖国母亲俄罗斯的雕像	BigMamaStatue	0x8515CCD2	0
+中立	炸弹箱	BombCrate	0x6C65E68F	1
+中立	桥梁	BRIDGESECTION	0x81C83DE0	0
+中立	Presence among the Stars	CAAT4_Transform	0xEA9B4CB3	0
+中立	属性箱	CantAttackAttributeCrate	0x3AD42886	1
+中立	属性箱	CantMoveAttributeCrate	0x8F821BCD	1
+中立	Deploy AA Railgun Batteries	CEL_AirfieldAATower	0xA987B433	0
+中立	民用建筑	CIVILIANBUILDINGGARRISONABLE	0xDAE017E1	0
+中立	会议中心	ConventionCenter	0xA0B8D956	0
+中立	属性箱	DamageMultDownAttributeCrate	0x42BE2BB0	1
+中立	属性箱	DamageMultUpAttributeCrate	0xED2F5708	1
+中立	Pz.Kpfw.Rheinpanther	DefenderAntiVehicleVehicleTech1	0xF34EDE66	0
+中立	属性箱	DeflectIncomingFireBoxAttributeCrate	0x54C0F813	1
+中立	Swarm Sortie	DragonShipAttackDrones	0x77DADF18	0
+中立	EA洛杉矶	EALA	0x6F78FAAA	0
+中立	复活节岛巨石像	EasterIslandDefense	0xC977AD38	0
+中立	属性箱	EmotionDissidentAttributeCrate	0x3F858FEB	1
+中立	炸弹箱	EmotionDissidentBombCrate	0xABF5F3C8	1
+中立	皇子的纪念碑	EmperorSonStatue	0x9943D35C	0
+中立	天皇的纪念碑	EmperorStatue	0x89723732	0
+中立	布赖顿岸炮	EuropeCoastalGun	0xD98938DE	0
+中立	三联波动炮	FI_FloatingFortressMainGun	0xD23C0CEB	0
+中立	要塞能量核心	FloatingFortressPowerCore	0x98A7EB56	0
+中立	炸弹箱	ForzenCrate	0xAB184D15	1
+中立	修车厂	GarageTechStructure	0x3B1CD6DC	1
+中立	瑞士银行	GE_SwissBank	0x272E7B7F	0
+中立	獾式轰炸机	GROUNDEDEXPLOSIVEBOMBER	0xB2178D05	0
+中立	天狗喷气机	GroundedExplosiveFighter	0x0D76FF12	0
+中立	Gun Target	GunTarget	0x5DB36033	0
+中立	治疗箱	HealCrate	0xC6462382	1
+中立	奖励箱	HealCrateMP	0x238F9BF5	1
+中立	属性箱	HealSuperDownAttributeCrate	0x67F18CFE	1
+中立	属性箱	HealSuperUpAttributeCrate	0x9A88F779	1
+中立	苏联指挥部	HeidelbergCastle	0xC141609D	0
+中立	帝国行政大厦	ImperialAdminbuilding	0xB4A6CD61	0
+中立	帝国港口	ImperialHarborbuilding	0x97890EA1	0
+中立	属性箱	InaudibleAttributeCrate	0xF0EB3D90	1
+中立	属性箱	IronCurtainAttributeCrate	0x77018D80	1
+中立	天翼	JAPANANTIAIRSHIP_AIR	0xCCC9DB46	0
+中立	海翼	JAPANANTIAIRSHIP_SEA	0xF7EB3692	0
+中立	VX直升机	JAPANANTIAIRVEHICLE_AIR	0x7194DA13	0
+中立	VX攻击机甲	JAPANANTIAIRVEHICLE_GROUND	0x0E363685	0
+中立	天狗喷气机	JAPANANTIINFANTRYVEHICLE_AIR	0xDB0B3289	0
+中立	天狗机甲	JAPANANTIINFANTRYVEHICLE_GROUND	0x27D9E856	0
+中立	经济建筑	JAPANECONOMICSTRUCTUREEGG	0x52BF5053	0
+中立	远程雷达	JAPANLONGRANGERADAR	0xF7D0DDD7	0
+中立	帝国船坞修理厂	JAPANNAVALYARDREPAIRBAY	0x4BDE17B2	0
+中立	雷达天线	JAPANRADARDISH	0x0DB76440	0
+中立	乌克兰炮台	KR_ArtilleryDome	0x08492FF7	0
+中立	机场指挥塔	LAControlTower	0x2491DEB9	0
+中立	媒体中心	LAMediaCenter	0xF122F662	0
+中立	杰斐逊雕像	LASERMTRUSHMORE_JEFFERSON	0xFBBC6555	0
+中立	林肯雕像	LASERMTRUSHMORE_LINCOLN	0xFFF9920D	0
+中立	罗斯福雕像	LASERMTRUSHMORE_ROOSEVELT	0x19102E38	0
+中立	华盛顿雕像	LASERMTRUSHMORE_WASHINGTON	0x0E5965D5	0
+中立		LaunchFortress	0xAC6698AC	0
+中立	自由女神像	LibertyStatue	0x7A52925A	0
+中立	不起眼的苏联坦克	MEERAGETANK	0xDEA2C986	0
+中立	现金箱	MoneyCrate	0xADDBE2E3	1
+中立	奖励箱	MoneyCrateMP	0xC48B928B	1
+中立	天皇的宫殿	MtFujiViewingTower	0x295CD6BD	0
+中立		MtRushmore	0x128F293E	0
+中立	信标	MultiplayerBeacon	0x11B62B99	1
+中立	信标	MultiplayerBeaconAttached	0xDA338E67	1
+中立	炸弹箱	NanoPointDefenceCrate	0x4BDAF44C	1
+中立	障碍	NONGARRISONABLESTRUCTURE	0x71897B35	0
+中立	属性箱	NoSpecialAbilityAttributeCrate	0x13123896	1
+中立	纽约证券交易所	NY_NYStockExchange	0xCE7F03BE	0
+中立		OBJECTIVESTRUCTURE	0x148E3A1C	0
+中立	白田码头	ORIGINALDOCKS	0x291C9237	0
+中立	长间道场	ORIGINALDOJO	0x6A1C50C4	0
+中立	炸弹箱	ParticleCannonCrate	0x93FC2C92	1
+中立	先进航空技术	PlayerPowerAirPower	0xD967E309	0
+中立	自由贸易	PLAYERPOWERALLIEDFREETRADE	0x2BE41E59	0
+中立	Corona Storm	PlayerPowerCelestialCoronaBlast	0x1E8944C0	0
+中立	与子同袍	PlayerPowerCelestialQuantumLinkSet	0x152E35D0	0
+中立	时空裂缝	PLAYERPOWERCHRONORIFTLVL1	0x26CEA780	0
+中立	时空深渊	PLAYERPOWERCHRONORIFTLVL2	0x5AF861F3	0
+中立	时空鸿沟	PLAYERPOWERCHRONORIFTLVL3	0x4DA05A88	0
+中立	超时空传送	PLAYERPOWERCHRONOSPHERE	0x722323DC	0
+中立	时空交换	PLAYERPOWERCHRONOSWAP	0xA5136424	0
+中立	研磨履带	PLAYERPOWERCRUSHPUPPIES	0xA6E2B363	0
+中立	冷冻射击	PLAYERPOWERCRYOSATELLITELVL1	0xC35413E3	0
+中立	冷冻轰击	PLAYERPOWERCRYOSATELLITELVL2	0x015BEC0B	0
+中立	冷冻末日	PLAYERPOWERCRYOSATELLITELVL3	0x9ED4AE35	0
+中立	生化空袭	PLAYERPOWERDESOLATORBOMB_LEVEL1	0xBBA5D8FA	0
+中立	双重生化空袭	PLAYERPOWERDESOLATORBOMB_LEVEL2	0x58836301	0
+中立	三重生化空袭	PLAYERPOWERDESOLATORBOMB_LEVEL3	0xCBFA9C3B	0
+中立	最终飞行队	PLAYERPOWERFINALSQUADRON_L1	0x1A4F7B4D	0
+中立	最终飞行队X	PLAYERPOWERFINALSQUADRON_L2	0x868EDAE7	0
+中立	最终飞行队奥米伽	PLAYERPOWERFINALSQUADRON_L3	0xCE5F2E0E	0
+中立	高科技	PLAYERPOWERHIGHTECHNOLOGY	0x86D81F24	0
+中立	铁幕	PlayerPowerIronCurtain	0x09C15111	0
+中立	毒质腐蚀	PLAYERPOWERIRRADIATETARGET	0x2CE70C77	0
+中立	高级火箭发射巢	PLAYERPOWERJAPANADVANCEDMISSILEPACKS	0x57BEBC18	0
+中立	遁地潜伏	PlayerPowerJapanAmbush	0xB4241786	0
+中立	气球炸弹	PLAYERPOWERJAPANBALLOONATTACK_L1	0x3B0BF0D5	0
+中立	气球炸弹群	PLAYERPOWERJAPANBALLOONATTACK_L2	0x4F85D465	0
+中立	气球炸弹海	PLAYERPOWERJAPANBALLOONATTACK_L3	0x18FEF7D7	0
+中立	天皇的狂怒	PLAYERPOWERJAPANEMPERORSRESOLVE_L1	0xC21DE634	0
+中立	天皇的复仇	PLAYERPOWERJAPANEMPERORSRESOLVE_L2	0x5C2E4F2B	0
+中立	天皇的惩罚	PLAYERPOWERJAPANEMPERORSRESOLVE_L3	0xF7AC1613	0
+中立	光荣退伍	PlayerPowerJapanEnhancedKamikaze	0x8215D29F	0
+中立	强化舰队	PlayerPowerJapanNavalPower	0x5A0BA121	0
+中立	自动化生产线	PLAYERPOWERJAPANROBOTICASSEMBLY	0x7C83A2A5	0
+中立	磁力卫星	PLAYERPOWERMAGNETICSATELLITELVL1	0x8B2A0AB8	0
+中立	超级磁力卫星	PLAYERPOWERMAGNETICSATELLITELVL2	0x6ABBB4A1	0
+中立	终极磁力卫星	PLAYERPOWERMAGNETICSATELLITELVL3	0x5A00A971	0
+中立	磁力奇点	PlayerPowerMagneticSingularity	0x47D07389	0
+中立	纳米蜂墙	PlayerPowerNanoSwarmHive	0x85F75040	0
+中立	轨道坠落	PLAYERPOWERORBITALREFUSE_RANK1	0xCD28C6ED	0
+中立	轨道倾泻	PLAYERPOWERORBITALREFUSE_RANK2	0x7F32AB4D	0
+中立	轨道大甩卖	PLAYERPOWERORBITALREFUSE_RANK3	0x9899962B	0
+中立	质子撞击炮	PlayerPowerParticleCannon	0x681C83A9	0
+中立	单点防御纳米护盾	PLAYERPOWERPOINTDEFENSEDRONES	0x9E8ABFBB	0
+中立	外科手术式打击	PLAYERPOWERPRECISIONSTRIKE	0x47E43B75	0
+中立	现金奖励	PLAYERPOWERPRODUCTIONKICKBACKS	0x8FC2CFE0	0
+中立		PLAYERPOWERSATELLITESWEEP	0xF30BA92F	0
+中立	大生产	PLAYERPOWERSOVIETMASSPRODUCTION	0xC67C962B	0
+中立	超能力大灾难	PLAYERPOWERTELEKINETICPROJECTORDEVICE	0xFF1B1323	0
+中立	恐怖机器人奇袭	PLAYERPOWERTERRORDRONEEGGS	0xD90BA9CF	0
+中立	定时炸弹	PLAYERPOWERTIMEBOMBLVL1	0xB731A473	0
+中立	定时炸弹豪华版	PLAYERPOWERTIMEBOMBLVL2	0x55AEBDA7	0
+中立	定时炸弹至尊版	PLAYERPOWERTIMEBOMBLVL3	0x4FEB8148	0
+中立	真空聚爆弹	PlayerPowerVacuumBomb	0xD3BF95F2	0
+中立	港务局	PortAuthority	0x18EB77EE	0
+中立	补给港口	PortStructure	0x338BB759	0
+中立	总统的豪华轿车	PRESIDENTLIMO	0xA4750943	0
+中立	炸弹箱	RadarCloseBombCrate	0x8FF1A0C1	1
+中立	神秘箱	RandomCrate	0x5292FE6A	1
+中立	属性箱	RangeDownAttributeCrate	0xE895D2AC	1
+中立	属性箱	RangeSuperDownAttributeCrate	0x13A95A0F	1
+中立	属性箱	RangeSuperUpAttributeCrate	0x1FCF25FA	1
+中立	属性箱	RangeUpAttributeCrate	0xDE4D2C62	1
+中立	属性箱	RateOfFireDownAttributeCrate	0x747B9E8D	1
+中立	属性箱	RateOfFireUpAttributeCrate	0x90EACEBF	1
+中立	属性箱	RechargeTimeDownAttributeCrate	0xA8D7CCC9	1
+中立	属性箱	RechargeTimeUpAttributeCrate	0x7E1792E1	1
+中立	总统山发射基地	RushmoreFiringBase	0xE7072F1A	0
+中立	杰斐逊头像控制器	RUSHMOREHEADCONTROLCENTER_JEFFERSON	0xCCBFA9C3	0
+中立		RushmoreHeadControlCenter_Lincoln	0x625008EF	0
+中立		RushmoreHeadControlCenter_Washington	0x02EABAD4	0
+中立	总统山通讯塔	RushmoreRadarTower	0x2CEF4EB6	0
+中立	盟军特使	S08SpecialCarrier	0x000CDD3D	0
+中立		S08SpecialDreadnought	0x42983B40	0
+中立	Best Buy	SA_BestBuy	0xB18EBEB4	0
+中立	GAME	SA_GAME	0x759E7977	0
+中立	GameStop	SA_GameStop	0xA918FFD7	0
+中立	格里芬天文台	SA_ObservatoryDefensiveGun	0xCD426AA9	0
+中立	游乐器械	SANTAMONICAPIER	0x143FE84C	0
+中立	K-45发射场	SatelliteLaunchFacility	0x31A7F13C	0
+中立	干船坞	ShipYardTechStructure	0xA6341918	1
+中立	监视箱	ShroudCrate	0xC264D48D	1
+中立	属性箱	ShroudRevealToAllAttributeCrate	0xE3044D32	1
+中立	雷达天线	SOVIETRADARDISH	0x83D496E5	0
+中立	属性箱	SpeedDownAttributeCrate	0xC33F3C1A	1
+中立	属性箱	SpeedSuperDownAttributeCrate	0xBC9B47BF	1
+中立	属性箱	SpeedSuperUpAttributeCrate	0xEF8C8725	1
+中立	属性箱	SpeedUpAttributeCrate	0x425BA5CB	1
+中立	障碍	ST_LENINGRADMISSLEBASE	0x1D506B83	0
+中立	国家火炮博物馆	ST_LENINGRADMISSLEBASE_01	0x77AFF893	0
+中立	列宁格勒要塞	ST_ShuttleBuilding	0x5C0D0C24	0
+中立	炸弹箱	SuperBombCrate	0xB3047F13	1
+中立	炸弹箱	SuperMetaImpactCrate	0x3AE5286C	1
+中立	矿藏	TECHBUILDINGORENODE	0xBAD58413	0
+中立	双联矿藏	TECHBUILDINGORENODE2	0x18048566	0
+中立	四联矿藏	TECHBUILDINGORENODE4	0x9E7E27D7	0
+中立	工业发电厂	TechbuildingPowerPlant	0xFCE09B93	0
+中立		TechStructure	0x1C9760F5	0
+中立	炸弹箱	TelekineticBombCrate	0x869BA318	1
+中立	部队箱	UnitCrate	0x3FA3F32C	1
+中立	部队箱	UnitCrateNew	0xDC56666A	1
+中立	炸弹箱	VacuumBombCrate	0x4770B81E	1
+中立	经验箱	VeterancyCrate	0x71ED78EE	1
+中立	奖励箱	VeterancyCrateMP	0x11B2F2BC	1
+中立	老兵学院	VeterancyTechStructure	0xFE293C2D	1
+中立	熔火钻机	WinterArmyAdvancedAssaultVehicle	0x484516FF	0
+中立	开山工程机甲	WinterArmyAntiStructureMecha	0x98CD4D6D	0
+中立	翠鸟攻击无人机	WinterArmyAntiVehicleUAV	0x3148B738	0
+中立	高炉机甲	WinterArmyBlastFurnaceMecha	0x92E1F7B1	0
+中立	机械校准台	WinterArmyCalibrationBase	0x1FE9C529	0
+中立	辐射机兵	WinterArmyDesolatorCommando	0xBA97B70B	0
+中立	苍鹭重型空中作业综合体	WinterArmyEgretAerialFortress	0x1AF96E4A	0
+中立	花岗岩战斗平台	WinterArmyGraniteBattleFortress	0x25CA23EB	0
+中立	铁锤机甲	WinterArmyHammerWalkingMecha	0xB6C26E03	0
+中立	疯狂伊文	WinterArmyInfiltrationShockTroop	0xBAA9AE65	0
+中立	深潜导航站	WinterArmyNavigationStation	0xB6F98D13	0
+中立	核素反应炉	WinterArmyNuclearPowerPlant	0xC78152FD	0
+中立	邮差步行机	WinterArmyPostmanWalkingMecha	0x434A32ED	0
+中立	放射研究所	WinterArmyRadiologyInstitut	0x414E970D	0
+中立	热焊工兵	WinterArmySpitfireEngineer	0xB279278A	0
+中立	奖励箱	MoneyCrate_200	0xEAA1CFAB	1
+未分类	莲灯	CelestialSonarBuoy	0xC4B86091	1

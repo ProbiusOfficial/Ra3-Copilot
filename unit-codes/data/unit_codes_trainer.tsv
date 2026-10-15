@@ -1,0 +1,733 @@
+code_hex	code_dec	name	faction	chinese_name	type_line	family	is_primary	note	category	unit_class	flags
+0x91A6C260	2443625056	CelestialAirfield	神州	羽渡航台		CelestialAirfield	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x15B5C047	364232775	CelestialBarracks	神州	神机营		CelestialBarracks	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x2F917E05	798064133	CelestialBaseDefenseAdvanced	神州	浑天高塔		CelestialBaseDefenseAdvanced	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x4AF53714	1257584404	CelestialBaseDefenseAir	神州	重弩碉台		CelestialBaseDefenseAir	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x3FA0F4F5	1067513077	CelestialBaseDefenseDropped	神州	重弩碉台		CelestialBaseDefenseDropped	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x10DC4637	282871351	CelestialBattery	神州	蓄元鼎		CelestialBattery	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1C5EE05B	475979867	CelestialConstructionYard	神州	伏龙殿		CelestialConstructionYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xF84AA5E2	4165641698	CelestialEnergyGatlingTower	神州	疾雷铳台		CelestialEnergyGatlingTower	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0xCCA5F13A	3433427258	CelestialEnergyRailgunBase	神州	天门神弓		CelestialEnergyRailgunBase	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|TRANSFORMER
+0xBB4F4FD7	3142537175	CelestialEngineerDrone	神州	维修天灯		CelestialEngineerDrone	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x01627771	23230321	CelestialLaserTower	神州	天火塔		CelestialLaserTower	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK
+0x6C96ED99	1821830553	CelestialMachineArm	神州	搬运机械臂		CelestialMachineArm	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x47854877	1199917175	CelestialNavalYard	神州	楼船泊坞		CelestialNavalYard	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x03EFB861	66041953	CelestialOutPost	神州	建造中继站		CelestialOutPost	1	多 DESC(阵营/真单位同名)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x89EC1654	2313950804	CelestialOutPost_Upgraded	神州	量子建造枢纽		CelestialOutPost	1	多 DESC(阵营/真单位同名)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCA1AC032	3390750770	CelestialOutPostEnhanced_Upgraded	神州	量子建造枢纽		CelestialOutPostEnhanced_Upgraded	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1E8B74CE	512455886	CelestialPortBridgeCrane	神州	障碍物		CelestialPortBridgeCrane	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x478815E1	1200100833	CelestialPortCrane	神州	障碍物		CelestialPortCrane	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD6448BB3	3594816435	CelestialPortLargeContainer_Blue	神州	平民建筑物		CelestialPortLargeContainer_Blue	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x27524C5D	659704925	CelestialPortLargeContainer_Cyan	神州	平民建筑物		CelestialPortLargeContainer_Cyan	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE2476C39	3796331577	CelestialPortLargeContainer_Green	神州	平民建筑物		CelestialPortLargeContainer_Green	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x618CC3B9	1636615097	CelestialPortLargeContainer_Orange	神州	平民建筑物		CelestialPortLargeContainer_Orange	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x88D0BFB2	2295381938	CelestialPortLargeContainer_Red	神州	平民建筑物		CelestialPortLargeContainer_Red	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xC643C6EB	3326330603	CelestialPortLargeContainer_White	神州	平民建筑物		CelestialPortLargeContainer_White	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xD8FFBE27	3640639015	CelestialPortLargeWarehouse	神州	平民建筑物		CelestialPortLargeWarehouse	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x247CFC58	612170840	CelestialPortMediumWarehouse	神州	平民建筑物		CelestialPortMediumWarehouse	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xF3774614	4084680212	CelestialPortSmallContainer_Blue	神州	平民建筑物		CelestialPortSmallContainer_Blue	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x2B96D397	731304855	CelestialPortSmallContainer_Cyan	神州	平民建筑物		CelestialPortSmallContainer_Cyan	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x2BCAB914	734705940	CelestialPortSmallContainer_Green	神州	平民建筑物		CelestialPortSmallContainer_Green	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xDFE697BE	3756431294	CelestialPortSmallContainer_Orange	神州	平民建筑物		CelestialPortSmallContainer_Orange	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x123E834B	306086731	CelestialPortSmallContainer_Red	神州	平民建筑物		CelestialPortSmallContainer_Red	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xB54ABCD9	3041574105	CelestialPortSmallContainer_White	神州	平民建筑物		CelestialPortSmallContainer_White	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x49A73B70	1235696496	CelestialPortSmallWarehouse	神州	平民建筑物		CelestialPortSmallWarehouse	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x30A7175F	816256863	CelestialPortWarehouseA	神州	平民建筑物		CelestialPortWarehouseA	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE82DB009	3895308297	CelestialPortWarehouseB	神州	平民建筑物		CelestialPortWarehouseB	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xBAD29AF5	3134364405	CelestialPortWarehouseC	神州	平民建筑物		CelestialPortWarehouseC	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE7B1F1F5	3887198709	CelestialPowerPlant	神州	揽星亭		CelestialPowerPlant	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB73ECE1D	3074346525	CelestialPowerPlantAdvanced	神州	导流尖塔		CelestialPowerPlantAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCD6164E6	3445712102	CelestialRefinery	神州	熔矿炉		CelestialRefinery	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA2700E2C	2725252652	CelestialSuperWeapon	神州	日晷阵列		CelestialSuperWeapon	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x3EA2E76A	1050863466	CelestialSuperWeaponAdvanced	神州	浴日神坛		CelestialSuperWeaponAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x1719F33C	387576636	CelestialTech4Object	神州	量子解算：万象昭晰		CelestialTech4Object	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x40B580E9	1085636841	CelestialTechStructure	神州	解算主楼		CelestialTechStructure	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE801D717	3892434711	CelestialWallPiece	神州	铁壁		CelestialWallPiece	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE4893170	3834196336	CelestialWallSegmentPiece	神州	铁壁		CelestialWallSegmentPiece	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x41003FFD	1090535421	CelestialWarFactory	神州	重甲工房		CelestialWarFactory	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x7BD32558	2077435224	CelestialAirfield_Fake	神州	羽渡航台		CelestialAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xBB617DA8	3143728552	CelestialAirfield_NoCore	神州	羽渡航台		CelestialAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0xD2B95B53	3535362899	CelestialAirfield_NoCore2S	神州	羽渡航台		CelestialAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0xDDDB9B96	3722156950	CelestialAirfield_WB	神州	羽渡航台		CelestialAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0xED0E80C4	3977150660	CelestialBarracks_BolckConstructableArea	神州	神机营		CelestialBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB48B38B8	3029022904	CelestialBarracks_Fake	神州	神机营		CelestialBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCC3C3029	3426496553	CelestialBarracks_NoCore	神州	神机营		CelestialBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0xF4202EDC	4095749852	CelestialBarracks_NoCore2S	神州	神机营		CelestialBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x61920EE8	1636962024	CelestialBarracks_WB	神州	神机营		CelestialBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x8EF71BAA	2398559146	CelestialBaseDefenseAdvanced_Fake	神州	浑天高塔		CelestialBaseDefenseAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0xDADDDAB2	3671972530	CelestialBaseDefenseAdvanced_NoCore	神州	浑天高塔		CelestialBaseDefenseAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x5A9A31FC	1520054780	CelestialBaseDefenseAdvanced_NoCore2S	神州	浑天高塔		CelestialBaseDefenseAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0xB6A76774	3064424308	CelestialBaseDefenseAdvanced_WB	神州	浑天高塔		CelestialBaseDefenseAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0xD0BFD76A	3502233450	CelestialBaseDefenseAir_Fake	神州	重弩碉台		CelestialBaseDefenseAir	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x857DB356	2239607638	CelestialBaseDefenseAir_NoCore	神州	重弩碉台		CelestialBaseDefenseAir	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x76857802	1988458498	CelestialBaseDefenseAir_NoCore2S	神州	重弩碉台		CelestialBaseDefenseAir	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x6A670304	1785135876	CelestialBaseDefenseAir_WB	神州	重弩碉台		CelestialBaseDefenseAir	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x8AD0667F	2328913535	CelestialConstructionYard_Enhanced	神州	伏龙殿		CelestialConstructionYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xDC6E784B	3698227275	CelestialNavalYard_Fake	神州	楼船泊坞		CelestialNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC3B213F4	3283227636	CelestialNavalYard_NoCore	神州	楼船泊坞		CelestialNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x63CDF614	1674442260	CelestialNavalYard_NoCore2S	神州	楼船泊坞		CelestialNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x33806F05	864055045	CelestialNavalYard_WB	神州	楼船泊坞		CelestialNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0xC3CC0C71	3284929649	CelestialOutPost_Enhanced	神州	建造中继站		CelestialOutPost	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x8F32A13F	2402459967	CelestialPowerPlant_Fake	神州	揽星亭		CelestialPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1A7E60CC	444489932	CelestialPowerPlant_NoCore	神州	揽星亭		CelestialPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xDDB435C6	3719574982	CelestialPowerPlant_NoCore2S	神州	揽星亭		CelestialPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x83EE2D89	2213424521	CelestialPowerPlant_WB	神州	揽星亭		CelestialPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCE74E216	3463766550	CelestialPowerPlantAdvanced_Fake	神州	导流尖塔		CelestialPowerPlantAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x87217C0B	2267118603	CelestialPowerPlantAdvanced_NoCore	神州	导流尖塔		CelestialPowerPlantAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x825AB5EB	2186982891	CelestialPowerPlantAdvanced_NoCore2S	神州	导流尖塔		CelestialPowerPlantAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x3CB2305F	1018310751	CelestialPowerPlantAdvanced_WB	神州	导流尖塔		CelestialPowerPlantAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB993636A	3113444202	CelestialRefinery_Fake	神州	熔矿炉		CelestialRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x44F7DA54	1157093972	CelestialRefinery_NoCore	神州	熔矿炉		CelestialRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xBE75F946	3195402566	CelestialRefinery_NoCore2S	神州	熔矿炉		CelestialRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x5C7ED6D0	1551816400	CelestialRefinery_TiberiumField	神州	熔矿炉		CelestialRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x8F897C62	2408152162	CelestialRefinery_WB	神州	熔矿炉		CelestialRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xDF2D2352	3744277330	CelestialSuperWeapon_Fake	神州	日晷阵列		CelestialSuperWeapon	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x70282236	1881678390	CelestialSuperWeapon_NoCore	神州	日晷阵列		CelestialSuperWeapon	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x83EDD1DC	2213401052	CelestialSuperWeapon_NoCore2S	神州	日晷阵列		CelestialSuperWeapon	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x0FAAD824	262854692	CelestialSuperWeapon_WB	神州	日晷阵列		CelestialSuperWeapon	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xF33E838B	4080960395	CelestialSuperWeaponAdvanced_disable	神州	浴日神坛		CelestialSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xB0AEF264	2964255332	CelestialSuperWeaponAdvanced_Fake	神州	浴日神坛		CelestialSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x7645B3AF	1984279471	CelestialSuperWeaponAdvanced_NoCore	神州	浴日神坛		CelestialSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x4EE0592C	1323325740	CelestialSuperWeaponAdvanced_NoCore2S	神州	浴日神坛		CelestialSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x486133EC	1214329836	CelestialSuperWeaponAdvanced_WB	神州	浴日神坛		CelestialSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x67991889	1738086537	CelestialTechStructure_Fake	神州	解算主楼		CelestialTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA46C8065	2758574181	CelestialTechStructure_NoCore	神州	解算主楼		CelestialTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x276FB470	661632112	CelestialTechStructure_NoCore2S	神州	解算主楼		CelestialTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xBFF47DAE	3220471214	CelestialTechStructure_WB	神州	解算主楼		CelestialTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xEF8F900B	4019163147	CelestialWarFactory_Enhanced	神州	重甲工房		CelestialWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x2B7AEECA	729476810	CelestialWarFactory_Fake	神州	重甲工房		CelestialWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x366FC710	913295120	CelestialWarFactory_NoCore	神州	重甲工房		CelestialWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x32D7B333	852996915	CelestialWarFactory_NoCore2S	神州	重甲工房		CelestialWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x783CD0EE	2017251566	CelestialWarFactory_WB	神州	重甲工房		CelestialWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED|NOT_AUTOACQUIRABLE
+0x01C0AF92	29405074	CelestialAIIT3_S01	神州	迅雷天罡		CelestialAIIT3_S01	1	无 DESC→取最短名前缀	unit	步兵	CAN_ATTACK
+0x51A8FBE1	1370029025	CelestialAntiInfantryInfantry	神州	龙炎军		CelestialAntiInfantryInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x1DC3F329	499381033	CelestialAntiInfantryInfantryAdvanced	神州	迅雷天罡		CelestialAntiInfantryInfantryAdvanced	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x6C3AF682	1815803522	CelestialAntiVehicleInfantry	神州	破甲铁卫		CelestialAntiVehicleInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x33DFE2A4	870310564	CelestialEngineer	神州	军部司械		CelestialEngineer	1	唯一 DESC(可建造面板)	unit	步兵	AMPHIBIOUS
+0x19419824	423729188	CelestialFireworkTrigger	神州	天眼哨机		CelestialFireworkTrigger	1	无 DESC→取最短名前缀	unit	步兵	CAN_ATTACK
+0x948C8A98	2492238488	CelestialInfiltrationInfantry	神州	岚影刺		CelestialInfiltrationInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0xD425C8E8	3559246056	CelestialInfiltrationInfantryBase	神州	岚影刺		CelestialInfiltrationInfantryBase	1	无 DESC→取最短名前缀	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x727FF6F5	1920988917	CelestialScoutDrone	神州	天眼哨机		CelestialScoutDrone	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0xDA04E7DD	3657754589	CelestialTransportUAV	神州	运输无人机		CelestialTransportUAV	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x833FF150	2202005840	CelestialAntiVehicleInfantry_EMC	神州	破甲铁卫		CelestialAntiVehicleInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x48D15832	1221679154	CelestialInfiltrationInfantry_02	神州	岚影刺		CelestialInfiltrationInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x4B0619FB	1258691067	CelestialInfiltrationInfantry_03	神州	岚影刺		CelestialInfiltrationInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x1EC5857C	516261244	CelestialInfiltrationInfantry_EMC	神州	岚影刺		CelestialInfiltrationInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x9C6C7CE6	2624355558	CelestialAntiAirShip	神州	磁弩防空系统		CelestialAntiAirShip	1	多 DESC(阵营/真单位同名)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x8C9004A3	2358248611	CelestialAntiAirVehicle	神州	磁弩高射炮		CelestialAntiAirVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x31AC0A98	833358488	CelestialAntiInfantryVehicle	神州	凌波护卫战车		CelestialAntiInfantryVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x9727F012	2535976978	CelestialAntiStructureVehicle	神州	白虎量子重炮运载车		CelestialAntiStructureVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x437A547A	1132090490	CelestialAntiVehicleVehicleTech1	神州	麒麟破阵战车		CelestialAntiVehicleVehicleTech1	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER
+0xC70DBDA9	3339566505	CelestialAntiVehicleVehicleTech3	神州	祝融攻坚战车		CelestialAntiVehicleVehicleTech3	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x703BAB39	1882958649	CelestialAntiVehicleVehicleTech4	神州	破军金甲		CelestialAntiVehicleVehicleTech4	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x25241CE6	623123686	CelestialDF41	神州	东风洲际导弹发射车		CelestialDF41	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x3B2F6E33	992964147	CelestialForkLiftVehicle	神州	神州军用叉车		CelestialForkLiftVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x6ECEAEBD	1859038909	CelestialHeavyAntiAirVehicleTech3	神州	祝融雷铳战车		CelestialHeavyAntiAirVehicleTech3	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x1726289A	388376730	CelestialLongRangeMissileVehicle	神州	青锋导弹车		CelestialLongRangeMissileVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x63DC81C4	1675395524	CelestialMBT99A	神州	貔貅破阵战车—甲型		CelestialMBT99A	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x8F2A3EBB	2401910459	CelestialMBT99B	神州	貔貅破阵战车—乙型		CelestialMBT99B	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x6AFB800D	1794867213	CelestialMiner	神州	磁浮矿机		CelestialMiner	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x9536F4F5	2503406837	CelestialSaluteGun	神州	神州礼炮		CelestialSaluteGun	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x5172A12A	1366466858	CelestialWaveriderIFV_ATGM	神州	青锋两栖导弹战车		CelestialWaveriderIFV_ATGM	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x9AEA1326	2599031590	CelestialWaveriderIFV_DragonBreathe	神州	凌波龙息炮重型战车		CelestialWaveriderIFV_DragonBreathe	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xB57F7FFF	3045031935	CelestialWaveriderIFV_Mortar	神州	凌波火力支援战车		CelestialWaveriderIFV_Mortar	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x819BF149	2174480713	CelestialWaveriderIFV_Water	神州	凌波护卫战车		CelestialWaveriderIFV_Water	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x6E2F0C35	1848577077	CelestialWheeledAssaultVehicle	神州	玄铁歼击车		CelestialWheeledAssaultVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x19CE7A0E	432962062	CUAntiVehicleVehicleTech0	神州	守护者坦克		CUAntiVehicleVehicleTech0	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x6723D3D6	1730401238	qilintank	神州	麒麟破阵战车		qilintank	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x9D207C7F	2636151935	CelestialAntiAirShip_Enhanced	神州	磁弩防空系统		CelestialAntiAirShip	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x2734BCF4	657767668	CelestialAntiAirShip_Enhanced_Water	神州	磁弩防空系统		CelestialAntiAirShip	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xC0287454	3223876692	CelestialAntiAirShip_Water	神州	磁弩防空系统		CelestialAntiAirShip	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x2ADF44D1	719275217	CelestialAntiInfantryVehicle_B	神州	凌波护卫战车		CelestialAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xDE969062	3734409314	CelestialAntiInfantryVehicle_Dropped	神州	凌波护卫战车		CelestialAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0xECCE3CA4	3972938916	CelestialAntiInfantryVehicle_HeavyTransport	神州	凌波护卫战车		CelestialAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x35BFBCE4	901758180	CelestialAntiInfantryVehicle_Water	神州	凌波护卫战车		CelestialAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x5990368F	1502623375	CelestialAntiStructureVehicle_Enhanced	神州	白虎量子重炮运载车		CelestialAntiStructureVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x8A8C08CD	2324433101	CelestialAntiVehicleVehicleTech1_EMC	神州	麒麟破阵战车		CelestialAntiVehicleVehicleTech1	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xAFA3CA82	2946747010	CelestialAntiVehicleVehicleTech3_EMC	神州	祝融雷铳战车		CelestialAntiVehicleVehicleTech3	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0xE7ED9D80	3891109248	CelestialAntiVehicleVehicleTech4_Enhanced	神州	破军金甲		CelestialAntiVehicleVehicleTech4	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x43D3F71C	1137964828	CelestialAntiVehicleVehicleTech4_S01	神州	破军金甲		CelestialAntiVehicleVehicleTech4	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0xC4B2E7AF	3300059055	CelestialLongRangeMissileVehicle_B	神州	青锋导弹车		CelestialLongRangeMissileVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0xEF5AB846	4015700038	CelestialMiner_AI	神州	磁浮矿机		CelestialMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x98635995	2556647829	CelestialMiner_Naval	神州	磁浮矿机		CelestialMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xB94BFA98	3108764312	CelestialMiner_Naval_TiberiumField	神州	采矿车(散矿版)		CelestialMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x2FC8B9C8	801683912	CelestialMiner_NoReplace	神州	磁浮矿机		CelestialMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x22FBAD10	586919184	CelestialMiner_TiberiumField	神州	采矿车(散矿版)		CelestialMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x81E71067	2179403879	CelestialSaluteGun_2024A	神州	神州礼炮		CelestialSaluteGun	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0xA62FA412	2788140050	CelestialSaluteGun_2024B	神州	神州礼炮		CelestialSaluteGun	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x964E9F52	2521734994	CelestialSaluteGun_2024C	神州	神州礼炮		CelestialSaluteGun	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x5DC76D85	1573350789	CelestialSaluteGun_2024D	神州	神州礼炮		CelestialSaluteGun	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x2A955297	714429079	CelestialAlmightlyShip	神州	计蒙驱逐舰		CelestialAlmightlyShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x5A436CDB	1514368219	CelestialAntiNavyShipTech1	神州	乌篷猎船		CelestialAntiNavyShipTech1	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0xF48E750F	4102976783	CelestialAntiNavyShipTech3	神州	玄冥级战列巡洋舰		CelestialAntiNavyShipTech3	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x475F7CF6	1197440246	CelestialAntiStructureShip	神州	玄武级攻击潜艇		CelestialAntiStructureShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x87711A73	2272336499	CelestialSeized_JapanAntiNavyShipTech3	神州	一式磁轨炮重巡		CelestialSeized_JapanAntiNavyShipTech3	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x14B327AF	347285423	CelestialAlmightlyShip_AA	神州	计蒙驱逐舰		CelestialAlmightlyShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xF4B96936	4105791798	CelestialAlmightlyShip_Enhanced	神州	计蒙驱逐舰		CelestialAlmightlyShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xD76C2AA8	3614190248	CelestialAlmightlyShip_FireWork	神州	计蒙驱逐舰		CelestialAlmightlyShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xF72698B1	4146501809	CelestialAlmightlyShip_Old	神州	计蒙驱逐舰		CelestialAlmightlyShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x5ADC60FE	1524392190	CelestialAntiNavyShipTech3_EMC	神州	玄冥级战列巡洋舰		CelestialAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xC4BDE3E8	3300778984	CelestialAntiNavyShipTech3_Enhanced	神州	玄冥级战列巡洋舰		CelestialAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x0EBDC8DC	247318748	CelestialAntiNavyShipTech3_Firework	神州	玄冥级战列巡洋舰		CelestialAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x17BE023B	398328379	CelestialAntiNavyShipTech3_Old	神州	玄冥级战列巡洋舰		CelestialAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x499C2378	1234969464	CelestialAntiStructureShip_Enhanced	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x2197B57A	563590522	CelestialAntiStructureShip_Firework	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x03675F88	57106312	CelestialAntiStructureShip_Firework_2024A	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x0C8AE019	210427929	CelestialAntiStructureShip_Firework_2024B	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x053D855B	87917915	CelestialAntiStructureShip_Firework_2024C	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x1862136F	409080687	CelestialAntiStructureShip_Firework_2024D	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xE6453E05	3863297541	CelestialAntiStructureShip_Old	神州	玄武级攻击潜艇		CelestialAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xE3B410D9	3820228825	CC_CoreObject	神州	量子建造核心		CC_CoreObject	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK
+0x2A12E0C1	705880257	CelestialAdvanceAircraftTech4	神州	摇光巡天炮		CelestialAdvanceAircraftTech4	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x6343827B	1665368699	CelestialAttackerAircraft	神州	朱雀攻击机		CelestialAttackerAircraft	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK
+0x41F44EF3	1106530035	CelestialBomberAircraft	神州	金乌轰炸机		CelestialBomberAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xF468932E	4100494126	CelestialEngineerRepairDrone	神州	维修天灯		CelestialEngineerRepairDrone	1	唯一 DESC(可建造面板)	unit	飞行器	
+0xAFE3F1F4	2950951412	CelestialEngineerRepairDroneLv2	神州	中型维修天灯		CelestialEngineerRepairDroneLv2	1	无 DESC→取最短名前缀	unit	飞行器	
+0x691BDF83	1763434371	CelestialEngineerRepairDroneLv3	神州	大型维修天灯		CelestialEngineerRepairDroneLv3	1	无 DESC→取最短名前缀	unit	飞行器	
+0x0945F8BD	155580605	CelestialFighterAircraft	神州	凤凰战机		CelestialFighterAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x0D0CCC90	218942608	CelestialInterceptorAircraft	神州	重明截击机		CelestialInterceptorAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0xC33CCE67	3275542119	CelestialMCV	神州	青龙战斗核心舰		CelestialMCV	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0x6B7D23B1	1803363249	CelestialSupportAircraft	神州	毕方支援机		CelestialSupportAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x518E4927	1368279335	CelestialAdvanceAircraftTech4_Enhanced	神州	摇光巡天炮		CelestialAdvanceAircraftTech4	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xE7C3F43A	3888378938	CelestialBomberAircraft_Enhanced	神州	金乌轰炸机		CelestialBomberAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xC9134307	3373482759	CelestialFighterAircraft_WithBlueTrailSomke	神州	凤凰战机		CelestialFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xB7207C1B	3072359451	CelestialFighterAircraft_WithRedTrailSomke	神州	凤凰战机		CelestialFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xEA8D715E	3935138142	CelestialFighterAircraft_WithTrailSomke	神州	凤凰战机		CelestialFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0x63A6C3A8	1671873448	CelestialFighterAircraft_WithWhiteTrailSomke	神州	凤凰战机		CelestialFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xAD16AE0F	2903944719	CelestialMCV_Air	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0x2CB505EA	750061034	CelestialMCV_Enhanced	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0xD04D203C	3494715452	CelestialMCV_Enhanced_Air	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0xF1F06055	4059062357	CelestialMCV_Enhanced_Ground	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0x90612761	2422286177	CelestialMCV_Enhanced_Naval	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0x5575833C	1433764668	CelestialMCV_Ground	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0xD26D6EBE	3530387134	CelestialMCV_Naval	神州	青龙战斗核心舰		CelestialMCV	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|UNPACKS_INTO_BUILDING
+0x32535841	844322881	AlliedAegisLargeDefenseBase	盟军	埃癸斯护盾发生器		AlliedAegisLargeDefenseBase	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x5B3008B7	1529874615	AlliedAirfield	盟军	空军基地		AlliedAirfield	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9D00C8D4	2634074324	AlliedAirfieldReplacement	盟军	空军基地		AlliedAirfieldReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xEA0DD1E4	3926774244	AlliedAirPad	盟军	停机坪		AlliedAirPad	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x509BD329	1352389417	AlliedBarracks	盟军	新兵训练营		AlliedBarracks	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9841C73C	2554447676	AlliedBarracksReplacement	盟军	新兵训练营		AlliedBarracksReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xEE3E07BD	3997042621	AlliedBaseDefense	盟军	多功能步兵炮塔		AlliedBaseDefense	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x69B62705	1773545221	AlliedBaseDefenseAdvanced	盟军	光谱塔		AlliedBaseDefenseAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x61A093F6	1637913590	AlliedConstructionYard	盟军	建造基地		AlliedConstructionYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x19681796	426252182	AlliedHeavyArtilleryDefenseBase	盟军	施耐德巨炮		AlliedHeavyArtilleryDefenseBase	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0xD41C8C0E	3558640654	AlliedLowTechStructure	盟军	信息中心		AlliedLowTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x7848F598	2018047384	AlliedNavalYard	盟军	海港		AlliedNavalYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1556764C	357987916	AlliedNavalYardReplacement	盟军	海港		AlliedNavalYardReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x0C3040FF	204488959	AlliedOutpost	盟军	指挥中心		AlliedOutpost	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x89B86E3D	2310565437	AlliedPowerPlant	盟军	发电厂		AlliedPowerPlant	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x15FB0A56	368773718	AlliedPowerPlantReplacement	盟军	发电厂		AlliedPowerPlantReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x8ECE261C	2395874844	AlliedRefinery	盟军	矿石精炼厂		AlliedRefinery	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB8C56CA3	3099946147	AlliedRefineryReplacement	盟军	矿石精炼厂		AlliedRefineryReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xFD87E82A	4253542442	AlliedSuperWeapon	盟军	超时空传送仪		AlliedSuperWeapon	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x95D6E965	2513889637	AlliedSuperWeaponAdvanced	盟军	质子撞击炮		AlliedSuperWeaponAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xCA9257EB	3398588395	AlliedTechStructure	盟军	科技中心		AlliedTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x296799CF	694655439	AlliedWallPiece	盟军	围墙		AlliedWallPiece	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x09435832	155408434	AlliedWallSegmentPiece	盟军	围墙		AlliedWallSegmentPiece	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x8209C058	2181677144	AlliedWarFactory	盟军	装甲工厂		AlliedWarFactory	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x3DC8001A	1036517402	AlliedWarFactoryReplacement	盟军	装甲工厂		AlliedWarFactoryReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB2BD6366	2998756198	FrozenrayDrone	盟军	冰山		FrozenrayDrone	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE6EB56EC	3874182892	ItalyMilanCathedral	盟军	障碍物		ItalyMilanCathedral	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x90BFA83B	2428479547	PleaseWait	盟军	暂未开放，敬请期待		PleaseWait	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x02463532	38155570	AlliedAirfield_AI	盟军	空军基地		AlliedAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE4826FE8	3833753576	AlliedAirfield_Enhanced	盟军	空军基地		AlliedAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD2F9ED39	3539594553	AlliedBarracks_AI	盟军	新兵训练营		AlliedBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xECFE8555	3976103253	AlliedConstructionYard_Enhanced	盟军	建造基地		AlliedConstructionYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x57EF6ACD	1475308237	AlliedLowTechStructure_AI	盟军	信息中心		AlliedLowTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE25C964C	3797718604	AlliedLowTechStructure_AIUnpack	盟军	信息中心		AlliedLowTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB280F34F	2994795343	AlliedLowTechStructure_Enhanced	盟军	信息中心		AlliedLowTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x481671E5	1209430501	AlliedNavalYard_AI	盟军	海港		AlliedNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB784A041	3078922305	AlliedNavalYard_Enhanced	盟军	海港		AlliedNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x261BE7D9	639363033	AlliedPowerPlant_AI	盟军	发电厂		AlliedPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD28A8AB1	3532294833	AlliedRefinery_AI	盟军	矿石精炼厂		AlliedRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x301A7EAE	807042734	AlliedRefinery_TiberiumField	盟军	矿石精炼厂		AlliedRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x79E2AFED	2044899309	AlliedSuperWeaponAdvanced_disable	盟军	质子撞击炮		AlliedSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xC762192A	3345094954	AlliedTechStructure_AI	盟军	科技中心		AlliedTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x5B66BA3F	1533459007	AlliedWarFactory_AI	盟军	装甲工厂		AlliedWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x3C9FFD45	1017118021	AlliedWarFactory_Enhanced	盟军	装甲工厂		AlliedWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x178D4853	395135059	FrozenrayDrone_HighTechnology	盟军	冰山		FrozenrayDrone	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x139CBC97	329038999	AlliedAntiInfantryInfantry	盟军	维和步兵		AlliedAntiInfantryInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x8ACA3F75	2328510325	AlliedAntiNavalScout	盟军	海豚		AlliedAntiNavalScout	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x9C5D3BB8	2623355832	AlliedAntiVehicleInfantry	盟军	标枪兵		AlliedAntiVehicleInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x53E0EB12	1407249170	AlliedCommandoTech1	盟军	谭雅		AlliedCommandoTech1	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x5F1F0E08	1595870728	AlliedCryoLegionnaire	盟军	冰冻军团		AlliedCryoLegionnaire	1	无 DESC→取最短名前缀	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0xE1E9179B	3790149531	AlliedEngineer	盟军	工兵		AlliedEngineer	1	唯一 DESC(可建造面板)	unit	步兵	AMPHIBIOUS
+0x4AA5D515	1252381973	AlliedInfiltrationInfantry	盟军	间谍		AlliedInfiltrationInfantry	1	唯一 DESC(可建造面板)	unit	步兵	AMPHIBIOUS
+0xF2B528B4	4071958708	AlliedRangerInfantry	盟军	游骑兵		AlliedRangerInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0xDDFC28DE	3724290270	AlliedScoutInfantry	盟军	警犬		AlliedScoutInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x8E5B3D9C	2388344220	AlliedRangerInfantry_AirAssault	盟军	游骑兵		AlliedRangerInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK
+0xBB06395A	3137747290	AlliedAntiAirVehicleTech1	盟军	多功能步兵战车		AlliedAntiAirVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x1C331EB6	473112246	AlliedAntiInfantryVehicle	盟军	激流 ACV		AlliedAntiInfantryVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xD48ED838	3566131256	AlliedAntiStructureVehicle	盟军	雅典娜炮		AlliedAntiStructureVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x07B91527	129570087	AlliedAntiVehicleVehicleTech1	盟军	守护者坦克		AlliedAntiVehicleVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x52BFE9C5	1388308933	AlliedAntiVehicleVehicleTech3	盟军	幻影坦克		AlliedAntiVehicleVehicleTech3	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xC04A61DC	3226100188	AlliedArtilleryVehicle	盟军	平定者		AlliedArtilleryVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x4599F5EE	1167717870	AlliedBattleFortress	盟军	特洛伊突击要塞		AlliedBattleFortress	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x8BEAB78D	2347415437	AlliedFutureTank	盟军	未来坦克X-1		AlliedFutureTank	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xF3930092	4086497426	AlliedGrizzlyMainBattleTank	盟军	灰熊坦克		AlliedGrizzlyMainBattleTank	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x4524E346	1160045382	AlliedHumveeVehicle	盟军	机枪悍马		AlliedHumveeVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x28DA574E	685397838	AlliedMCV	盟军	基地车		AlliedMCV	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x2A196E71	706309745	AlliedMiner	盟军	采矿车		AlliedMiner	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x5E606FD6	1583378390	AlliedPacifierFAV	盟军	平定者		AlliedPacifierFAV	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xBC8AAB80	3163204480	PrismTank	盟军	光棱坦克		PrismTank	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER
+0x1F829DA5	528653733	RheinEntenteNimravusMBT	盟军	莱茵豹主战坦克		RheinEntenteNimravusMBT	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x4AE1512A	1256280362	RheinEntentePalaeoloxodonTD	盟军	菱齿象坦克歼击车		RheinEntentePalaeoloxodonTD	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x4068B3D7	1080603607	AlliedAntiInfantryVehicle_Ground	盟军	激流 ACV		AlliedAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x79C256EB	2042779371	AlliedAntiInfantryVehicle_Transport	盟军	激流 ACV		AlliedAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xF20D1A21	4060944929	AlliedAntiStructureVehicle_Enhanced	盟军	雅典娜炮		AlliedAntiStructureVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xCBD60D8C	3419803020	AlliedAntiVehicleVehicleTech1_Enhanced	盟军	守护者坦克		AlliedAntiVehicleVehicleTech1	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xDEE3DDCF	3739475407	AlliedAntiVehicleVehicleTech3_Enhanced	盟军	幻影坦克		AlliedAntiVehicleVehicleTech3	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x486527C9	1214588873	AlliedHumveeVehicle_Ranger	盟军	机枪悍马		AlliedHumveeVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x2E73B888	779335816	AlliedMCV_Enhanced	盟军	基地车		AlliedMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x2A64E893	711256211	AlliedMCV_Enhanced_Naval	盟军	基地车		AlliedMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x648D1440	1686967360	AlliedMCV_Naval	盟军	基地车		AlliedMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x66C64A19	1724271129	AlliedMiner_AI	盟军	采矿车		AlliedMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x75288D70	1965591920	AlliedMiner_Naval	盟军	采矿车		AlliedMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x40C179CF	1086421455	AlliedMiner_Naval_TiberiumField	盟军	采矿车(散矿版)		AlliedMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xE0F23684	3773970052	AlliedMiner_NoReplace	盟军	采矿车		AlliedMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x5AC6B7C9	1522972617	AlliedMiner_TiberiumField	盟军	采矿车(散矿版)		AlliedMiner	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x6D79199E	1836652958	AlliedPrismTank_Enhanced	盟军	光棱坦克		AlliedPrismTank	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x2E211A99	773921433	AlliedAntiAirShip	盟军	水翼船		AlliedAntiAirShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x5AE534FC	1524970748	AlliedAntiNavyShipTech1	盟军	突袭驱逐舰		AlliedAntiNavyShipTech1	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x9356389F	2471901343	AlliedAntiNavyShipTech3	盟军	波塞冬巡洋舰		AlliedAntiNavyShipTech3	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x09705D80	158358912	AlliedAntiStructureShip	盟军	航空母舰		AlliedAntiStructureShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0xE35CB7B3	3814504371	AlliedLandingCraftAirCushion	盟军	气垫登陆舰		AlliedLandingCraftAirCushion	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xC525F7EC	3307599852	AlliedThetisBattleShip	盟军	忒提斯战列舰		AlliedThetisBattleShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0xF5581A9A	4116191898	AlliedAntiAirShip_Enhanced	盟军	水翼船		AlliedAntiAirShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xD204810B	3523510539	AlliedAntiNavyShipTech1_Enhanced	盟军	突袭驱逐舰		AlliedAntiNavyShipTech1	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xEEB157C1	4004599745	AlliedAntiNavyShipTech3_Enhanced	盟军	波塞冬巡洋舰		AlliedAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x5AEB512A	1525371178	AlliedGaintAirCraftCarrier_B	盟军	奥林匹斯级航空母舰		AlliedGaintAirCraftCarrier	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xBEC6EFE9	3200708585	AlliedLandingCraftAirCushion_Ranger	盟军	气垫登陆舰		AlliedLandingCraftAirCushion	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xF44268FA	4097992954	AlliedAC130GunshipAircraft	盟军	先锋武装炮艇机		AlliedAC130GunshipAircraft	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK
+0xB74F8348	3075441480	AlliedAntiGroundAircraft	盟军	维护者轰炸机		AlliedAntiGroundAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x4FDD5A5C	1339906652	AlliedAntiStructureBomberAircraft	盟军	世纪轰炸机		AlliedAntiStructureBomberAircraft	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x4D55BD7C	1297464700	AlliedAvengerAttackAircraft	盟军	复仇者攻击机		AlliedAvengerAttackAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x83D5A86B	2211817579	AlliedBomberAircraft	盟军	世纪轰炸机		AlliedBomberAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x3C82B910	1015200016	AlliedFighterAircraft	盟军	阿波罗战斗机		AlliedFighterAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x3D6832A4	1030238884	AlliedGunshipAircraft	盟军	先锋武装炮艇机		AlliedGunshipAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x4F0B5B47	1326144327	AlliedInterceptorAircraft	盟军	阿瑞斯截击机		AlliedInterceptorAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0xE815CE45	3893743173	AlliedNightinaleHelicopter	盟军	夜莺直升机		AlliedNightinaleHelicopter	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x509D5101	1352487169	AlliedSupportAircraft	盟军	冰冻直升机		AlliedSupportAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0xDAFF9AEF	3674184431	AlliedAntiStructureBomberAircraft_Enhanced	盟军	世纪轰炸机		AlliedAntiStructureBomberAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x5ADD5E72	1524457074	AlliedFighterAircraft_Enhanced	盟军	阿波罗战斗机		AlliedFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xE7122CA0	3876727968	AlliedFighterAircraft_WithTrailSomke	盟军	阿波罗战斗机		AlliedFighterAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0x974A13D3	2538214355	AlliedGunshipAircraft_Enhanced	盟军	先锋武装炮艇机		AlliedGunshipAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xFC7EFFC6	4236181446	AlliedSupportAircraft_Enhanced	盟军	冰冻直升机		AlliedSupportAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0xD25BB962	3529226594	SovietAirfield	苏联	机场		SovietAirfield	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9B621A7B	2606897787	SovietAirfieldReplacement	苏联	机场		SovietAirfieldReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA7F3C6F0	2817771248	SovietAutoSentryGunDefense	苏联	全自动哨戒机炮		SovietAutoSentryGunDefense	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x80D4EA1E	2161437214	SovietBarracks	苏联	军营		SovietBarracks	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC8AA2152	3366592850	SovietBarracksReplacement	苏联	军营		SovietBarracksReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xFA1F6466	4196361318	SovietBaseDefenseAdvanced	苏联	磁爆线圈		SovietBaseDefenseAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x1769BE29	392805929	SovietBaseDefenseAir	苏联	高射炮		SovietBaseDefenseAir	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x4DF5F9C1	1307965889	SovietBaseDefenseGround	苏联	哨兵枪		SovietBaseDefenseGround	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK
+0xE980BF64	3917528932	SovietBunker	苏联	战斗碉堡		SovietBunker	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0xC16FF13F	3245338943	SovietConstructionYard	苏联	建造基地		SovietConstructionYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA01D437D	2686272381	SovietCrane	苏联	起重机回收厂		SovietCrane	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x2D270F77	757534583	SovietDualPurposeCruiseMissileTurret	苏联	礁石岸防导弹要塞		SovietDualPurposeCruiseMissileTurret	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x760B34AF	1980445871	SovietEmblemStatue	苏联	障碍物		SovietEmblemStatue	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xDE462936	3729140022	SovietFutureBuildingA	苏联	平民建筑物		SovietFutureBuildingA	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xDDCD37C9	3721213897	SovietFutureBuildingB	苏联	平民建筑物		SovietFutureBuildingB	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xC17BA3A7	3246105511	SovietFutureBuildingC	苏联	平民建筑物		SovietFutureBuildingC	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xC058E764	3227051876	SovietFutureBuildingD	苏联	平民建筑物		SovietFutureBuildingD	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xADF4DAB0	2918505136	SovietFutureBuildingE	苏联	平民建筑物		SovietFutureBuildingE	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xAD5B495E	2908440926	SovietFutureBuildingF	苏联	平民建筑物		SovietFutureBuildingF	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xC273A197	3262357911	SovietFutureBuildingG	苏联	平民建筑物		SovietFutureBuildingG	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xCBF50CA4	3421834404	SovietFutureBuildingH	苏联	平民建筑物		SovietFutureBuildingH	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xF05C7D42	4032593218	SovietFutureBuildingI	苏联	障碍物		SovietFutureBuildingI	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x6094F50D	1620374797	SovietHeavyAntiAirMissileTurret	苏联	胡杨防空导弹系统		SovietHeavyAntiAirMissileTurret	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x70B6424D	1890992717	SovietHighTechStructure	苏联	高级作战指挥堡垒		SovietHighTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xE19C3C48	3785112648	SovietMotherlandCallStatue	苏联	障碍物		SovietMotherlandCallStatue	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x6E1ABB35	1847245621	SovietNavalYard	苏联	海军船坞		SovietNavalYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x75DDD9D1	1977473489	SovietNavalYardReplacement	苏联	海军船坞		SovietNavalYardReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD43B7665	3560666725	SovietNewStatueC	苏联	障碍物		SovietNewStatueC	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC90340AB	3372433579	SovietNewStatueD	苏联	障碍物		SovietNewStatueD	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x18D953FD	416895997	SovietNewStatueE	苏联	障碍物		SovietNewStatueE	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x09442731	155461425	SovietOutpost	苏联	前哨基地		SovietOutpost	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCF8D9F20	3482165024	SovietPowerPlant	苏联	反应堆		SovietPowerPlant	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x524BBD01	1380695297	SovietPowerPlantAdvanced	苏联	超级反应堆		SovietPowerPlantAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x700FC09A	1880080538	SovietPowerPlantAdvancedReplacement	苏联	超级反应堆		SovietPowerPlantAdvancedReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x4BD0670A	1271949066	SovietRailControlStation	苏联			SovietRailControlStation	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC45AAEAB	3294277291	SovietRefinery	苏联	矿石精炼厂		SovietRefinery	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD20552E1	3523564257	SovietSuperWeapon	苏联	铁幕 		SovietSuperWeapon	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x856C9DD6	2238488022	SovietSuperWeaponAdvanced	苏联	真空内爆弹		SovietSuperWeaponAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xB7377639	3073865273	SovietTechStructure	苏联	战斗研究所		SovietTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x3E02A960	1040361824	SovietTeslaWallHub	苏联			SovietTeslaWallHub	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|POWERED
+0xA82CF003	2821517315	SovietWallPiece	苏联	围墙		SovietWallPiece	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x0895CAE6	144034534	SovietWallSegmentPiece	苏联	围墙		SovietWallSegmentPiece	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD50C222E	3574342190	SovietWarFactory	苏联	战争工厂		SovietWarFactory	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x351C460D	891045389	SovietWarFactoryReplacement	苏联	战争工厂		SovietWarFactoryReplacement	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x5F3D5857	1597855831	WinterArmyReaperHeavyDeployedTurret	苏联	收割机甲炮台		WinterArmyReaperHeavyDeployedTurret	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK
+0x40AE3B3C	1085160252	SovietAirfield_AI	苏联	机场		SovietAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xAF057FC8	2936373192	SovietAirfield_Enhanced	苏联	机场		SovietAirfield	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC1F60C86	3254127750	SovietBarracks_AI	苏联	军营		SovietBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE8B04E87	3903868551	SovietBarracks_Enhanced	苏联	军营		SovietBarracks	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9ED00335	2664432437	SovietBaseDefenseAdvanced_Enhanced	苏联	磁爆线圈		SovietBaseDefenseAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x8B74D99F	2339690911	SovietConstructionYard_Enhanced	苏联	建造基地		SovietConstructionYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB31C574F	3004979023	SovietCrane_AI	苏联	起重机回收厂		SovietCrane	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x3A752092	980754578	SovietCrane_Enhanced	苏联	起重机回收厂		SovietCrane	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9CBBF748	2629564232	SovietHighTechStructure_AI	苏联	高级作战指挥堡垒		SovietHighTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x047BE6CA	75228874	SovietNavalYard_AI	苏联	海军船坞		SovietNavalYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xF0BEBD86	4039032198	SovietPowerPlant_AI	苏联	反应堆		SovietPowerPlant	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x15743D37	359939383	SovietPowerPlantAdvanced_AI	苏联	超级反应堆		SovietPowerPlantAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE8709F07	3899694855	SovietRailControlStation_Bridge	苏联	全自动哨戒机炮		SovietRailControlStation	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA6449D0A	2789514506	SovietRefinery_AI	苏联	矿石精炼厂		SovietRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1FA7A15A	531079514	SovietRefinery_TiberiumField	苏联	矿石精炼厂		SovietRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x58558122	1481998626	SovietSuperWeaponAdvanced_disable	苏联	真空内爆弹		SovietSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x2649F2A0	642380448	SovietTechStructure_AI	苏联	战斗研究所		SovietTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE4148EFE	3826552574	SovietTechStructure_AIUnpack	苏联	战斗研究所		SovietTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x45753539	1165309241	SovietTechStructure_Enhanced	苏联	战斗研究所		SovietTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x236185A4	593593764	SovietWarFactory_AI	苏联	战争工厂		SovietWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x19AB11AF	430641583	SovietAntiInfantryInfantry	苏联	征召兵		SovietAntiInfantryInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x2C358C61	741706849	SovietAntiVehicleInfantry	苏联	防空部队		SovietAntiVehicleInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x38CE7DCD	953056717	SovietChiefScientist	苏联			SovietChiefScientist	1	无 DESC→取最短名前缀	campaign_units	步兵	
+0x174F874F	391087951	SovietCommandoTech1	苏联	娜塔莎		SovietCommandoTech1	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0xA08AABD3	2693442515	SovietEngineer	苏联	战斗工兵		SovietEngineer	1	唯一 DESC(可建造面板)	unit	步兵	AMPHIBIOUS
+0x3E11865D	1041335901	SovietHeavyAntiVehicleInfantry	苏联	磁爆部队		SovietHeavyAntiVehicleInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x8E9ED5CC	2392774092	SovietMortarCycle	苏联	火炮机车		SovietMortarCycle	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x33026FA1	855797665	SovietScoutInfantry	苏联	战熊		SovietScoutInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0xD741D327	3611415335	SovietScoutVehicle	苏联	恐怖机器人		SovietScoutVehicle	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x8ABE6B1D	2327735069	WinterArmyScoutVehicle	苏联	勘察飞轮		WinterArmyScoutVehicle	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0xDFB83E95	3753393813	SovietHeavyAntiVehicleInfantry_Enhanced	苏联	磁爆部队		SovietHeavyAntiVehicleInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0x91578776	2438432630	Overlordtank	苏联	联盟重型坦克		Overlordtank	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x6EBA4F44	1857703748	S02_ExplodingMig	苏联	獾式轰炸机		S02_ExplodingMig	1	无 DESC→取最短名前缀	campaign_units	载具	IMMOBILE|NOT_AUTOACQUIRABLE
+0xCCBD2C91	3434949777	SovietAntiAirShip	苏联	牛蛙战车		SovietAntiAirShip	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xAFBF713B	2948559163	SovietAntiAirVehicle	苏联	石勒喀河自行高射炮		SovietAntiAirVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x60F0B4E9	1626387689	SovietAntiInfantryVehicle	苏联	镰刀机甲		SovietAntiInfantryVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x821381DE	2182316510	SovietAntiStructureVehicle	苏联	V4 导弹发射车		SovietAntiStructureVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x94B3590B	2494781707	SovietAntiVehicleVehicleTech1	苏联	铁锤坦克		SovietAntiVehicleVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x911C7E98	2434563736	SovietAntiVehicleVehicleTech2	苏联	磁爆坦克		SovietAntiVehicleVehicleTech2	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x9E45383C	2655336508	SovietAntiVehicleVehicleTech3	苏联	天启坦克		SovietAntiVehicleVehicleTech3	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x20502281	542122625	SovietAntiVehicleVehicleTech4	苏联	联盟重型坦克		SovietAntiVehicleVehicleTech4	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x417619DF	1098258911	SovietArmoredTrain_ArmorHead	苏联			SovietArmoredTrain_ArmorHead	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0xEF738A96	4017326742	SovietArmoredTrain_CannonCarriage	苏联			SovietArmoredTrain_CannonCarriage	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x4182499F	1099057567	SovietArmoredTrain_Carriage	苏联			SovietArmoredTrain_Carriage	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x2493E226	613671462	SovietArmoredTrain_CarronadeCarriage	苏联			SovietArmoredTrain_CarronadeCarriage	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x3612BBAB	907197355	SovietArmoredTrain_FlakCarriage	苏联			SovietArmoredTrain_FlakCarriage	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x6B695CDB	1802067163	SovietArmoredTrain_NukeMissileCarriage	苏联			SovietArmoredTrain_NukeMissileCarriage	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x800ED185	2148454789	SovietArmoredTrain_PowerHead	苏联			SovietArmoredTrain_PowerHead	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x93FF3DB6	2482978230	SovietGrinderVehicleCorona	苏联	粉碎者		SovietGrinderVehicleCorona	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x3EE3BF3D	1055113021	SovietHeavyAntiAirVehicleTech2	苏联	ZSU-85自行防空炮		SovietHeavyAntiAirVehicleTech2	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xB1E56042	2984599618	SovietHeavyAntiVehicleVehicleTech2	苏联	犀牛坦克		SovietHeavyAntiVehicleVehicleTech2	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x1CC60024	482738212	SovietHeavyGrinder	苏联	粉碎者		SovietHeavyGrinder	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0xC1E2C163	3252863331	SovietHeavyMortarVehicle	苏联	郁金香自行迫击炮		SovietHeavyMortarVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xAF4C0DA5	2940997029	SovietMCV	苏联	基地车		SovietMCV	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xF6DAC2A4	4141531812	SovietMiner	苏联	采矿车		SovietMiner	1	唯一 DESC(可建造面板)	unit	载具	AMPHIBIOUS
+0xE78CA44E	3884753998	SovietSledgehammerSPG	苏联	重锤突击炮		SovietSledgehammerSPG	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0xF918FB5A	4179163994	SovietSPG	苏联	重锤突击炮		SovietSPG	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xBB686AE1	3144182497	SovietSurveyor	苏联	史普尼克勘查车		SovietSurveyor	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xA33B2EEB	2738564843	VUAntiAirVehicleTech1	苏联	“偏流”两栖高射炮		VUAntiAirVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x85CB288F	2244683919	VUAntiInfantryVehicleTech1	苏联	“蝾螈”步兵战车		VUAntiInfantryVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x2859A51F	676963615	VUAntiVehicleVehicleTech1	苏联	“章鱼”突击炮		VUAntiVehicleVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xFB4B3DBD	4216012221	VUBmptVehicle	苏联	BMPT坦克支援车		VUBmptVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xB5376CCE	3040308430	VUMissileAntiVehicleVehicleTech1	苏联	“菊花”导弹车		VUMissileAntiVehicleVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x0CB749FE	213338622	WinterArmyReaperHeavyMecha	苏联	收割机甲		WinterArmyReaperHeavyMecha	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x665F47D6	1717520342	Overlordtank_SpitfireEngineer	苏联	联盟重型坦克		Overlordtank	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x522BCB61	1378601825	SovietAntiAirShip_Ground	苏联	牛蛙战车		SovietAntiAirShip	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xAD485858	2907199576	SovietAntiAirVehicle_Transport	苏联	石勒喀河自行高射炮		SovietAntiAirVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x111A74C7	286946503	SovietAntiStructureVehicle_Enhanced	苏联	V4 导弹发射车		SovietAntiStructureVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xA56E3D06	2775465222	SovietAntiVehicleVehicleTech2_AirAssault	苏联	磁爆坦克		SovietAntiVehicleVehicleTech2	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x82EDE5D3	2196628947	SovietAntiVehicleVehicleTech2_Enhanced	苏联	磁爆坦克		SovietAntiVehicleVehicleTech2	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x9F0344B9	2667791545	SovietAntiVehicleVehicleTech3_Enhanced	苏联	天启坦克		SovietAntiVehicleVehicleTech3	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x9EE5F8A2	2665871522	SovietAntiVehicleVehicleTech3_WOT	苏联	天启坦克		SovietAntiVehicleVehicleTech3	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x7EE484B4	2128905396	SovietAntiVehicleVehicleTech4_Enhanced	苏联	联盟重型坦克		SovietAntiVehicleVehicleTech4	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x916B46F5	2439726837	SovietArmoredTrain_ArmorHead_Firework	苏联			SovietArmoredTrain_ArmorHead	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x95CE6CD3	2513333459	SovietArmoredTrain_CarronadeCarriage_Firework	苏联			SovietArmoredTrain_CarronadeCarriage	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x334A7D20	860519712	SovietArmoredTrain_NukeMissileCarriage_Firework	苏联			SovietArmoredTrain_NukeMissileCarriage	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x6EEB1938	1860901176	SovietHeavyAntiVehicleVehicleTech2_Enhanced	苏联	犀牛坦克		SovietHeavyAntiVehicleVehicleTech2	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x40EF4DC7	1089424839	SovietMCV_Enhanced	苏联	基地车		SovietMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x1960AA4A	425765450	SovietMCV_Enhanced_Naval	苏联	基地车		SovietMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x1545FAC2	356907714	SovietMCV_Naval	苏联	基地车		SovietMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x951764B9	2501338297	SovietMiner_Naval	苏联	采矿车		SovietMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x62F058BF	1659918527	SovietMiner_Naval_TiberiumField	苏联	采矿车(散矿版)		SovietMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x438DC608	1133364744	SovietMiner_NoReplace	苏联	采矿车		SovietMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x989D88E8	2560461032	SovietMiner_TiberiumField	苏联	采矿车(散矿版)		SovietMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0xDAACBC0C	3668753420	SovietSledgehammerSPG_Enhanced	苏联	重锤突击炮		SovietSledgehammerSPG	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x92718B35	2456914741	SovietSurveyor_Naval	苏联	史普尼克勘查车		SovietSurveyor	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xCCC0438C	3435152268	S08_SovietAntiStructureShip	苏联	苏联特使		S08_SovietAntiStructureShip	1	无 DESC→取最短名前缀	campaign_units	舰船	CAN_ATTACK
+0xAFF62E78	2952146552	SovietAntiNavyShipTech1	苏联	磁爆快艇		SovietAntiNavyShipTech1	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|AMPHIBIOUS
+0x8D0A384A	2366257226	SovietAntiNavyShipTech2	苏联	阿库拉攻击潜艇		SovietAntiNavyShipTech2	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x0430257C	70264188	SovietAntiNavyShipTech3	苏联	光荣级导弹巡洋舰		SovietAntiNavyShipTech3	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xBCEF51B9	3169800633	SovietAntiStructureShip	苏联	无畏级武库舰		SovietAntiStructureShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x5CA2BA5D	1554168413	SovietAntiNavyShipTech1_AirAssault	苏联	磁爆快艇		SovietAntiNavyShipTech1	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|AMPHIBIOUS
+0x6EFA5243	1861898819	SovietAntiNavyShipTech1_Enhanced	苏联	磁爆快艇		SovietAntiNavyShipTech1	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|AMPHIBIOUS
+0xED23C07C	3978543228	SovietAntiNavyShipTech2_Enhanced	苏联	阿库拉攻击潜艇		SovietAntiNavyShipTech2	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0xA74555B0	2806338992	SovietAntiStructureShip_Enhanced	苏联	无畏级武库舰		SovietAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x40ACAD6D	1085058413	SovietAntiGroundAircraft	苏联	双刃直升机		SovietAntiGroundAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x95826617	2508350999	SovietAntiGroundAttacker	苏联	伊尔攻击机		SovietAntiGroundAttacker	1	无 DESC→取最短名前缀	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xFFA811AE	4289204654	SovietBomberAircraft	苏联	基洛夫飞艇		SovietBomberAircraft	1	多 DESC(阵营/真单位同名)	unit	飞行器	CAN_ATTACK
+0x7F54CED1	2136264401	SovietFighterAircraft	苏联	米格战斗机		SovietFighterAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x12E6F290	317125264	SovietHeavyTransportAircraft	苏联	鲁斯兰大型运输机		SovietHeavyTransportAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x840270E4	2214752484	SovietInterceptorAircraft	苏联	苏霍伊截击机		SovietInterceptorAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x6D9F8A98	1839172248	SovietTransportAircraft	苏联	纤夫运输直升机		SovietTransportAircraft	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xD293353B	3532862779	SovietWeatherBalloon	苏联	民用气象飞艇		SovietWeatherBalloon	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0xAD17BDA8	2904014248	WinterArmyKoelAttackUAV	苏联	蜂鸟侦查无人机		WinterArmyKoelAttackUAV	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0xAA672693	2858886803	SovietAntiGroundAircraft_Enhanced	苏联	双刃直升机		SovietAntiGroundAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0xF68B7D15	4136336661	SovietAntiGroundAttacker_Enhanced	苏联	伊尔攻击机		SovietAntiGroundAttacker	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x440FE7FF	1141893119	SovietBomberAircraft_Movie	苏联	基洛夫飞艇		SovietBomberAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK
+0x80E237CD	2162309069	SovietTransportAircraft_HeavyCannon	苏联	纤夫武装运输直升机		SovietTransportAircraft	0	变体/形态(可由基准派生)	unit	飞行器	CAN_ATTACK|TRANSFORMER
+0x1894B5E9	412399081	S08_SovietWarFactory	苏联	战争工厂		S08_SovietWarFactory	1	无 DESC→取最短名前缀	campaign_units	其他	IMMOBILE|NOT_AUTOACQUIRABLE
+0x04F32965	83044709	JapanBarracks	帝国	瞬息道场		JapanBarracks	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x89AE48EA	2309900522	JapanBaseDefense	帝国	防卫者-VX		JapanBaseDefense	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x2D795EEA	762928874	JapanBaseDefenseAdvanced	帝国	波能塔		JapanBaseDefenseAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x356FA3A9	896508841	JapanConstructionYard	帝国	建造基地		JapanConstructionYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x5EA380F2	1587773682	JapanHighTechStructure	帝国	帝国V.I.P要塞		JapanHighTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1FDF98B6	534747318	JapanIwoJima40mmAntiAirGun	帝国			JapanIwoJima40mmAntiAirGun	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK
+0x9B1A469D	2602190493	JapanIwoJimaBarracks	帝国	瞬息道场		JapanIwoJimaBarracks	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x6C919E76	1821482614	JapanIwoJimaInfantryArtilleryBunker	帝国			JapanIwoJimaInfantryArtilleryBunker	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK
+0x2280173C	578819900	JapanIwoJimaInfantryCliffBunker	帝国			JapanIwoJimaInfantryCliffBunker	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xC55F0E00	3311341056	JapanIwoJimaInfantryCoreFortress	帝国			JapanIwoJimaInfantryCoreFortress	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|GARRISON
+0x44083D1F	1141390623	JapanIwoJimaInfantryPrimaryBunker	帝国			JapanIwoJimaInfantryPrimaryBunker	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|GARRISON
+0xBFFE4E21	3221114401	JapanIwoJimaInfantrySmallBunker	帝国			JapanIwoJimaInfantrySmallBunker	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xD8CDF55B	3637376347	JapanKamikazeCommandTower	帝国	樱花井		JapanKamikazeCommandTower	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x263DA9AF	641575343	JapanNavalYard	帝国	帝国码头		JapanNavalYard	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xF03A09A7	4030335399	JapanOmegaOblivionBomb	帝国	湮灭炸弹		JapanOmegaOblivionBomb	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK
+0x5BA365EB	1537435115	JapanPointShieldControlTower	帝国	瞬息纳米护盾投射塔		JapanPointShieldControlTower	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x309480DD	815038685	JapanPowerPlant	帝国	瞬息发电机		JapanPowerPlant	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x80C3022B	2160263723	JapanPowerPlantTurbine	帝国	涡轮机		JapanPowerPlantTurbine	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x5D02B20C	1560457740	JapanRefinery	帝国	矿石精炼厂		JapanRefinery	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD6D22475	3604096117	JapanSuperWeapon	帝国	纳米虫群巢穴		JapanSuperWeapon	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x1AFC9A6E	452762222	JapanSuperWeaponAdvanced	帝国	超能波毁灭装置		JapanSuperWeaponAdvanced	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0xD20CC8DE	3524053214	JapanTechStructure	帝国	纳米科技电脑主机		JapanTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xF8C50039	4173660217	JapanWallPiece	帝国	围墙		JapanWallPiece	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xBF93CE00	3214134784	JapanWallSegmentPiece	帝国	围墙		JapanWallSegmentPiece	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA689B39A	2794042266	JapanWarFactory	帝国	机甲工厂		JapanWarFactory	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA459EF98	2757357464	JapanBaseDefense_Enhanced	帝国	防卫者-VX		JapanBaseDefense	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x4580C4BD	1166066877	JapanConstructionYard_Enhanced	帝国	建造基地		JapanConstructionYard	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD25BEE6C	3529240172	JapanRefinery_TiberiumField	帝国	矿石精炼厂		JapanRefinery	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x6388764B	1669887563	JapanSuperWeaponAdvanced_disable	帝国	超能波毁灭装置		JapanSuperWeaponAdvanced	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|POWERED|NOT_AUTOACQUIRABLE
+0x614B7C5D	1632336989	JapanTechStructure_Enhanced	帝国	纳米科技电脑主机		JapanTechStructure	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x144D8BAC	340626348	JapanWarFactory_Enhanced	帝国	机甲工厂		JapanWarFactory	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x0FB02C55	263203925	JapanAntiInfantryInfantry	帝国	帝国武士		JapanAntiInfantryInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x7D0549DD	2097498589	JapanAntiVehicleInfantry	帝国	坦克杀手		JapanAntiVehicleInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0xD81C1012	3625717778	JapanAntiVehicleInfantryTech3	帝国	火箭天使		JapanAntiVehicleInfantryTech3	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|TRANSFORMER
+0xC9E24BAF	3387050927	JapanArcherInfantry	帝国	弓箭少女		JapanArcherInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x6586A5A0	1703323040	JapanCommandoTech1	帝国	欧米伽百合子		JapanCommandoTech1	1	多 DESC(阵营/真单位同名)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x598FC0D4	1502593236	JapanCommandoTech1_Complete	帝国	百合子(完整)		JapanCommandoTech1	1	多 DESC(阵营/真单位同名)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0x20DBDFCC	551280588	JapanEngineer	帝国	工兵		JapanEngineer	1	唯一 DESC(可建造面板)	unit	步兵	AMPHIBIOUS
+0xA768E216	2808668694	JapanInfiltrationInfantry	帝国	忍者		JapanInfiltrationInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK|AMPHIBIOUS
+0xF67311D3	4134736339	JapanKamikazeInfantry	帝国	狂热帝国武士		JapanKamikazeInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0x12E7D7A4	317183908	JapanScoutInfantry	帝国	爆裂机器人		JapanScoutInfantry	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK
+0xDDACA5DD	3719079389	JapanAntiVehicleInfantry_Ambush	帝国	坦克杀手		JapanAntiVehicleInfantry	0	变体/形态(可由基准派生)	unit	步兵	CAN_ATTACK
+0x6E8C5FFF	1854693375	JapanAntiAirVehicleTech1	帝国	打击者-VX		JapanAntiAirVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xC3986ED4	3281546964	JapanAntiInfantryVehicle	帝国	天狗机器人		JapanAntiInfantryVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x90B81D3C	2427985212	JapanAntiStructureVehicle	帝国	波能坦克		JapanAntiStructureVehicle	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0xCEB7DA1F	3468155423	JapanAntiVehicleVehicleTech1	帝国	海啸坦克		JapanAntiVehicleVehicleTech1	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x59908E62	1502645858	JapanAntiVehicleVehicleTech3	帝国	鬼王		JapanAntiVehicleVehicleTech3	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x57F07A3A	1475377722	JapanBarracksEgg	帝国	道场核心		JapanBarracksEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x69919CB5	1771150517	JapanBarracksEgg_T3	帝国	高阶道场核心		JapanBarracksEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x2412FB82	605223810	JapanBaseDefenseAdvancedEgg	帝国	塔楼核心		JapanBaseDefenseAdvancedEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x1F496B6B	524905323	JapanBaseDefenseEgg	帝国	防卫者核心		JapanBaseDefenseEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x5066384B	1348876363	JapanGigaFortressShipEgg	帝国	超级要塞核心		JapanGigaFortressShipEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xB5E3C722	3051603746	JapanHighTechStructureEgg	帝国	V.I.P要塞核心		JapanHighTechStructureEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x7117987E	1897371774	JapanKamikazeCommandTowerEgg	帝国	樱花井核心		JapanKamikazeCommandTowerEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x2C39DAC5	741989061	JapanKingOniXMecha_Enhanced	帝国	鬼王X		JapanKingOniXMecha_Enhanced	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x1791E072	395436146	JapanLightTransportVehicle	帝国	迅雷运输艇		JapanLightTransportVehicle	1	唯一 DESC(可建造面板)	unit	载具	TRANSFORMER|AMPHIBIOUS
+0x1C2EF767	472840039	JapanMCV	帝国	基地车		JapanMCV	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x1581883A	360810554	JapanMechaX	帝国	鬼王X		JapanMechaX	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0x92CDE50F	2462967055	JapanMiner	帝国	采矿车		JapanMiner	1	唯一 DESC(可建造面板)	unit	载具	AMPHIBIOUS
+0x57B88B60	1471712096	JapanMissileMechaAdvanced	帝国	心神机甲		JapanMissileMechaAdvanced	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xF0455D99	4031077785	JapanNavalYardEgg	帝国	码头核心		JapanNavalYardEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xF447DCB8	4098350264	JapanNavalYardEgg_T3	帝国	高阶码头核心		JapanNavalYardEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xF6CAF260	4140495456	JapanPointShieldControlTowerEgg	帝国	投射塔核心		JapanPointShieldControlTowerEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xC6B3F8AA	3333683370	JapanPowerPlantEgg	帝国	发电机核心		JapanPowerPlantEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xFF4A8B60	4283075424	JapanRefineryEgg	帝国	矿石精炼厂核心		JapanRefineryEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x7B862459	2072388697	JapanSentinelVehicle	帝国	钢铁浪人		JapanSentinelVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0xE5EC3883	3857463427	JapanSteelRoninMecha	帝国	钢铁浪人		JapanSteelRoninMecha	1	唯一 DESC(可建造面板)	unit	载具	CAN_ATTACK
+0x5C1C0F0F	1545342735	JapanSuperWeaponAdvancedEgg	帝国	毁灭装置核心		JapanSuperWeaponAdvancedEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x5FC93021	1607020577	JapanSuperWeaponEgg	帝国	纳米虫群核心		JapanSuperWeaponEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x78D3E32C	2027152172	JapanTechStructureEgg	帝国	电脑主机核心		JapanTechStructureEgg	1	唯一 DESC(可建造面板)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xD2ACD3EB	3534541803	JapanTransportVehicle2	帝国			JapanTransportVehicle2	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0x1A0E0D72	437128562	JapanTsunamiAssaultTank	帝国	海啸坦克		JapanTsunamiAssaultTank	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0xA02E31D3	2687381971	JapanWarFactoryEgg	帝国	机甲工厂核心		JapanWarFactoryEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x5AE2245E	1524769886	JapanWarFactoryEgg_T3	帝国	高阶机甲工厂核心		JapanWarFactoryEgg	1	多 DESC(阵营/真单位同名)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x02B0E053	45146195	JapanAntiAirVehicleTech1_Enhanced	帝国	打击者-VX		JapanAntiAirVehicleTech1	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x9F67C5D6	2674378198	JapanAntiAirVehicleTech1_Enhanced_Water	帝国	打击者-VX		JapanAntiAirVehicleTech1	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x3F06C283	1057407619	JapanAntiInfantryVehicle_Enhanced	帝国	天狗机器人		JapanAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xC1BDDB5C	3250445148	JapanAntiInfantryVehicle_Enhanced_Water	帝国	天狗机器人		JapanAntiInfantryVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER|AMPHIBIOUS
+0xD39025CA	3549439434	JapanAntiStructureVehicle_Enhanced	帝国	波能坦克		JapanAntiStructureVehicle	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0xBA8E535F	3129889631	JapanAntiVehicleVehicleTech1_Naval	帝国	海啸坦克		JapanAntiVehicleVehicleTech1	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0x4FE689E2	1340508642	JapanAntiVehicleVehicleTech3_Movie	帝国	鬼王		JapanAntiVehicleVehicleTech3	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK
+0x9284877E	2458158974	JapanBaseDefenseEgg_Enhanced	帝国	防卫者核心		JapanBaseDefenseEgg	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xD372437F	3547480959	JapanBaseDefenseEgg_S07	帝国	防卫者核心		JapanBaseDefenseEgg	0	变体/形态(可由基准派生)	campaign_units	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x0A4E80A3	172916899	JapanLightTransportVehicle_AntiTank	帝国	迅雷运输艇		JapanLightTransportVehicle	0	变体/形态(可由基准派生)	unit	载具	TRANSFORMER|AMPHIBIOUS
+0x7924346B	2032415851	JapanLightTransportVehicle_Kamikaze	帝国	迅雷运输艇		JapanLightTransportVehicle	0	变体/形态(可由基准派生)	unit	载具	TRANSFORMER|AMPHIBIOUS
+0x5E5CF68F	1583150735	JapanMCV_Enhanced	帝国	基地车		JapanMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x16EAABFD	384478205	JapanMCV_Enhanced_Naval	帝国	基地车		JapanMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xD2ECDA2C	3538737708	JapanMCV_Naval	帝国	基地车		JapanMCV	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xE27A88A0	3799681184	JapanMiner_Naval	帝国	采矿车		JapanMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0xBAC77782	3133634434	JapanMiner_Naval_TiberiumField	帝国	采矿车(散矿版)		JapanMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x4B1B5EDE	1260084958	JapanMiner_NoReplace	帝国	采矿车		JapanMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x086E655C	141452636	JapanMiner_TiberiumField	帝国	采矿车(散矿版)		JapanMiner	0	变体/形态(可由基准派生)	unit	载具	AMPHIBIOUS
+0x3450A0C2	877699266	JapanMissileMechaAdvanced_Enhanced	帝国	心神机甲		JapanMissileMechaAdvanced	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0xDF391F7C	3745062780	JapanMissileMechaAdvanced_Enhanced_Water	帝国	心神机甲		JapanMissileMechaAdvanced	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|TRANSFORMER
+0x5E986303	1587045123	JapanTechStructureEgg_Enhanced	帝国	电脑主机核心		JapanTechStructureEgg	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0x59025164	1493324132	JapanTsunamiAssaultTank_Naval	帝国	海啸坦克		JapanTsunamiAssaultTank	0	变体/形态(可由基准派生)	unit	载具	CAN_ATTACK|AMPHIBIOUS
+0xDDCBCCF9	3721121017	JapanWarFactoryEgg_Enhanced	帝国	机甲工厂核心		JapanWarFactoryEgg	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xD173F397	3514037143	JapanWarFactoryEgg_T3_Enhanced	帝国	高阶机甲工厂核心		JapanWarFactoryEgg	0	变体/形态(可由基准派生)	unit	载具	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xB142DEC6	2973949638	JapanAntiAirShip	帝国	海翼		JapanAntiAirShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x99F5113D	2582974781	JapanAntiNavyShipTech3	帝国	太刀重巡洋舰		JapanAntiNavyShipTech3	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0xFC5E3314	4234031892	JapanAntiStructureShip	帝国	将军战列舰		JapanAntiStructureShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x1A2CA9AB	439134635	JapanAntiVehicleShip	帝国	薙刀驱逐舰		JapanAntiVehicleShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x6ECA5F9A	1858756506	JapanBattleShipOld	帝国	将军战列舰		JapanBattleShipOld	1	无 DESC→取最短名前缀	unit	舰船	CAN_ATTACK
+0x30A862D6	816341718	JapanFortressShip	帝国	超级要塞		JapanFortressShip	1	多 DESC(阵营/真单位同名)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x2F03D2E1	788779745	JapanGigaFortress_Land	帝国	超级要塞		JapanGigaFortress_Land	1	无 DESC→取最短名前缀	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xAAE5C03C	2867183676	JapanGigaFortressShip	帝国	超级要塞		JapanGigaFortressShip	1	无 DESC→取最短名前缀	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x4605B1F6	1174778358	JapanInterceptorAircraft	帝国	樱花回天雷		JapanInterceptorAircraft	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xCEDA61FD	3470418429	JapanNavyScoutShip	帝国	长枪迷你潜艇		JapanNavyScoutShip	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0x1EB5C3E8	515228648	JapanYumiAircraftCarrier	帝国	千鸟特攻母舰		JapanYumiAircraftCarrier	1	唯一 DESC(可建造面板)	unit	舰船	CAN_ATTACK
+0xF3439735	4081293109	JapanAntiAirShip_Enhanced	帝国	海翼		JapanAntiAirShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x40976C20	1083665440	JapanAntiNavyShipTech3_Enhanced	帝国	太刀重巡洋舰		JapanAntiNavyShipTech3	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x726BF680	1919678080	JapanAntiStructureShip_Enhanced	帝国	将军战列舰		JapanAntiStructureShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x79B1C957	2041694551	JapanAntiVehicleShip_Enhanced	帝国	薙刀驱逐舰		JapanAntiVehicleShip	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK
+0x0A9D011A	178061594	JapanInterceptorAircraft_Ground	帝国	樱花回天雷		JapanInterceptorAircraft	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0xCDEF1FC2	3455000514	JapanInterceptorAircraft_WarfactoryWater	帝国	樱花回天雷		JapanInterceptorAircraft	0	变体/形态(可由基准派生)	unit	舰船	CAN_ATTACK|TRANSFORMER
+0x078AB8D6	126531798	JapanOmegaOblivionBombEgg	帝国	湮灭炸弹核心		JapanOmegaOblivionBombEgg	1	唯一 DESC(可建造面板)	unit	飞行器	UNPACKS_INTO_BUILDING|AMPHIBIOUS
+0xEA8BE878	3935037560	JapanSakuraAttackRocket	帝国	鬼樱特攻机		JapanSakuraAttackRocket	1	唯一 DESC(可建造面板)	unit	飞行器	CAN_ATTACK
+0x17A52B6D	396700525	JapanHealingStation	帝国			JapanHealingStation	1	无 DESC→取最短名前缀	campaign_structures	其他	IMMOBILE|POWERED
+0x95BC56A5	2512148133	JapanPsychicInhibitor	帝国			JapanPsychicInhibitor	1	无 DESC→取最短名前缀	campaign_structures	其他	IMMOBILE|CAN_ATTACK|POWERED
+0x45DDE2DB	1172169435	JapanBaseDefense_S07	帝国	防卫者-VX		JapanBaseDefense	0	变体/形态(可由基准派生)	campaign_units	其他	IMMOBILE|CAN_ATTACK|POWERED
+0xE9C38722	3921905442	AirportTechStructure	中立	机场		AirportTechStructure	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x257E8AD1	629050065	CoronaMap_CelestialCivilianBuilding01	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x359769A7	899115431	CoronaMap_CelestialCivilianBuilding02	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding02	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x229E7A93	580811411	CoronaMap_CelestialCivilianBuilding03	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding03	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x3E862946	1048979782	CoronaMap_CelestialCivilianBuilding04	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding04	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x11132EFE	286469886	CoronaMap_CelestialCivilianBuilding05	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding05	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x16A72B84	380054404	CoronaMap_CelestialCivilianBuilding06	中立	平民建筑物		CoronaMap_CelestialCivilianBuilding06	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE830665A	3895486042	CoronaMap_CelestialGreenHouse	中立	平民建筑物		CoronaMap_CelestialGreenHouse	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x89838C2C	2307099692	CoronaMap_KharkivCivilianBuilding_01	中立	平民建筑物		CoronaMap_KharkivCivilianBuilding_01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x971D685D	2535286877	CoronaMap_KharkivIndustrialBuilding_LeftPart	中立	平民建筑物		CoronaMap_KharkivIndustrialBuilding_LeftPart	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x4D140601	1293157889	CoronaMap_KharkivIndustrialBuilding_MiddlePart	中立	平民建筑物		CoronaMap_KharkivIndustrialBuilding_MiddlePart	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xD282E6BE	3531794110	CoronaMap_KharkivIndustrialBuilding_RightPart	中立	平民建筑物		CoronaMap_KharkivIndustrialBuilding_RightPart	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x1C3D2FBB	473771963	CoronaMap_ParisArk	中立	平民建筑物		CoronaMap_ParisArk	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xA53FE0B2	2772426930	DefensiveStructureTechStructure	中立	发射基地		DefensiveStructureTechStructure	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x21E5C11B	568705307	DefensiveStructureTechStructureMetalSlug	中立	发射基地		DefensiveStructureTechStructureMetalSlug	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|CAN_ATTACK|POWERED
+0x3B1CD6DC	991745756	GarageTechStructure	中立	车库		GarageTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x7E129BB4	2115148724	HospitalTechStructure	中立	医院		HospitalTechStructure	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xAE378830	2922874928	ObservationPostTechStructure	中立	前线哨塔		ObservationPostTechStructure	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA3E28BBE	2749533118	OilDerrick	中立	钻油塔		OilDerrick	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x212445F1	556025329	OreNode	中立	矿脉		OreNode	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x0EAE2BD7	246295511	OreNodeSmall	中立			OreNodeSmall	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xC0F5DADD	3237337821	OreNodeWorthy_NoGrowth_Large	中立			OreNodeWorthy_NoGrowth_Large	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x7FDE66EF	2145281775	Ra2_OreNode	中立			Ra2_OreNode	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xA6341918	2788432152	ShipYardTechStructure	中立	干船坞		ShipYardTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xFE293C2D	4264115245	VeterancyTechStructure	中立	精兵学院		VeterancyTechStructure	1	唯一 DESC(可建造面板)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xDD99FE7E	3717856894	OilDerrick_OnWater	中立	钻油塔		OilDerrick	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x07F3461A	133383706	OreNode_LooseOre_100	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x8AA3183A	2325944378	OreNode_LooseOre_100_FreeField	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x766B1A61	1986730593	OreNode_LooseOre_12000	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x1DE6D0B4	501665972	OreNode_LooseOre_200	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xE2CC580F	3805042703	OreNode_LooseOre_200_FreeField	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xD564BF2C	3580149548	OreNode_LooseOre_400	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x74799DA1	1954127265	OreNode_LooseOre_400_FreeField	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x0696CD12	110546194	OreNode_LooseOre_Base	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x4FEDE70D	1340991245	OreNode_LooseOre_NoGrowth	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x3E6CC57B	1047315835	OreNode_NoGrowth_Large	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xEEB95B36	4005124918	OreNode_TiberiumField	中立			OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xB4A024E8	3030394088	Ra2_OreNode_Base	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xFCC7C1C9	4240949705	Ra2_OreNode_FreeField	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xF2B855CA	4072166858	Ra2_OreNode_LooseOre_12000	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x8995BB39	2308291385	Ra2_OreNode_NoGrowth	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xF8EDE79E	4176340894	Ra2_OreNode_NoGrowth_Large	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x2B331168	724767080	Ra2_OreNode_Worthy	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x3AA6E891	984017041	Ra2_OreNode_Worthy_FreeField	中立			Ra2_OreNode	0	变体/形态(可由基准派生)	structure	建筑	IMMOBILE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x0BB62E20	196488736	CoronaMap_OreNodeOreAmountSetterVehicle	中立			CoronaMap_OreNodeOreAmountSetterVehicle	1	无 DESC→取最短名前缀	unit	载具	CAN_ATTACK
+0xF07B59A0	4034615712	AreaOfEffectDownAttributeCrate	中立	属性箱		AreaOfEffectDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x0A42B97C	172145020	AreaOfEffectUpDownAttributeCrate	中立	属性箱		AreaOfEffectUpDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xCDB07511	3450893585	ArmorDownAttributeCrate	中立	属性箱		ArmorDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x87A97ACD	2276031181	ArmorUpAttributeCrate	中立	属性箱		ArmorUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x634174A0	1665234080	AttackSuperDownAttributeCrate	中立	属性箱		AttackSuperDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xE680ECB5	3867208885	AttackSuperUpAttributeCrate	中立	属性箱		AttackSuperUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x6C65E68F	1818617487	BombCrate	中立	炸弹箱		BombCrate	1	唯一 DESC(可建造面板)	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x8F821BCD	2407668685	CantMoveAttributeCrate	中立	属性箱		CantMoveAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x0BFFC923	201312547	CrateAttribute	中立	属性箱		CrateAttribute	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x6C337D59	1815313753	CrateHeal	中立	治疗箱		CrateHeal	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xC5557E68	3310714472	CrateHealMP	中立	奖励箱		CrateHealMP	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xEF5D1375	4015854453	CrateMoney	中立	现金箱		CrateMoney	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xBAA787FD	3131541501	CrateMoneyMP	中立	奖励箱		CrateMoneyMP	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x2CAF86D8	749700824	CrateRandom	中立	神秘箱		CrateRandom	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x8F743C28	2406759464	CrateSalvage	中立			CrateSalvage	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xF4A7E879	4104644729	CrateShroud	中立	监视箱		CrateShroud	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x6FC506CC	1875183308	CrateVeterancy	中立	经验箱		CrateVeterancy	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x5FA8998B	1604884875	CrateVeterancyMP	中立	奖励箱		CrateVeterancyMP	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x42BE2BB0	1119759280	DamageMultDownAttributeCrate	中立	属性箱		DamageMultDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xED2F5708	3979302664	DamageMultUpAttributeCrate	中立	属性箱		DamageMultUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x54C0F813	1421932563	DeflectIncomingFireBoxAttributeCrate	中立	属性箱		DeflectIncomingFireBoxAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x3F858FEB	1065717739	EmotionDissidentAttributeCrate	中立	属性箱		EmotionDissidentAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xABF5F3C8	2885022664	EmotionDissidentBombCrate	中立	炸弹箱		EmotionDissidentBombCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xAB184D15	2870496533	ForzenCrate	中立	炸弹箱		ForzenCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x67F18CFE	1743883518	HealSuperDownAttributeCrate	中立	属性箱		HealSuperDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x9A88F779	2592667513	HealSuperUpAttributeCrate	中立	属性箱		HealSuperUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xF0EB3D90	4041948560	InaudibleAttributeCrate	中立	属性箱		InaudibleAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x77018D80	1996590464	IronCurtainAttributeCrate	中立	属性箱		IronCurtainAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x4BDAF44C	1272640588	NanoPointDefenceCrate	中立	炸弹箱		NanoPointDefenceCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x13123896	319961238	NoSpecialAbilityAttributeCrate	中立	属性箱		NoSpecialAbilityAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x13145F3D	320102205	OnSeaUnitCrate	中立			OnSeaUnitCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x8FF1A0C1	2414977217	RadarCloseBombCrate	中立	炸弹箱		RadarCloseBombCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xE895D2AC	3902132908	RangeDownAttributeCrate	中立	属性箱		RangeDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x13A95A0F	329865743	RangeSuperDownAttributeCrate	中立	属性箱		RangeSuperDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x1FCF25FA	533669370	RangeSuperUpAttributeCrate	中立	属性箱		RangeSuperUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xDE4D2C62	3729599586	RangeUpAttributeCrate	中立	属性箱		RangeUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x747B9E8D	1954258573	RateOfFireDownAttributeCrate	中立	属性箱		RateOfFireDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x90EACEBF	2431307455	RateOfFireUpAttributeCrate	中立	属性箱		RateOfFireUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xA8D7CCC9	2832714953	RechargeTimeDownAttributeCrate	中立	属性箱		RechargeTimeDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x7E1792E1	2115474145	RechargeTimeUpAttributeCrate	中立	属性箱		RechargeTimeUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xE3044D32	3808709938	ShroudRevealToAllAttributeCrate	中立	属性箱		ShroudRevealToAllAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xC33F3C1A	3275701274	SpeedDownAttributeCrate	中立	属性箱		SpeedDownAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xEF8C8725	4018964261	SpeedSuperUpAttributeCrate	中立	属性箱		SpeedSuperUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x425BA5CB	1113302475	SpeedUpAttributeCrate	中立	属性箱		SpeedUpAttributeCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xB3047F13	3003416339	SuperBombCrate	中立	炸弹箱		SuperBombCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x3AE5286C	988096620	SuperMetaImpactCrate	中立	炸弹箱		SuperMetaImpactCrate	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x3FA3F32C	1067709228	UnitCrate	中立	部队箱		UnitCrate	1	唯一 DESC(可建造面板)	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xDC56666A	3696649834	UnitCrateNew	中立	部队箱		UnitCrateNew	1	无 DESC→取最短名前缀	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xBE41C295	3191980693	CrateMoneyMP_200	中立	奖励箱		CrateMoneyMP	0	变体/形态(可由基准派生)	unit	箱子	IMMOBILE|CRATE|UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x11B62B99	297151385	MultiplayerBeacon	中立	信标		MultiplayerBeacon	1	唯一 DESC(可建造面板)	unit	其他	UNATTACKABLE|NOT_AUTOACQUIRABLE
+0xDA338E67	3660811879	MultiplayerBeaconAttached	中立	信标		MultiplayerBeaconAttached	1	无 DESC→取最短名前缀	unit	其他	UNATTACKABLE|NOT_AUTOACQUIRABLE
+0x373075B5	925922741	BaseCivilianStructureNoGarrisonDestructible	平民	障碍物		BaseCivilianStructureNoGarrisonDestructible	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x9B22CA25	2602748453	CoronaMap_AmiensCathedral_01	平民	障碍物		CoronaMap_AmiensCathedral_01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xD33360CC	3543359692	CoronaMap_ApolloLunarModule	平民	障碍物		CoronaMap_ApolloLunarModule	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x0AE80BF0	182979568	CoronaMap_CelestialPavilion01	平民	障碍物		CoronaMap_CelestialPavilion01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x1FE90EE1	535367393	CoronaMap_CelestialPavilion02	平民	障碍物		CoronaMap_CelestialPavilion02	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xE895B710	3902125840	FutureTechSigmaHarmonizer	平民			FutureTechSigmaHarmonizer	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0x6DB5FF16	1840643862	HB_CastleWall_04	平民	平民建筑物		HB_CastleWall_04	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0x53521D38	1397890360	HB_CastleWall_05	平民	平民建筑物		HB_CastleWall_05	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0xDB42898C	3678570892	MJ_BuildingHillside01	平民	平民建筑物		MJ_BuildingHillside01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xF83F51C6	4164899270	MJ_BuildingStilts01	平民	平民建筑物		MJ_BuildingStilts01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x59A919F4	1504254452	MJ_BuildingWaterWheelLarge01	平民	平民建筑物		MJ_BuildingWaterWheelLarge01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x77E2373E	2011313982	MJ_BuildingWaterWheelSmall01	平民	平民建筑物		MJ_BuildingWaterWheelSmall01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x2F5DDC86	794680454	MJ_BuildingWoods01	平民	平民建筑物		MJ_BuildingWoods01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xD7BF8BBA	3619654586	MJ_BuildingWoods02	平民	平民建筑物		MJ_BuildingWoods02	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE81248AE	3893512366	MJ_EmperorsTomb	平民			MJ_EmperorsTomb	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0x7A09C8C3	2047461571	MJ_GuardHouse01	平民	平民建筑物		MJ_GuardHouse01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xB3B539E5	3014998501	MJ_KenjiVilla	平民			MJ_KenjiVilla	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xA9C7E6CF	2848450255	MJ_MtFujiViewingTower	平民	天皇的宫殿		MJ_MtFujiViewingTower	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x6BCC878D	1808566157	MJ_OldJapanTomb1	平民			MJ_OldJapanTomb1	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0xC8A06E84	3365957252	MJ_OldJapanTomb2	平民			MJ_OldJapanTomb2	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0x43A1C24A	1134674506	MJ_OldJapanTomb3	平民			MJ_OldJapanTomb3	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0x75A42C6A	1973693546	MJ_OldJapanTomb4	平民			MJ_OldJapanTomb4	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON|NOT_AUTOACQUIRABLE
+0xF0692C18	4033424408	MJ_PalaceWall03	平民	障碍物		MJ_PalaceWall03	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xB23AC058	2990194776	MJ_Structure_01	平民	平民建筑物		MJ_Structure_01	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xF4E9B49D	4108956829	MJ_Structure_02	平民	平民建筑物		MJ_Structure_02	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xE90F44E3	3910092003	MJ_Structure_03	平民	平民建筑物		MJ_Structure_03	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0x4AD27119	1255305497	MJ_Structure_04	平民	平民建筑物		MJ_Structure_04	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|GARRISON
+0xB4D68BCF	3033959375	CORMAP_CivMan	平民			CORMAP_CivMan	1	无 DESC→取最短名前缀	unit	步兵	
+0x2672C07D	645054589	CORMAP_CivManA_01	平民			CORMAP_CivManA_01	1	无 DESC→取最短名前缀	unit	步兵	
+0xC6E398C5	3336804549	CORMAP_CivManB_01	平民			CORMAP_CivManB_01	1	无 DESC→取最短名前缀	unit	步兵	
+0xC58BAEFE	3314265854	CORMAP_CivManB_02	平民			CORMAP_CivManB_02	1	无 DESC→取最短名前缀	unit	步兵	
+0xB49E94A0	3030291616	CORMAP_CivManB_03	平民			CORMAP_CivManB_03	1	无 DESC→取最短名前缀	unit	步兵	
+0xA941CEAB	2839662251	CORMAP_CivManB_04	平民			CORMAP_CivManB_04	1	无 DESC→取最短名前缀	unit	步兵	
+0x9B5B2B33	2606443315	CORMAP_CivManB_05	平民			CORMAP_CivManB_05	1	无 DESC→取最短名前缀	unit	步兵	
+0x9AEA6B78	2599054200	CORMAP_CivManB_06	平民			CORMAP_CivManB_06	1	无 DESC→取最短名前缀	unit	步兵	
+0x0F7455B4	259282356	CORMAP_CivManB_07	平民			CORMAP_CivManB_07	1	无 DESC→取最短名前缀	unit	步兵	
+0x093A5A53	154819155	CORMAP_CivManB_08	平民			CORMAP_CivManB_08	1	无 DESC→取最短名前缀	unit	步兵	
+0xE6A4AA3A	3869551162	CORMAP_CivWoman	平民			CORMAP_CivWoman	1	无 DESC→取最短名前缀	unit	步兵	
+0x103A55C6	272258502	CORMAP_CivWomanA_01	平民			CORMAP_CivWomanA_01	1	无 DESC→取最短名前缀	unit	步兵	
+0x7EFB5753	2130401107	CORMAP_CivWomanA_02	平民			CORMAP_CivWomanA_02	1	无 DESC→取最短名前缀	unit	步兵	
+0xB4895B7C	3028900732	CORMAP_CivWomanA_03	平民			CORMAP_CivWomanA_03	1	无 DESC→取最短名前缀	unit	步兵	
+0xEC1F96F7	3961493239	CORMAP_CivWomanA_04	平民			CORMAP_CivWomanA_04	1	无 DESC→取最短名前缀	unit	步兵	
+0x0DAD9473	229479539	CORMAP_CivWomanA_05	平民			CORMAP_CivWomanA_05	1	无 DESC→取最短名前缀	unit	步兵	
+0x785F6799	2019518361	CORMAP_CivWomanA_06	平民			CORMAP_CivWomanA_06	1	无 DESC→取最短名前缀	unit	步兵	
+0xDF2B4560	3744154976	CORMAP_CivWomanA_07	平民			CORMAP_CivWomanA_07	1	无 DESC→取最短名前缀	unit	步兵	
+0xB9EB9010	3119222800	CelestialPowerFakeHalo	特殊			CelestialPowerFakeHalo	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xEF10998C	4010842508	CelestialPowerHalo	特殊			CelestialPowerHalo	1	无 DESC→取最短名前缀	structure	建筑	IMMOBILE|NOT_AUTOACQUIRABLE
+0xC4B86091	3300417681	CelestialSonarBuoy	特殊	莲灯		CelestialSonarBuoy	1	唯一 DESC(可建造面板)	unit	步兵	CAN_ATTACK

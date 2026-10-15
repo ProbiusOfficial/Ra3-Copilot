@@ -1,15 +1,25 @@
 # ============================================================
+# Ra3-Copilot · 收录策略：
 # ============================================================
 
 /*
 
-# ---- 白名单（产品本体与仓库基础设施） ----
+# ---- 白名单（产品本体 / 单位代码研究 / 仓库基础设施） ----
+!/unit-codes/
 !/docs/
 !/README.md
 !.gitignore
 !.gitattributes
 
-# unit-codes/             单位代码研究归档
+# ---- unit-codes：只收录"提取逻辑 + 派生清单" ----
+# 原始抽取物（游戏 .big 解出的清单/字符串）与第三方图鉴属版权材料，不入库
+#   重新生成见 unit-codes/README.md（工具在 unit-codes/tools/）
+/unit-codes/data/source/
+/unit-codes/data/*.json
+/unit-codes/data/*.bak_*
+/unit-codes/out/
+/unit-codes/**/__pycache__/
+
 
 # ---- 构建产物 ----
 x64/

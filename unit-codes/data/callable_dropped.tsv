@@ -1,0 +1,32 @@
+faction	chinese_name	id	code_hex	reason
+神州	凌波护卫战车	CelestialAirDrop_Land	0x2A2CC306	运输/搭载体
+盟军	航空母舰	AlliedChronoBeacon_AircraftCarrier	0x56F9E40A	忽略全部选择（传送/空投抵达体）
+盟军	阿波罗战斗机	AlliedChronoBeacon_Apollo	0x2C0290FF	忽略全部选择（传送/空投抵达体）
+盟军	阿瑞斯截击机	AlliedChronoBeacon_Ares	0xD3177D59	忽略全部选择（传送/空投抵达体）
+盟军	突袭驱逐舰	AlliedChronoBeacon_AssaultDestroyer	0xCC7100C4	忽略全部选择（传送/空投抵达体）
+盟军	雅典娜炮	AlliedChronoBeacon_AthenaCannon	0xA2FF6EC5	忽略全部选择（传送/空投抵达体）
+盟军	特洛伊突击要塞	AlliedChronoBeacon_BattleFortress	0x06F6307A	名字属于 ChronoBeacon（传送/空投抵达体）
+盟军	世纪轰炸机	AlliedChronoBeacon_CenturyBomber	0x7255015E	忽略全部选择（传送/空投抵达体）
+盟军	冰冻直升机	AlliedChronoBeacon_Cryocopter	0x6C7375B1	忽略全部选择（传送/空投抵达体）
+盟军	未来坦克X-1	AlliedChronoBeacon_FutureTank	0x346E8404	忽略全部选择（传送/空投抵达体）
+盟军	守护者坦克	AlliedChronoBeacon_GuardianTank	0x2DAA4493	忽略全部选择（传送/空投抵达体）
+盟军	先锋武装炮艇机	AlliedChronoBeacon_Harbinger	0x2A62F22F	忽略全部选择（传送/空投抵达体）
+盟军	水翼船	AlliedChronoBeacon_Hydrofoil	0xCB7D1820	忽略全部选择（传送/空投抵达体）
+盟军	多功能步兵战车	AlliedChronoBeacon_IFV	0x717292FC	忽略全部选择（传送/空投抵达体）
+盟军	基地车	AlliedChronoBeacon_MCV	0x3D301335	忽略全部选择（传送/空投抵达体）
+盟军	采矿车	AlliedChronoBeacon_Miner	0x3ABE7892	忽略全部选择（传送/空投抵达体）
+盟军	幻影坦克	AlliedChronoBeacon_MirageTank	0xC066F9D1	忽略全部选择（传送/空投抵达体）
+盟军	波塞冬巡洋舰	AlliedChronoBeacon_Poseidon	0xDB5A5941	忽略全部选择（传送/空投抵达体）
+盟军	光棱坦克	AlliedChronoBeacon_PrismTank	0xA4143C83	忽略全部选择（传送/空投抵达体）
+盟军	激流 ACV	AlliedChronoBeacon_Riptide	0x6D526B63	忽略全部选择（传送/空投抵达体）
+盟军	维护者轰炸机	AlliedChronoBeacon_Vindicator	0xBADE039E	忽略全部选择（传送/空投抵达体）
+盟军	涡轮	AlliedPowerPlantTurbine	0xE6A2CCE9	由技能/超武召唤产生的临时体
+盟军	基地车	AlliedChronoBeacon_MCV_Naval	0x0FDDCEAC	忽略全部选择（传送/空投抵达体）
+盟军	采矿车	AlliedChronoBeacon_Miner_Naval	0xC780A559	忽略全部选择（传送/空投抵达体）
+盟军	激流 ACV	AlliedChronoBeacon_Riptide_Naval	0xE7D3AC17	名字属于 ChronoBeacon（传送/空投抵达体）
+苏联	纤夫运输直升机	SovietTeslaAirAssault	0x5953C7A1	忽略全部选择（传送/空投抵达体）
+苏联	纤夫运输直升机	SovietTeslaAirAssaultExpand	0xBE0DDEA7	忽略全部选择（传送/空投抵达体）
+苏联	纤夫运输直升机	SovietTeslaAirAssault_Naval	0x1387A870	忽略全部选择（传送/空投抵达体）
+苏联	纤夫运输直升机	SovietTeslaAirAssaultExpand_Naval	0xFC40D256	忽略全部选择（传送/空投抵达体）
+帝国	飞燕特攻机	JapanYumiAircraft	0xBD2690DD	官方库未标记 SELECTABLE
+帝国	飞燕特攻机	JapanYumiAircraft_Kamikaze	0xCCB16783	官方库未标记 SELECTABLE
