@@ -42,7 +42,7 @@
 | POST | `/capture` | 收编（归属改成本地玩家） |
 | POST | `/kill` | 摧毁选中 |
 | POST | `/rank` | 满级 |
-| POST | `/speed?mode=0..3` | 0 超速 / 1 慢速 / 2 冻结 / 3 恢复 |
+| POST | `/speed?mode=0..3` | 0 超速 / 1 慢速 / 2 定住 / 3 恢复 |
 | POST | `/health?mode=0..2` | 0 无敌 / 1 残血 / 2 恢复血量 |
 | POST | `/summon?hash=0x..&count=N` | 按哈希召唤单位 |
 | POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`） |

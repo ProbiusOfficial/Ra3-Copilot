@@ -1,5 +1,5 @@
 // httpapi.cpp - 进程内调试接口实现（winsock，仅 127.0.0.1）
-// ★ winsock2.h 必须在 windows.h 之前（否则 windows.h 会先拉进旧 winsock.h，导致 ws2tcpip.h 报错）
+// winsock2.h 必须在 windows.h 之前（否则 windows.h 会先拉进旧 winsock.h，导致 ws2tcpip.h 报错）
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -314,7 +314,7 @@ bool GetParam(const char* q, const char* key, char* out, int n) {
 int GetParamInt(const char* q, const char* key, int def) {
     char b[32];
     if (!GetParam(q, key, b, sizeof(b))) return def;
-    return (int)strtoul(b, nullptr, 0);   // ★ atoi 不认 0x 前缀（左下角惨案真根因）；base=0 同时支持十/十六进制
+    return (int)strtoul(b, nullptr, 0);   // atoi 不认 0x 前缀（左下角惨案真根因）；base=0 同时支持十/十六进制
 }
 
 // 把命令投递给渲染线程并等结果
@@ -401,7 +401,7 @@ void Handle(SOCKET c, char* req) {
             "== 变更（投递到渲染线程=游戏主线程）==\n"
             "POST /copy | /wnb | /mcv       复制选中 / 预设增援×8 / 基地车\n"
             "POST /capture | /kill | /rank  收编 / 摧毁选中 / 满级\n"
-            "POST /speed?mode=0..3          超速/慢速/冻结/恢复\n"
+            "POST /speed?mode=0..3          超速/慢速/定住/恢复\n"
             "POST /health?mode=0..2         无敌/残血/恢复\n"
             "POST /summon?hash=0x..&count=N[&owner=索引][&x=&y=&z=]  按哈希召唤（owner 见 /snapshot；给 x/y/z 则落在指定坐标）\n"
             "POST /crate?idx=N&count=N      空投箱\n"
@@ -631,7 +631,7 @@ void Handle(SOCKET c, char* req) {
     }
 
     // ---- 变更类：投递给渲染线程 ----
-    // ★ 已取消闸门（2026-10-16）：接口只监听 127.0.0.1，单机环境下「把 MCP 配置交给 AI」
+    // 已取消闸门（2026-10-16）：接口只监听 127.0.0.1，单机环境下「把 MCP 配置交给 AI」
     //   本身即视为授权。原「脑机接口开关」只拦带 ai=1 的请求（即 MCP 通道），却常被误当成
     //   能力开关，徒增"到底开没开"的困惑 → 不再拦截任何请求。
     //   ai=1 仅保留作遥测（计数 + 调用日志，见本函数末尾）。
@@ -652,7 +652,7 @@ void Handle(SOCKET c, char* req) {
         GetParam(query, "hash", hb, sizeof(hb));
         args[0] = (int)strtoul(hb, nullptr, 0);
         args[1] = GetParamInt(query, "count", 1);
-        // ★ owner=<玩家索引> → 给该方召唤（缺省/0 = 本地玩家）。索引见 /snapshot 的 owners[].idx
+        // owner=<玩家索引> → 给该方召唤（缺省/0 = 本地玩家）。索引见 /snapshot 的 owners[].idx
         int teamOv = 0;
         if (GetParam(query, "owner", ob, sizeof(ob))) {
             const int idx = atoi(ob);
@@ -667,7 +667,7 @@ void Handle(SOCKET c, char* req) {
         }
         args[2] = teamOv;
         na = 3;
-        // ★ 指定落点：?x=&y=&z=（给了 x 与 y 即生效；否则退回 光标/选中/视角）
+        // 指定落点：?x=&y=&z=（给了 x 与 y 即生效；否则退回 光标/选中/视角）
         char xb[32] = { 0 }, yb[32] = { 0 }, zb[32] = { 0 };
         if (GetParam(query, "x", xb, sizeof(xb)) && GetParam(query, "y", yb, sizeof(yb))) {
             float px = strtof(xb, nullptr), py = strtof(yb, nullptr), pz = 0.0f;

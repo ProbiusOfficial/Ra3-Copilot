@@ -66,7 +66,7 @@ PlayerIdCaveStub PROC
     mov   g_localPlayerId, eax
     jmp   pi_replay
 pi_clear:
-    ; ★ 不清零：保留"上一次有效值"（UI 按钮是异步点击的，清零会让收编/召唤当场失效）
+    ; 不清零：保留"上一次有效值"（UI 按钮是异步点击的，清零会让收编/召唤当场失效）
 pi_replay:
     popfd                               ; 9D
     popad                               ; 61
@@ -199,7 +199,7 @@ fb2_skip:
 FastBuild2CaveStub ENDP
 
 FastBuild3CaveStub PROC                 ; base+0x2F6CFF  AOB D986BC010000 (6B, push/ret)
-    ; ★ 基于 CE：这里**不动 [esi+0x1bc]**（那是别的计时器，写它会卡建造），
+    ; 基于 CE：这里**不动 [esi+0x1bc]**（那是别的计时器，写它会卡建造），
     ;   只做 [edi+0x14] = [edi+0x3c] + 1（建造队列计时一致性），且 ebp==1 时跳过
     pushad
     pushfd
@@ -207,7 +207,7 @@ FastBuild3CaveStub PROC                 ; base+0x2F6CFF  AOB D986BC010000 (6B, p
     je    fb3_skip
     cmp   ebp, 1
     je    fb3_skip
-    cmp   edi, 00010000h                ; ★ 护栏：edi 不是原指令提供的，可能是垃圾值
+    cmp   edi, 00010000h                ; 护栏：edi 不是原指令提供的，可能是垃圾值
     jb    fb3_skip
     mov   eax, dword ptr [edi+3Ch]
     inc   eax
@@ -224,7 +224,7 @@ FastBuild3CaveStub ENDP
 ;   [ebp+0x260]=99999.0f
 ; ===========================================================================
 MapCaveStub PROC
-    ; ★ 原指令是"写" [ebp+0x260]；必须先重放原指令、再覆盖，否则我们的值会被它冲掉（之前迷雾无效的根因）
+    ; 原指令是"写" [ebp+0x260]；必须先重放原指令、再覆盖，否则我们的值会被它冲掉（之前迷雾无效的根因）
     movss dword ptr [ebp+00000260h], xmm0 ; F3 0F 11 85 60 02 00 00  原指令**先**重放
     pushfd
     pushad
@@ -324,7 +324,7 @@ OKData2CaveStub ENDP
 UnitAmmoCaveStub PROC
     pushad
     pushfd
-    ; ★ 这段代码正在遍历"选中单位"数组（原指令 mov ecx,[edx+edi*4]），顺便抓一个出来
+    ; 这段代码正在遍历"选中单位"数组（原指令 mov ecx,[edx+edi*4]），顺便抓一个出来
     mov   eax, dword ptr [edx+edi*4]
     test  eax, eax
     jz    ua_nosel
@@ -337,7 +337,7 @@ ua_nosel:
     je    ua_skip
     cmp   dword ptr [ebp+000003ACh], 0
     je    ua_skip
-    cmp   ecx, 00010000h            ; ★ 护栏：不像堆指针就别写（防闪退）
+    cmp   ecx, 00010000h            ; 护栏：不像堆指针就别写（防闪退）
     jb    ua_skip
     mov   dword ptr [ecx+01Ch], 07FFFFFFFh
 ua_skip:
@@ -353,7 +353,7 @@ UnitAmmoCaveStub ENDP
 ;   g_flags+13 == 1 -> [eax+8]=50000 ; == 2 -> [eax+8]=0
 ; ===========================================================================
 DangerLevelCaveStub PROC
-    ; ★★ 原指令 mov eax,[ecx+0x1278] **本身才把目标对象装进 eax**！
+    ; 原指令 mov eax,[ecx+0x1278] **本身才把目标对象装进 eax**！
     ;    必须先重放它、再写 [eax+8]；否则 eax 是垃圾 → 写飞 → 闪退（本机闪退根因）
     mov   eax, dword ptr [ecx+00001278h] ; 8B 81 78 12 00 00  原指令**先**重放
     pushfd
@@ -409,7 +409,7 @@ GodModeCaveStub PROC
     mov   edi, dword ptr [ecx+00000418h]
     cmp   edi, g_localPlayerObj
     jne   gm_skip
-    cmp   esi, 00010000h            ; ★ 护栏：不像堆指针就别写（防闪退）
+    cmp   esi, 00010000h            ; 护栏：不像堆指针就别写（防闪退）
     jb    gm_skip
     mov   dword ptr [esi+04h], 0497423F0h  ; 9999999.0f
     mov   dword ptr [esi+0Ch], 0497423F0h
@@ -461,7 +461,7 @@ SuperPowerCaveStub PROC
     mov   ecx, g_localPlayerObj
     test  ecx, ecx
     jz    sp_skip
-    cmp   esi, 00010000h                ; ★ 护栏：esi 不是原指令提供的，可能是垃圾值
+    cmp   esi, 00010000h                ; 护栏：esi 不是原指令提供的，可能是垃圾值
     jb    sp_skip
     cmp   byte ptr [g_flags+0Dh], 1
     jne   sp_chk_e

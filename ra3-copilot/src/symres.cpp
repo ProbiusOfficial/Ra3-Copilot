@@ -142,7 +142,7 @@ uintptr_t DeriveSelMgr() {
             if (v < 0x01000000 || v >= 0x80000000 || inMod(v)) continue;
             uint32_t cnt = 0, node = 0, mgrVt = 0;
             if (!rd32(v + 0x5c, cnt) || cnt < 1 || cnt > 64) continue;
-            // ★ 管理器自身 vtable 必须在主模块内 —— 排除堆上"形状相似"的假对象
+            // 管理器自身 vtable 必须在主模块内 —— 排除堆上"形状相似"的假对象
             //   （2026-10-14 教训：缺这一条时误命中一个堆对象，导致所有选中单位操作失效）
             if (!rd32(v, mgrVt) || !inMod(mgrVt)) continue;
             if (!rd32(v + 0x50, node) || !node) continue;
@@ -221,7 +221,7 @@ void SymInit() {
     }
     if (!s_fact.addr) { s_fact.addr = reinterpret_cast<uintptr_t>(g_img) + R_THINGFACT; s_fact.how = "RVA兜底"; }
 
-    // 选中管理器：★ 优先「RVA + 结构验证」（CE 表逐字节验证过，对本构建可靠）；
+    // 选中管理器：优先「RVA + 结构验证」（CE 表逐字节验证过，对本构建可靠）；
     //   只有验证失败才退回"扫 .data 结构推导"（面向未知版本/其它 mod）。
     //   —— 2026-10-14 教训：扫 .data 曾误命中毒对象 → 所有"选中单位操作"（收编/血量/速度/满级/摧毁）全部失效。
     {

@@ -4,9 +4,9 @@
 //   · privateAttackObject(victim, maxShots, cmdSource)  运行时 VA 0x76E690（ret 0xC, na=3）
 //   · privateMoveToPosition(Coord3D* pos, cmdSource)    运行时 VA 0x6EFF70（ret 8,   na=2）
 //
-// ★ 必须在渲染线程（游戏主线程）执行；地址为运行时 VA（ImageBase 0x400000，无 ASLR）。
-// ★ na（栈参数量）必须与被调方 ret N/4 严格一致，否则调用器尾声 esp 失衡跳飞。
-// ★ 联机禁用；本模块只对"本局存在的活体对象"下发命令。
+// 必须在渲染线程（游戏主线程）执行；地址为运行时 VA（ImageBase 0x400000，无 ASLR）。
+// na（栈参数量）必须与被调方 ret N/4 严格一致，否则调用器尾声 esp 失衡跳飞。
+// 联机禁用；本模块只对"本局存在的活体对象"下发命令。
 #pragma once
 #include <cstdint>
 

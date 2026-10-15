@@ -457,7 +457,7 @@ TOOLS = [
     {
         "name": "summon_unit",
         "description": "召唤单位到战场。unit 可给中文名、模板名或哈希。"
-                       "★ 给 x/y/z 就落在指定世界坐标（不再依赖鼠标光标）；不给则按 光标/选中单位 自动选点。"
+                       "给 x/y/z 就落在指定世界坐标（不再依赖鼠标光标）；不给则按 光标/选中单位 自动选点。"
                        "owner 可指定归属（0/缺省=你的阵营；>0 = get_battle_state 里的敌方 idx，用于给对手加兵/测试）。",
         "inputSchema": {
             "type": "object",

@@ -102,7 +102,7 @@ bool LooksLikeTeam(uint32_t p) {
 }
 
 // 运行时推导 Thing vtable：选中单位(Drawable) -> [d+0x138](Thing) -> vtable
-// ★ 必须校验"那真的是 Thing"：Thing+0x418 得是合法 Team 对象。
+// 必须校验"那真的是 Thing"：Thing+0x418 得是合法 Team 对象。
 //   教训（2026-10-15 实机）：刚召唤出来的单位是"半初始化"的，它的 [d+0x138] 可能是垃圾
 //   → 会推导出一个错误 vtable（实测 0x00C2E324）→ 全图扫描命中数暴跌 → 快照全空。
 uint32_t DeriveThingVt() {
@@ -203,7 +203,7 @@ bool ScanBattlefield(BattleSummary* out, bool fresh) {
     const DWORD t0 = GetTickCount();
     uint32_t vt = DeriveThingVt();
     CollectThings(vt);
-    // ★ 命中数兜底：候选 vtable 若是错的（典型：选中了刚召唤出来的半初始化单位），
+    // 命中数兜底：候选 vtable 若是错的（典型：选中了刚召唤出来的半初始化单位），
     //   命中数会从数千暴跌到几十 → 用已知常量重扫，取命中更多的那个。
     if (vt != kThingVtFallback && g_nHits < 200) {
         const int a = g_nHits;

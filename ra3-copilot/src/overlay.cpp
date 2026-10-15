@@ -236,7 +236,7 @@ HWND FindGameWnd() {
 }
 
 LRESULT CALLBACK OverlayWndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
-    // ★ 关键：鼠标落在菜单上时，把鼠标消息**吞掉**，不要传给游戏
+    // 关键：鼠标落在菜单上时，把鼠标消息**吞掉**，不要传给游戏
     //   （否则点菜单等于点游戏世界 → 选择丢失/下错命令）
     if (g_ov.imguiReady && g_cfg.visible && g_cfg.blockInput) {
         bool havePt = true;
@@ -316,7 +316,7 @@ void EnsureImGui(IDirect3DDevice9* dev) {
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX9_Init(dev);
 
-    // ★ 字形范围自己列全：ImGui 自带的 ChineseSimplifiedCommon **不含箭头等符号**，
+    // 字形范围自己列全：ImGui 自带的 ChineseSimplifiedCommon **不含箭头等符号**，
     //   界面上会显示成 '?'（实测「复制单位 → 光标处」的箭头、"•" 之类的符号全丢了）。
     static const ImWchar kGlyphRanges[] = {
         0x0020, 0x00FF,   // 基本拉丁 + 拉丁补充（含 × · °）
@@ -367,7 +367,7 @@ void EnsureImGui(IDirect3DDevice9* dev) {
 }
 
 void BuildUI();
-// ★ 每帧逻辑（与菜单是否可见无关）：调试接口、帧计数、快捷键队列、自动空投
+// 每帧逻辑（与菜单是否可见无关）：调试接口、帧计数、快捷键队列、自动空投
 void OverlayTick();
 
 void RenderOverlay(IDirect3DDevice9* dev) {
@@ -408,7 +408,7 @@ HRESULT STDMETHODCALLTYPE HookSetTransform(IDirect3DDevice9* dev, D3DTRANSFORMST
     if (m) {
         __try {
             if (st == D3DTS_VIEW) {
-                // ★ 只接受"像 3D 场景相机"的视图矩阵（前向朝下，fz 明显为负），
+                // 只接受"像 3D 场景相机"的视图矩阵（前向朝下，fz 明显为负），
                 //   否则会抓到 UI/2D 那一遍的矩阵 → 视角中心算出垃圾
                 const float fz = m->_33;      // 行向量约定：第 3 行 = 相机前向，_33 = 前向的 z 分量
                 // 诊断：无条件记录（不过滤）—— 用来核对过滤阈值/行列约定是否搞反
@@ -416,7 +416,7 @@ HRESULT STDMETHODCALLTYPE HookSetTransform(IDirect3DDevice9* dev, D3DTRANSFORMST
                 g_viewLastFz = fz;
                 InterlockedIncrement(&g_viewCount);
                 if (fz < g_viewMinFz) { g_viewMinFz = fz; memcpy(g_viewMinMat, m, sizeof(float) * 16); }
-                // ★ 判据改为「平移分量非零」：真·3D 相机视图矩阵含相机平移
+                // 判据改为「平移分量非零」：真·3D 相机视图矩阵含相机平移
                 //   （行主序在 _41/_42/_43，列主序在 _14/_24/_34）；UI/2D 那遍是单位矩阵（平移=0）。
                 //   旧判据 "_33 < -0.05" 实测把游戏 3D 相机的 VIEW 全部拒掉了（坐标约定不符）。
                 const float tRow = (m->_41 < 0 ? -m->_41 : m->_41) + (m->_42 < 0 ? -m->_42 : m->_42) + (m->_43 < 0 ? -m->_43 : m->_43);
@@ -475,7 +475,7 @@ void HookDeviceVtable(IDirect3DDevice9* dev) {
                              reinterpret_cast<void**>(&g_origSwapPresent), "SwapChain::Present");
             sc->Release();
         }
-        // ★ IDirect3DDevice9 标准 vtable（0-based，按 d3d9.h 方法顺序）：
+        // IDirect3DDevice9 标准 vtable（0-based，按 d3d9.h 方法顺序）：
         //   16=Reset 17=Present 41=BeginScene 42=EndScene 43=Clear 44=SetTransform 45=GetTransform
         //   （曾误用 vt[24] —— 那是 CreateVolumeTexture，游戏永不调用 → VIEW 矩阵永远抓不到）
         HookFunction(vt[44], reinterpret_cast<void*>(&HookSetTransform),
@@ -626,7 +626,7 @@ HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, cons
             if (!g_hasView || !g_hasProj) {   // 兜底：游戏可能用常量表而非 SetTransform
                 D3DMATRIX m;
                 if (!g_hasView && SUCCEEDED(dev->GetTransform(D3DTS_VIEW, &m))) {
-                    // ★ 只采纳"像 3D 相机"的矩阵（行3=前向，_33=前向 z 应明显为负）。
+                    // 只采纳"像 3D 相机"的矩阵（行3=前向，_33=前向 z 应明显为负）。
                     //   shader 游戏不走固定管线时 GetTransform 会返回【单位矩阵】(._33=1) →
                     //   必须丢弃，否则污染 g_viewMat，反投影会算出近原点垃圾（"生成在左下角"的直接成因）。
                     if (m._33 < -0.05f) {
@@ -656,7 +656,7 @@ HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, cons
             }
             if (!g_ov.imguiReady) EnsureImGui(dev);
             if (g_ov.imguiReady && dev == g_ov.device) {
-                OverlayTick();                     // ★ 无论菜单是否可见都要跑（否则 HTTP 接口会超时）
+                OverlayTick();                     // 无论菜单是否可见都要跑（否则 HTTP 接口会超时）
                 if (g_cfg.visible) RenderOverlay(dev);
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -684,7 +684,7 @@ HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a
             if (SUCCEEDED(sc->GetDevice(&dev)) && dev) {
                 if (!g_ov.imguiReady) EnsureImGui(dev);
                 if (g_ov.imguiReady && dev == g_ov.device) {
-                    OverlayTick();                 // ★ 兜底：若游戏只走 SwapChain::Present
+                    OverlayTick();                 // 兜底：若游戏只走 SwapChain::Present
                     if (g_cfg.visible) RenderOverlay(dev);
                 }
                 dev->Release();
@@ -723,7 +723,7 @@ const HKDef kHK[] = {
     { 'I',    false, HK_COPY,        "I",        "复制选中单位 → 光标处" },
     { VK_OEM_MINUS, false, HK_SPEEDMAX,  "-",       "加速（选中单位）" },
     { VK_OEM_PLUS,  false, HK_SPEEDSLOW, "+",       "减速（选中单位）" },
-    { VK_PRIOR, false, HK_FREEZE,     "PageUp",   "冻结单位" },
+    { VK_PRIOR, false, HK_FREEZE,     "PageUp",   "定住单位" },
     { VK_NEXT,  false, HK_SPEEDNORM,  "PageDown", "恢复速度" },
     { VK_OEM_4, false, HK_HPMAX,      "[",        "无限血量" },
     { VK_OEM_6, false, HK_HPMIN,      "]",        "残血（血量设为 1）" },
@@ -749,7 +749,7 @@ int  g_moneyLockVal = 0;
 // 单位操作：锁定血量（每帧把选中单位血量回写到上限）
 bool g_hpLock = false;
 
-// ★ 快捷键动作队列：输入线程只"投递"，真正执行放到渲染线程（= 游戏主线程）
+// 快捷键动作队列：输入线程只"投递"，真正执行放到渲染线程（= 游戏主线程）
 //   原因：召唤/满级会调用游戏内部函数，从我们的输入线程调用 = 跨线程竞态 → 闪退（实测）
 const int kHKQ = 32;
 int g_hkQ[kHKQ] = { 0 };
@@ -837,7 +837,7 @@ void TabResource() {
     if (ImGui::Button("加钱 (F7)", ImVec2(120, 0))) MoneyAdd(g_cfg.addAmount);
 
     // 锁定金额：点一下把「当前资金」钉住（之后每帧回写），再点解除
-    // ★ 状态必须取"点击前"的副本：按钮回调会翻转 g_moneyLock，若 Push/Pop 各判一次
+    // 状态必须取"点击前"的副本：按钮回调会翻转 g_moneyLock，若 Push/Pop 各判一次
     //   就会"没 Push 却 Pop" → ImGui 断言框（PopStyleColor too many times）。2026-10-15 实机踩到。
     const bool moneyLocked = g_moneyLock;
     if (moneyLocked) PushBtnOn();
@@ -947,7 +947,7 @@ void TabBattle() {
     ImGui::SameLine();
     if (ImGui::Button("慢速", ImVec2(70, 0))) LogAct("慢速", ActSpeed(1));
     ImGui::SameLine();
-    if (ImGui::Button("冻结", ImVec2(70, 0))) LogAct("冻结", ActSpeed(2));
+    if (ImGui::Button("定住", ImVec2(70, 0))) LogAct("定住", ActSpeed(2));
     ImGui::SameLine();
     if (ImGui::Button("恢复速度", ImVec2(86, 0))) LogAct("恢复速度", ActSpeed(3));
     ImGui::SameLine();
@@ -1000,7 +1000,7 @@ void TabBattle() {
 }
 
 // ===== 面板：单位操作（2026-10-15 重排）=====
-// 按钮顺序：升级单位 / 锁定血量 / 无限血量 / 加速 ‖ 恢复速度 / 减速 / 冻结单位 / 接管单位 / 摧毁单位
+// 按钮顺序：升级单位 / 锁定血量 / 无限血量 / 加速 ‖ 恢复速度 / 减速 / 定住单位 / 接管单位 / 摧毁单位
 // 秒杀模式、We Need Back 已按需求移除；无限弹药与复制移到按钮区（秒杀原位置）。
 void PanelUnitOps() {
     ImGui::Text("选中 %d 个单位", SelectedCount());
@@ -1029,7 +1029,7 @@ void PanelUnitOps() {
     // —— 第 1 排：升级 / 血量 / 加速 ——
     if (ImGui::Button("升级单位", ImVec2(84, 0))) LogAct("升级单位", ActRank());
     ImGui::SameLine();
-    const bool hpLocked = g_hpLock;                  // ★ 同上：取点击前的副本
+    const bool hpLocked = g_hpLock;                  // 同上：取点击前的副本
     if (hpLocked) PushBtnOn();
     if (ImGui::Button("锁定血量", ImVec2(84, 0))) {
         g_hpLock = !g_hpLock;
@@ -1052,7 +1052,7 @@ void PanelUnitOps() {
     ImGui::SameLine();
     if (ImGui::Button("减速", ImVec2(84, 0))) LogAct("减速", ActSpeed(1));
     ImGui::SameLine();
-    if (ImGui::Button("冻结单位", ImVec2(84, 0))) LogAct("冻结单位", ActSpeed(2));
+    if (ImGui::Button("定住单位", ImVec2(84, 0))) LogAct("定住单位", ActSpeed(2));
     ImGui::SameLine();
     if (ImGui::Button("接管单位", ImVec2(84, 0))) LogAct("接管单位", ActSetOwner());
     ImGui::SameLine();
@@ -1440,8 +1440,8 @@ void OverlayTick() {
     const float dt = s_lastMs ? (now - s_lastMs) / 1000.0f : 0.0f;
     s_lastMs = now;
 
-    HttpApiPump();                    // ★ 执行调试接口投递过来的命令（本线程=游戏主线程）
-    PostProcPump();                   // ★ 到期补跑"创建后处理"（登记召唤物进玩家体系）
+    HttpApiPump();                    // 执行调试接口投递过来的命令（本线程=游戏主线程）
+    PostProcPump();                   // 到期补跑"创建后处理"（登记召唤物进玩家体系）
     ++g_tickNow;                      // 帧计数（选中单位新鲜度判断用）
     g_logClock += dt;
     // 详细日志：每 5 秒一条心跳（只落盘、不进 UI 日志环）。
@@ -1456,7 +1456,7 @@ void OverlayTick() {
                     g_hookSt.installed, g_hookSt.total, GuardSkips());
         WriteDiskLog(LOG_INFO, hb);
     }
-    // ★ 先在渲染线程（= 游戏主线程）执行排队的快捷键动作
+    // 先在渲染线程（= 游戏主线程）执行排队的快捷键动作
     for (int k = 0; k < 8; ++k) { const int id = PopHotkey(); if (!id) break; RunHotkey(id); }
     // 金额锁定：每帧把资金回写到锁定值（在游戏主线程上做，安全）
     if (g_moneyLock && LocalPlayerReady()) MoneySet(g_moneyLockVal);
@@ -1569,7 +1569,7 @@ void BuildUI() {
         ImGui::End();
     }
 
-    DrainColorStack();        // ★ 护栏：把任何遗留的 PushStyleColor 清掉，杜绝 ImGui 断言框
+    DrainColorStack();        // 护栏：把任何遗留的 PushStyleColor 清掉，杜绝 ImGui 断言框
     g_panelRectN = g_rectFill;
 }
 
@@ -1605,7 +1605,7 @@ void RunHotkey(int id) {
     case HK_LEVELUP:      LogAct("升级单位", ActRank()); break;
     case HK_SPEEDMAX:     LogAct("加速", ActSpeed(0)); break;
     case HK_SPEEDSLOW:    LogAct("减速", ActSpeed(1)); break;
-    case HK_FREEZE:       LogAct("冻结单位", ActSpeed(2)); break;
+    case HK_FREEZE:       LogAct("定住单位", ActSpeed(2)); break;
     case HK_SPEEDNORM:    LogAct("恢复速度", ActSpeed(3)); break;
     case HK_HPMAX:        LogAct("无限血量", ActHealth(0)); break;
     case HK_HPMIN:        LogAct("残血", ActHealth(1)); break;
@@ -1753,13 +1753,13 @@ bool DropCrate(int ownerPlayer, int count, bool atMouse) {
 }
 
 void OverlayInit() {
-    SetUnhandledExceptionFilter(Ra3CrashFilter);   // ★ 先装崩溃捕获（崩溃现场落盘，无视日志开关）
+    SetUnhandledExceptionFilter(Ra3CrashFilter);   // 先装崩溃捕获（崩溃现场落盘，无视日志开关）
     g_hookSt = InstallHooks();
     SymInit();                          // 符号解析（特征码+结构推导，先于任何动作）
     AddLog(LOG_OK, "功能钩子 %d/%d 已安装（AOB 通过 %d）",
            g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk);
 
-    HttpApiStart(17832);                // ★ 调试接口先起来（/ping 立刻可用；变更类命令等渲染线程）
+    HttpApiStart(17832);                // 调试接口先起来（/ping 立刻可用；变更类命令等渲染线程）
 
     for (int i = 0; i < 1800 && !GetModuleHandleA("d3d9.dll"); ++i) Sleep(100);
 

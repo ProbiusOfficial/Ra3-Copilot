@@ -15,7 +15,7 @@ namespace ra3 {
 void HttpApiStart(int port = 17832);
 void HttpApiStop();
 
-// ★ 由渲染线程每帧调用：执行挂起的命令（没有就立刻返回）
+// 由渲染线程每帧调用：执行挂起的命令（没有就立刻返回）
 void HttpApiPump();
 
 // ---- 脑机接口（MCP）开放开关 & 遥测（面板用）----

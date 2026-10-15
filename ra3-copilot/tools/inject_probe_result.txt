@@ -1,0 +1,32 @@
+[*] target pid=65496
+[*] exe path = D:\GAME\Game_RTS\Red Alert 3\Data\ra3_1.12.game
+[i] already loaded: ra3copilot.dll base=0x02be0000 size=1224704
+[*] main base=0x00400000
+[*] money site   0x00acfdfe: e9fd015200  E9-OK
+[*] playerid site 0x004ff95b: e9a006ae0020  NOT-PATCHED
+[*] d3d9.dll loaded=True base=0x66f80000
+[*] game top-level windows=3
+    hwnd=0x00751230 vis=1 owner=0x00000000 class="41DAF790-16F5-4881-8754-59FD8CF3B8D2" title="红色警戒：日冕"
+    hwnd=0x07c80ff8 vis=0 owner=0x00ee0e9c class="MSCTFIME UI" title="MSCTFIME UI"
+    hwnd=0x00ee0e9c vis=0 owner=0x00751230 class="IME" title="Default IME"
+[*] dll base=0x02be0000 size=1224704
+[+] map symbols=174
+    g_localPlayerId    = 0 (0x00000000)
+    g_localPlayerObj   = 0 (0x00000000)
+    g_moneyOp          = 0 (0x00000000)
+    g_moneyValue       = 0 (0x00000000)
+    g_retMoney         = 11337219 (0x00acfe03)
+    g_retPlayerId      = 5241185 (0x004ff961)
+    g_telemEnter       = 0 (0x00000000)
+    g_telemApplied     = 0 (0x00000000)
+    g_telemEndScene    = 71 (0x00000047)
+    g_telemPresent     = 71 (0x00000047)
+    g_telemWndHooked   = 1 (0x00000001)
+    g_telemD3dHooked   = 0 (0x00000000)
+    g_telemImguiReady  = 1 (0x00000001)
+    g_telemWndFound    = 0 (0x00000000)
+    g_telemRenderOnce  = 0 (0x00000000)
+[!] g_localPlayerObj not captured yet
+[=] d3dHooked=0 wndHooked=1 imguiReady=1
+[=] ES=71 Present=71 SwapPresent=0 CreateDevice=0 CreateDeviceEx=0 renderFrames=0
+[!] HookD3D9 FAILED (dummy device creation refused?) -> no overlay UI

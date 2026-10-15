@@ -14,7 +14,7 @@
                  STRUCTURE / IMMOBILE / CRATE / IGNORES_SELECT_ALL / TRANSPORT / SUMMONED …）
   logic_commands 可用指令（含 Command_Construct* 的说明是可建造对象）
 
-★ 判据：`SELECTABLE` ∈ kind_of  → 玩家能选中、召唤出来能正常用
+判据：`SELECTABLE` ∈ kind_of  → 玩家能选中、召唤出来能正常用
   缺 `SELECTABLE` 的都是「召唤出来也用不了」的东西，典型：
     AlliedChronoBeacon_Poseidon   超时空传送抵达体（IGNORES_SELECT_ALL）
     CelestialAirDrop_Land         空投运输体（TRANSPORT）

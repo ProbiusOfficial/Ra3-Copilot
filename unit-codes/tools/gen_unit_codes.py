@@ -2,7 +2,7 @@
 
 Source files (all under ../data/source/)
   game_objects.jsonl       官方单位图鉴数据 (cor-games.com/units → /data/game_objects/game_objects.jsonl)
-                           ★ 权威：editor_name = 对象模板名, display_name = 中文名, side = 阵营,
+                           权威：editor_name = 对象模板名, display_name = 中文名, side = 阵营,
                              kind_of = 类型标志位, editor_sorting = unit/structure/prop 分类
   worldbuilder.manifest    WBData.big     -> 原版对象调色板符号表
   mod.manifest             Core13.big     -> 补丁 / Mod 符号表

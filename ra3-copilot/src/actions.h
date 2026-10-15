@@ -11,7 +11,7 @@ uintptr_t GameBase();
 int SelectedCount();
 
 // 单位操作（作用于"当前选中单位"），返回受影响单位数
-int ActSpeed(int mode);    // 0=加速 1=减速 2=冻结 3=恢复速度
+int ActSpeed(int mode);    // 0=加速 1=减速 2=定住 3=恢复速度
 int ActHealth(int mode);   // 0=无限血量(写极大值) 1=残血 2=恢复血量
 int LockSelectedHealth();  // 锁定血量：每帧把选中单位血量回写到上限（由 UI 的开关驱动）
 int ActSetOwner();         // 收编敌方 / 复制到己方（归属改成本地玩家）
@@ -21,9 +21,9 @@ int ActRank();             // 满级（调游戏 +0x35C200 单位升级）
 // 召唤：按对象类型哈希在落点生成单位（落点=首个选中单位处，否则鼠标光标处）
 // owner：0=己方（本地玩家）
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name);
-// ★ 带归属覆盖：teamOverride != 0 时用它当归属（可给敌方/任意玩家召唤），0 = 本地玩家
+// 带归属覆盖：teamOverride != 0 时用它当归属（可给敌方/任意玩家召唤），0 = 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name);
-// ★ 指定召唤落点：下一次召唤生效一次后自动清除（跨线程安全；供 /summon?x=&y=&z= 用）
+// 指定召唤落点：下一次召唤生效一次后自动清除（跨线程安全；供 /summon?x=&y=&z= 用）
 void SetSummonPosOverride(bool on, float x, float y, float z);
 bool SummonMCV();          // 召唤三阵营基地车各一辆
 int  ActCopySelected();    // 复制选中单位（按"当前对象哈希"创建 1 个）
@@ -41,7 +41,7 @@ uintptr_t FirstSelectedObject();
 //   PostB：激活（内部 0x7191D0(obj,1)）+ [team+0x8c] 统计 + 收尾
 // 缺这两步 → 单位没登记进玩家体系（小地图图标半透明/空心）。参数个数严格按 ret 8 / ret 0xC。
 bool PostProcessCall(uintptr_t team, uintptr_t obj, bool runA, bool runB);
-// ★ 延迟登记：创建当帧调 PostA/PostB **无效**（实测），要隔一段时间再调。
+// 延迟登记：创建当帧调 PostA/PostB **无效**（实测），要隔一段时间再调。
 //   SummonByHash 只入队；渲染线程每帧调 PostProcPump() 到期补跑。
 void QueuePostProcess(uintptr_t team, uintptr_t thing);
 void PostProcPump();

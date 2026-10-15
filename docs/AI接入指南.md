@@ -78,7 +78,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 | `POST /summon?hash=0x..&count=N[&owner=idx][&x=&y=&z=]` | **按哈希召唤**（`owner` 见 `/snapshot`；给坐标则落在指定点，否则用光标/选中） |
 | `POST /copy` / `/wnb` / `/mcv` | 复制选中 / 预设增援×8 / 基地车 |
 | `POST /capture` / `/kill` / `/rank` | 收编 / 摧毁选中 / 满级 |
-| `POST /speed?mode=0..3` | 超速 / 慢速 / 冻结 / 恢复 |
+| `POST /speed?mode=0..3` | 超速 / 慢速 / 定住 / 恢复 |
 | `POST /health?mode=0..2` | 无敌 / 残血 / 恢复 |
 | `POST /crate?idx=N&count=N` | 空投箱子 |
 | `POST /toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h`） |

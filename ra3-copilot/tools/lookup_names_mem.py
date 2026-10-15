@@ -136,7 +136,7 @@ def main():
                 if i < 0:
                     break
                 idx = i + 1
-                # ★ 必须是「完整键」：以 \0 结尾，且前面不能还是标识符字符
+                # 必须是「完整键」：以 \0 结尾，且前面不能还是标识符字符
                 #   （否则 CelestialAirfield 会命中 CelestialAirfieldUpgrade 里的一段）
                 if i + len(key) >= len(data) or data[i + len(key)] != 0:
                     continue
@@ -147,7 +147,7 @@ def main():
                     v = utf16_cjk_at(data, p)
                     if not v or not (2 <= len(v) <= 24):
                         continue
-                    # ★ 关键校验：实测条目里，值的字符数就写在它**前面 4 字节**的 u16 里
+                    # 关键校验：实测条目里，值的字符数就写在它**前面 4 字节**的 u16 里
                     #   （如 "埃癸斯护盾发生器" 前是 08 00 0a 00）。对得上才算定位正确，
                     #   否则就是字节没对齐解出来的乱码（"刀馗""餀躟魰" 那类）。
                     if p < 4:

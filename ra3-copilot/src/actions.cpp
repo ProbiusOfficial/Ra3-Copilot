@@ -100,7 +100,7 @@ void CrashMarkPos(const char* what, float x, float y, float z, uintptr_t a1, uin
 // ===================== 反馈音（"叮"）定义见文件下方 ra3 命名空间 =====================
 
 bool IsMemOk(uintptr_t p, size_t n, bool writable) {
-    // ★ 上限必须是 4GB：WOW64 下 32 位进程有完整 4GB 用户空间，游戏对象实测在 0x9Exxxxxx！
+    // 上限必须是 4GB：WOW64 下 32 位进程有完整 4GB 用户空间，游戏对象实测在 0x9Exxxxxx！
     //   曾误用 0x7FFFFFFF → 把所有合法对象判成非法 → 复制/满级/收编全废。
     if (!p || p < 0x00010000u || p > 0xFFF00000u) return false;
     if (!n) return false;
@@ -231,22 +231,23 @@ uintptr_t BodyOf(uintptr_t obj) {
     return b;
 }
 
-// 速度档位（+8 处的速度因子）
-// ★ 冻结不能用 0 —— 游戏把 0 当成"未设置/无覆盖"从而回退默认速度，
-//   这是"冻结单位没生效"的直接原因；改用一个极小非零值。
+// 速度档位（引擎读取 +8 处的速度因子）
+// 定住必须写 0 —— 0 即"速度为零"，单位完全静止；写非零小值（如 0.01）单位仍会缓慢移动。
+//   与 CE SelectUnitFreeze 写 00000000(float_0) 一致。
 constexpr float kSpeedFast   = 500.0f;
 constexpr float kSpeedSlow   = 10.0f;
-constexpr float kSpeedFreeze = 0.01f;
+constexpr float kSpeedFreeze = 0.0f;
 
 // 速度子节点处理（跳过已是目标档位的，备份后写入）
 void SetSpeedNode(uintptr_t n, float v) {
     if (!n) return;
-    // 护栏：现值必须是合理的速度（0..1e5），否则认错对象 → 不写
     float cur = 0;
     if (!IsMemOk(n, 0x44, true)) return;
     __try { cur = *reinterpret_cast<float*>(n + 8); } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
-    if (!PlausibleFloat(cur, 0.01f, 1.0e5f)) { ++g_guardSkip; return; }
-    if (cur == kSpeedFast || cur == kSpeedSlow || cur == kSpeedFreeze) return;   // 已是目标档位
+    // 已是目标档位就不再动（0 属定住档，必须先于下限护栏判断）
+    if (cur == kSpeedFast || cur == kSpeedSlow || cur == kSpeedFreeze) return;
+    // 护栏：现值必须是合理的速度（0..1e5），否则认错对象 → 不写
+    if (!PlausibleFloat(cur, 0.0f, 1.0e5f)) { ++g_guardSkip; return; }
     SafeWriteFloat(n + 0x40, cur);      // 备份原速
     SafeWriteFloat(n + 8, v);
 }
@@ -257,9 +258,9 @@ void RestoreSpeedNode(uintptr_t n) {
     if (!IsMemOk(n, 0x44, true)) return;
     __try { cur = *reinterpret_cast<float*>(n + 8); bk = *reinterpret_cast<float*>(n + 0x40); }
     __except (EXCEPTION_EXECUTE_HANDLER) { return; }
-    // ★ 只还原"被我们改过的那三档"（旧代码只认 500/10 → 冻结后的 0 永远还原不了）
+    // 只还原"被我们改过的那三档"（旧代码只认 500/10 → 定住后的 0 永远还原不了）
     if (cur != kSpeedFast && cur != kSpeedSlow && cur != kSpeedFreeze) return;
-    if (!PlausibleFloat(bk, 0.01f, 1.0e5f)) return;
+    if (!PlausibleFloat(bk, 0.0f, 1.0e5f)) return;
     if (bk == kSpeedFast || bk == kSpeedSlow || bk == kSpeedFreeze) return;
     SafeWriteFloat(n + 8, bk);
 }
@@ -320,7 +321,7 @@ bool PosLooksValid(const float p[4]) {
         if (!(p[i] == p[i])) return false;                 // NaN
         if (p[i] > 1.0e6f || p[i] < -1.0e6f) return false;
     }
-    if (fabsf(p[0]) + fabsf(p[1]) + fabsf(p[2]) < 1.0f) return false;   // ★ 近原点一律不可信
+    if (fabsf(p[0]) + fabsf(p[1]) + fabsf(p[2]) < 1.0f) return false;   // 近原点一律不可信
     return true;
 }
 
@@ -376,7 +377,7 @@ bool Unproject(const float invM[16], float nx, float ny, float nz, float out[4])
 }
 
 // 落点候选 0：**鼠标光标处**
-// ★ 基于 CE 的做法：读 [0x8DAEFC] 对象的 +0x3c/+0x40/+0x44（原样 3 个 dword），
+// 基于 CE 的做法：读 [0x8DAEFC] 对象的 +0x3c/+0x40/+0x44（原样 3 个 dword），
 //   调用游戏自己的换算函数 0x1ED4A0(src, dst, 0, 0)，结果即"鼠标位置的地图世界坐标"。
 //   —— 不再自己抓 D3D 相机矩阵做反投影：实测游戏 SetTransform(D3DTS_VIEW) 传的全是单位矩阵，
 //      3D 相机根本不走那条通道（49716 次调用全为单位矩阵），自算反投影此路不通。
@@ -495,7 +496,7 @@ constexpr uint32_t kSuperWeaponSkip[] = {
 
 // ---- 危险动作流水账（崩溃取证；定义在匿名空间之外，供 overlay 的崩溃处理器共用）----
 // 路径 = <DLL 目录>\ra3copilot_last.txt
-// ★ 追加写而不是覆盖：崩了之后**末尾几行就是"死前动作序列"**；超过 64 KB 自动清空重来。
+// 追加写而不是覆盖：崩了之后**末尾几行就是"死前动作序列"**；超过 64 KB 自动清空重来。
 char* CrashLogPath() {
     static char dir[MAX_PATH] = { 0 };
     if (!dir[0]) {
@@ -643,14 +644,14 @@ int ActKillSelected() {
     uintptr_t fnAddr = SymKillUnit();          // = 0x39EA50
     if (!fnAddr) { SetErr("击杀函数未解析到"); return -1; }
     auto fn = reinterpret_cast<KillUnit_t>(fnAddr);
-    // ★★ 先把选中单位全部收集到数组，再逐个击杀（2026-10-15 闪退修复）：
+    // 先把选中单位全部收集到数组，再逐个击杀（2026-10-15 闪退修复）：
     //    击杀会让游戏把该单位从"选中链表"里摘掉 —— 边遍历边杀会拿到野指针 → 闪退。
     uintptr_t tgt[64];
     int nTgt = 0;
     uintptr_t obj;
     while ((obj = SelNext(it)) != 0) {
         if (nTgt >= 64) break;
-        // ★ 基于 CE：目标 = [obj+0x138]（body）
+        // 基于 CE：目标 = [obj+0x138]（body）
         uintptr_t b = BodyOf(obj);
         if (!b) { ++g_guardSkip; continue; }
         if (!LooksLikeGameObject(b)) { ++g_guardSkip; continue; }
@@ -679,7 +680,7 @@ int ActRank() {
     int n = 0;
     uintptr_t obj;
     while ((obj = SelNext(it)) != 0) {
-        // ★ 基于 CE 的 SelectUnitLevelUp：目标 = [[obj+0x138] + 0x3CC]
+        // 基于 CE 的 SelectUnitLevelUp：目标 = [[obj+0x138] + 0x3CC]
         //   （先取 body=[obj+0x138]，再读 body+0x3CC；之前漏了 body 这一层）
         uint32_t body32 = 0, tgt32 = 0;
         uintptr_t tgt = 0;
@@ -688,7 +689,7 @@ int ActRank() {
             tgt = tgt32;
         else if (LooksLikeGameObject(obj))
             tgt = obj;
-        if (!tgt) { ++g_guardSkip; continue; }   // ★ 护栏：目标必须像游戏对象
+        if (!tgt) { ++g_guardSkip; continue; }   // 护栏：目标必须像游戏对象
         __try {
             CrashMark("LevelUp", tgt, obj, 0);
             fn(reinterpret_cast<void*>(tgt), nullptr, 3, 1, 0);   // 基于 CE: ecx=目标, (3,1,0)
@@ -723,7 +724,7 @@ char  g_postErr[128] = "";
 typedef void(__fastcall* Thiscall2_t)(void* ecx, void* edx, uint32_t a1, uint32_t a2);
 typedef void(__fastcall* Thiscall3_t)(void* ecx, void* edx, uint32_t a1, uint32_t a2, uint32_t a3);
 
-// ---- 延迟后处理队列（★ 时序是关键）----
+// ---- 延迟后处理队列（时序是关键）----
 // 实机结论（2026-10-15）：**创建当帧立刻调 PostA/PostB 无效**（小地图图标仍透明）；
 //   **隔一段时间再调就有效**（图标立刻变实心）。所以改成入队 + 每帧泵，到期再调。
 struct PendingPost { uintptr_t team; uintptr_t obj; DWORD due; };
@@ -755,7 +756,7 @@ void PostProcPump() {
         PendingPost& p = g_pendPost[i];
         if (!p.obj) continue;
         if (now < p.due) { g_pendPost[w++] = p; continue; }        // 还没到期 → 留着
-        // ★ 到期：先校验对象此刻仍合法（可能已被摧毁/回收 → 指针已失效，绝不能再调）
+        // 到期：先校验对象此刻仍合法（可能已被摧毁/回收 → 指针已失效，绝不能再调）
         uint32_t vt = 0, nowOwner = 0;
         const uintptr_t base = GameBase();
         const bool vtOk = SafeRead32(p.obj, vt) && base && vt >= base && vt < base + 0x940000;
@@ -781,7 +782,7 @@ bool PostProcessCall(uintptr_t team, uintptr_t obj, bool runA, bool runB) {
     if (!IsMemOk(team, 0x1280, false)) { _snprintf_s(g_postErr, sizeof(g_postErr), _TRUNCATE, "team 不像 Team 对象"); return false; }
 
     const uintptr_t a = base + R_POSTA, b = base + R_POSTB;
-    // ★ 入口字节校验（地址漂移/被打桩时拒绝，绝不盲调）
+    // 入口字节校验（地址漂移/被打桩时拒绝，绝不盲调）
     uint8_t ea[2] = { 0 }, eb[3] = { 0 };
     if (runA && (!SafeReadBytes(a, ea, 2) || ea[0] != 0x56 || ea[1] != 0x57)) {
         _snprintf_s(g_postErr, sizeof(g_postErr), _TRUNCATE, "PostA 入口字节不符(%02X %02X)", ea[0], ea[1]);
@@ -818,7 +819,7 @@ const char* PostProcLastError() { return g_postErr; }
 bool GetSummonStealth() { return g_summonStealth; }
 void SetSummonStealth(bool on) { g_summonStealth = on; }
 
-// ★ 指定召唤落点（跨线程：HTTP 线程写、渲染线程读；"用一次即清"）
+// 指定召唤落点（跨线程：HTTP 线程写、渲染线程读；"用一次即清"）
 static float g_summonOv[3] = { 0, 0, 0 };
 static volatile LONG g_summonOvSet = 0;
 void SetSummonPosOverride(bool on, float x, float y, float z) {
@@ -831,7 +832,7 @@ bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char*
     return SummonByHashFor(hash, count, 0, atMouse, name);
 }
 
-// ★ teamOverride != 0 → 用指定"队伍对象"当归属（可给敌方/任意玩家召唤）；0 → 本地玩家
+// teamOverride != 0 → 用指定"队伍对象"当归属（可给敌方/任意玩家召唤）；0 → 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name) {
     (void)name;
     SetErr("");
@@ -845,7 +846,7 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
 
     void* tmpl = FindTemplate(hash);
     if (!tmpl) { SetErr("模板未找到（该哈希不在模板库）"); return false; }
-    // ★ 护栏：模板必须像游戏对象，否则"拿垃圾指针去调 CreateUnit"必崩
+    // 护栏：模板必须像游戏对象，否则"拿垃圾指针去调 CreateUnit"必崩
     if (!LooksLikeGameObject(reinterpret_cast<uintptr_t>(tmpl))) {
         SetErr("模板对象不合法（护栏拦下，未调用 CreateUnit）"); return false;
     }
@@ -932,7 +933,7 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
     }
     if (made <= 0) { SetErr("CreateUnit 返回空对象"); return false; }
     Ding();
-    // ★★★★★ 2026-10-15 修复：「召唤/复制出来的单位技能灰、护盾/能力不回」
+    // 2026-10-15 修复：「召唤/复制出来的单位技能灰、护盾/能力不回」
     //   根因：正常建造路径会在创建后把对象（Thing）的这 6 个状态字初始化成"可用态"；
     //         而 SummonByHash 走的是裸 CreateUnit，这 6 个字停在"半初始化"值 →
     //         单位的状态机接不上（技能不可用、护盾回复不触发）。
@@ -973,7 +974,7 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
         }
         R3_LOG(0, "[召唤] 创建后状态字补写：%d 个单位 × 6 字（成功写入 %d 次）", nb, nfix);
     }
-    // ★ 创建后处理链（延迟版，`/postproc?on=1` 默认开）：把对象登记进玩家体系。
+    // 创建后处理链（延迟版，`/postproc?on=1` 默认开）：把对象登记进玩家体系。
     //   ⚠️ 实测：**创建当帧立刻调无效**（图标仍透明）→ 这里只"入队"，
     //      由渲染线程每帧的 PostProcPump() 在 kPostDelayMs 之后再调。
     if (g_postProcOn) {
@@ -994,15 +995,15 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
     // 基于 CE 的 SetUnitState：置状态位，让对象真正"进入世界"
     for (int i = 0; i < made && i < 20; ++i) {
         if (!created[i]) continue;
-        if (!LooksLikeGameObject(created[i])) { ++g_guardSkip; continue; }   // ★ 护栏：不是游戏对象就别写
-        // ★★ 护栏修正（2026-10-15）：原来要求 [obj+0x138] 是对象指针，但 **CreateUnit 返回的是 Thing**，
+        if (!LooksLikeGameObject(created[i])) { ++g_guardSkip; continue; }   // 护栏：不是游戏对象就别写
+        // 护栏修正（2026-10-15）：原来要求 [obj+0x138] 是对象指针，但 **CreateUnit 返回的是 Thing**，
         //    其 +0x138 是浮点（实测 4283D50B）→ 护栏恒定跳过 → SetUnitState 从来没生效过。
         //    改用 "Thing 专有的 HP 结构指针" 做判据（与上面的 ResolveThing 一致）。
         if (!ResolveThing(created[i])) { ++g_guardSkip; continue; }
         CrashMark("SetUnitState", created[i], 0, 0);
         uint32_t v = 0;
         if (SafeRead32(created[i] + 0xBC, v)) SafeWrite32(created[i] + 0xBC, v | 0x80000000u);
-        // ★★★★★ 2026-10-15 实机定案：下面这三位 = **"隐形/未入世"标志位**。
+        // 2026-10-15 实机定案：下面这三位 = **"隐形/未入世"标志位**。
         //   证据（同型号同 vtable 逐字节对拍，`research/memscan/diff_states.py`）：
         //       实心(已被侦察单位照亮) = {+0xC8:0, +0x28:0, +0x208:0}
         //       隐形(刚召唤)           = {+0xC8:0x800, +0x28:0x80000000, +0x208:0x80000000}

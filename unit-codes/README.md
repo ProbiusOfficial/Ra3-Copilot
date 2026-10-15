@@ -17,21 +17,21 @@ unit-codes/
 ├── README.md                     ← 你正在看的这份
 ├── 单位代码与哈希算法.md           ← 完整研究报告（原理 / 验证 / 形态 / 场景物件 / 社区资源）
 ├── data/
-│   ├── callable_final.tsv        ★ 修改器当前使用的召唤清单（运行时实测 ∩ 可用性筛选）
+│   ├── callable_final.tsv        修改器当前使用的召唤清单（运行时实测 ∩ 可用性筛选）
 │   ├── callable_dropped.tsv      被剔除的条目 + 原因（留档，别删）
 │   ├── callable_probe.tsv        逐条实测结果（ThingFactory::Find / HTTP /resolve）
 │   ├── unit_codes_trainer.tsv|h  全量候选（未筛可用性）
-│   ├── unit_codes_all.tsv        ★ 全量 5461 条（含场景/特效/投射物，带 summonable 列）
+│   ├── unit_codes_all.tsv        全量 5461 条（含场景/特效/投射物，带 summonable 列）
 │   └── source/  （本地，不入库）   原始素材：官方图鉴 jsonl + 从 .big 抽出的 manifest/str/csf
 │                                   版权材料，由 tools/ 重新生成，见 §4.2
 ├── tools/
 │   ├── sage_hash.py              哈希算法既有实现（含自检）
 │   ├── unitcode.py               命令行小工具
 │   ├── official_db.py            官方图鉴数据访问器（含「可用性」判据）
-│   ├── filter_usable.py          ★ 给召唤清单做可用性过滤
-│   ├── fetch_official.py         ★ 重新拉取官方图鉴数据
+│   ├── filter_usable.py          给召唤清单做可用性过滤
+│   ├── fetch_official.py         重新拉取官方图鉴数据
 │   ├── gen_unit_codes.py         生成 data/*.tsv|h
-│   ├── gen_site.py               ★ 生成站点查询器（输出到 仓库根 site/units.html + site/data.js）
+│   ├── gen_site.py               生成站点查询器（输出到 仓库根 site/units.html + site/data.js）
 │   ├── csf_read2.py              RA3 CSF 字符串表解析器（值是按位取反的 UTF-16LE）
 │   ├── big_ls.py                 BIG4 归档目录/统计
 │   ├── scan_object_names.py      在 BIG 里按字节搜名字
@@ -89,7 +89,7 @@ code = StringHasher.Hash( 对象模板名.lower() )     // 32 位无符号
 | 社区《增援代码》表（盟军/苏联/帝国全量） | 逐条一致 |
 | 官方单位图鉴 `editor_name` ↔ 我们算出的代码 | 逐条一致（含用户实测的 `AlliedAntiNavyShipTech3` = 0x9356389F） |
 
-### 3.3 ★★★ "能召唤" ≠ "召唤出来能用"
+### 3.3 "能召唤" ≠ "召唤出来能用"
 
 **这是最容易踩的坑，也是 2026-10-15 用户实测发现的**：
 
@@ -146,7 +146,7 @@ unit-codes/data/source/game_objects.jsonl
         ├─ gen_unit_codes.py ─→ unit_codes_all.tsv / unit_codes_trainer.tsv（全量候选）
         │
         │  ra3-copilot/tools/probe_callable.py     ← 逐条 ThingFactory::Find 实测"模板存不存在"
-        │  ra3-copilot/tools/fix_callable.py       ← 变体替换 + ★ 可用性过滤（SELECTABLE）
+        │  ra3-copilot/tools/fix_callable.py       ← 变体替换 + 可用性过滤（SELECTABLE）
         ▼
 unit-codes/data/callable_final.tsv        （410 条：能创建 + 能用）
         │  ra3-copilot/tools/gen_units_corona.py
