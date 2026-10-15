@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RA3-COPILOT · 红色警戒3 日冕 作战辅助系统</title>
 <meta name="description" content="红色警戒3 日冕 Mod 的进程内作战辅助系统：局内覆盖层 + 功能模块 + MCP 脑机接口。">
+<meta property="og:title" content="RA3-COPILOT · 作战辅助系统">
+<meta property="og:description" content="红色警戒3 日冕 Mod 的进程内作战辅助系统">
+<meta property="og:image" content="assets/og_cover.jpg">
 <link rel="icon" href="assets/favicon.png">
 <style>
 :root{
-  --bg:#0e1013;--bg2:#131619;--pnl:rgba(255,255,255,.035);--pnl2:rgba(255,255,255,.06);
+  --bg:#0e1013;--pnl:rgba(255,255,255,.035);--pnl2:rgba(255,255,255,.065);
   --line:rgba(255,255,255,.10);--line2:rgba(255,255,255,.06);
   --tx:#e8eaec;--dim:#9aa1a8;--dim2:#666d74;
   --red:#d9757b;--red2:#ef9a9f;--redglow:rgba(217,117,123,.35);
@@ -23,91 +26,84 @@ a{color:inherit;text-decoration:none}
 code{font-family:var(--mono);color:var(--red2)}
 .wrap{max-width:1240px;margin:0 auto;padding:0 28px}
 
-/* ---------- 顶部导航 ---------- */
-.nav{position:fixed;top:0;left:0;right:0;z-index:50;height:62px;
-  background:linear-gradient(180deg,rgba(10,12,15,.92),rgba(10,12,15,.4) 70%,transparent);
+/* 全站叠加纹理 */
+.grid-tex{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:url('assets/bg_grid.png');background-size:512px 512px}
+.scan{position:fixed;inset:0;z-index:70;pointer-events:none;opacity:.05;
+  mix-blend-mode:overlay;background:url('assets/scanline.png') center/cover no-repeat}
+
+/* ---------- 导航 ---------- */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;height:64px;
+  background:linear-gradient(180deg,rgba(10,12,15,.94),rgba(10,12,15,.45) 72%,transparent);
   backdrop-filter:blur(6px)}
-.nav .wrap{display:flex;align-items:center;height:62px;gap:26px}
-.nav .logo{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:2.5px;font-size:14px}
-.nav .logo img{height:26px;display:block}
-.nav .logo i{width:10px;height:10px;background:var(--red);display:inline-block;
-  clip-path:polygon(0 0,100% 0,100% 62%,62% 100%,0 100%);box-shadow:0 0 12px var(--redglow)}
-.nav nav{display:flex;gap:22px;font-size:12.5px;letter-spacing:1.2px;margin-left:auto}
-.nav nav a{color:var(--dim);position:relative;padding:4px 0;text-transform:uppercase}
+.nav .wrap{display:flex;align-items:center;height:64px;gap:24px}
+.nav .logo{display:flex;align-items:center}
+.nav .logo img{height:30px;display:block}
+.nav nav{display:flex;gap:22px;font-size:12.5px;letter-spacing:1.2px;margin-left:auto;text-transform:uppercase}
+.nav nav a{color:var(--dim);position:relative;padding:4px 0}
 .nav nav a:hover{color:var(--tx)}
 .nav nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--red);transition:.25s}
 .nav nav a:hover::after{right:0}
 
 /* ---------- 主视觉 ---------- */
-.hero{position:relative;min-height:100svh;display:flex;align-items:center;overflow:hidden;
-  background:
-    radial-gradient(1200px 620px at 78% 22%, rgba(217,117,123,.13), transparent 62%),
-    radial-gradient(900px 500px at 10% 90%, rgba(255,255,255,.05), transparent 60%),
-    linear-gradient(180deg,#0b0d10,#0e1013 60%,#0e1013)}
-.hero .bggrid{position:absolute;inset:0;opacity:.5;pointer-events:none;
-  background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
-  background-size:64px 64px;
-  -webkit-mask-image:radial-gradient(closest-side at 50% 45%,#000 55%,transparent);
-          mask-image:radial-gradient(closest-side at 50% 45%,#000 55%,transparent)}
-.hero .bgart{position:absolute;inset:0;background-size:cover;background-position:center;
-  opacity:.35;filter:saturate(.7) brightness(.75)}
+.hero{position:relative;min-height:100svh;display:flex;align-items:center;overflow:hidden;isolation:isolate}
+.hero .bgart{position:absolute;inset:0;background:url('assets/hero_bg.jpg') center/cover no-repeat;
+  transform:scale(1.04)}
+.hero .veil{position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(10,12,15,.96) 0%,rgba(10,12,15,.82) 38%,rgba(10,12,15,.30) 66%,rgba(10,12,15,.55) 100%),
+             linear-gradient(180deg,rgba(10,12,15,.55),transparent 30%,rgba(14,16,19,.95))}
 .hero .wrap{position:relative;z-index:3;width:100%;display:grid;
-  grid-template-columns:1.05fr .95fr;gap:24px;align-items:center;padding-top:70px}
+  grid-template-columns:1.02fr .98fr;gap:20px;align-items:center;padding-top:74px}
 .hero-copy .tag{display:inline-flex;align-items:center;gap:9px;font-size:11.5px;letter-spacing:2px;
   color:var(--red2);border:1px solid rgba(217,117,123,.35);padding:6px 14px;border-radius:2px;
   background:rgba(217,117,123,.06)}
-.hero-copy h1{margin:22px 0 0;font-size:clamp(38px,6.4vw,86px);line-height:.98;font-weight:850;
-  letter-spacing:-1.5px}
+.hero-copy h1{margin:22px 0 0;font-size:clamp(38px,6.4vw,84px);line-height:.98;font-weight:850;letter-spacing:-1.5px}
 .hero-copy h1 em{font-style:normal;color:var(--red);text-shadow:0 0 34px var(--redglow)}
 .hero-copy .en{margin-top:8px;font-family:var(--mono);font-size:12.5px;letter-spacing:6px;color:var(--dim2)}
 .hero-copy p{margin:20px 0 0;max-width:520px;color:var(--dim);font-size:15.5px}
 .hero-copy p b{color:var(--tx);font-weight:600}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
-.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;font-size:13.5px;
-  letter-spacing:1px;border:1px solid var(--line);border-radius:2px;background:var(--pnl);
-  transition:.2s}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 24px;font-size:13.5px;letter-spacing:1px;
+  border:1px solid var(--line);border-radius:2px;background:var(--pnl);transition:.2s}
 .btn:hover{background:var(--pnl2);border-color:rgba(255,255,255,.22)}
 .btn.primary{background:linear-gradient(100deg,#d9757b,#c1585f);border-color:transparent;color:#fff;
   font-weight:650;box-shadow:0 12px 34px rgba(217,117,123,.24)}
 .btn.primary:hover{filter:brightness(1.08)}
-.herostats{display:flex;gap:26px;margin-top:34px;flex-wrap:wrap}
+.herostats{display:flex;gap:28px;margin-top:36px;flex-wrap:wrap}
 .herostats div{font-family:var(--mono)}
-.herostats b{display:block;font-size:20px;color:var(--tx)}
+.herostats b{display:block;font-size:20px}
 .herostats span{font-size:11.5px;color:var(--dim2);letter-spacing:1.4px}
 
-.hero-art{position:relative;align-self:end;display:flex;justify-content:center;align-items:flex-end}
-.hero-art img{width:100%;max-width:560px;display:block;
-  filter:drop-shadow(0 30px 60px rgba(0,0,0,.65))}
-/* 非透明底图（暂无 alpha）→ 用径向遮罩把方框边缘融进暗色背景 */
-.softmask{-webkit-mask-image:radial-gradient(112% 98% at 50% 42%,#000 50%,transparent 90%);
-          mask-image:radial-gradient(112% 98% at 50% 42%,#000 50%,transparent 90%)}
-.hero-art .frame{position:absolute;inset:12% 6% 6% 6%;border:1px solid var(--line);pointer-events:none;
-  clip-path:polygon(0 0,34% 0,34% 1px,100% 1px,100% 100%,0 100%)}
-.hero-art .frame::before,.hero-art .frame::after{content:"";position:absolute;width:26px;height:26px;
-  border:2px solid var(--red);opacity:.8}
-.hero-art .frame::before{left:-1px;top:-1px;border-right:none;border-bottom:none}
-.hero-art .frame::after{right:-1px;bottom:-1px;border-left:none;border-top:none}
-
-.ph{position:relative;min-height:260px;display:flex;align-items:center;justify-content:center;
-  border:1px dashed var(--line);border-radius:6px;background:var(--pnl)}
-.ph .phlabel{display:none;font-family:var(--mono);font-size:12px;color:var(--dim2)}
-.ph.isph .phlabel{display:block}
-.ph.isph img{display:none}
+.hero-art{position:relative;display:flex;justify-content:center;align-items:flex-end;min-height:60vh}
+.hero-art .ch{position:relative;z-index:2;height:min(82svh,760px);width:auto;display:block;
+  filter:drop-shadow(0 40px 70px rgba(0,0,0,.7)) drop-shadow(0 0 26px rgba(217,117,123,.12))}
+.hero-art .hud{position:absolute;inset:auto 0 -2% 0;height:78%;z-index:1;opacity:.5;
+  background:url('assets/hud_frame.png') center/contain no-repeat}
+.hero-art .ret{position:absolute;right:2%;top:14%;width:74px;opacity:.5;z-index:3}
+.miss{display:none !important}
 
 /* ---------- 通用分区 ---------- */
-section{padding:96px 0;border-top:1px solid var(--line2);position:relative}
+section{position:relative;padding:104px 0;border-top:1px solid var(--line2);z-index:1}
+section > .seclayer{position:absolute;inset:0;z-index:-1;background-size:cover;background-position:center;
+  opacity:.5}
+section > .seclayer::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(14,16,19,.94),rgba(14,16,19,.72) 45%,rgba(14,16,19,.96))}
 .sec-h{display:flex;align-items:baseline;gap:16px;margin-bottom:10px}
 .sec-h .no{font-family:var(--mono);font-size:12px;color:var(--red);letter-spacing:2px}
 .sec-h h2{font-size:clamp(24px,3vw,34px);margin:0;font-weight:800;letter-spacing:-.5px}
 .sec-h .line{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
-.sec-sub{color:var(--dim);max-width:760px;font-size:14.8px;margin:0 0 34px}
+.sec-sub{color:var(--dim);max-width:780px;font-size:14.8px;margin:0 0 36px}
+.divider{height:80px;margin:0 auto;max-width:1240px;background:url('assets/divider.png') center/contain no-repeat;
+  opacity:.65}
 
 /* 简介 */
 .about{display:grid;grid-template-columns:1.25fr .75fr;gap:30px;align-items:start}
 .about p{color:var(--dim);margin:0 0 14px;font-size:15px}
 .about p b{color:var(--tx)}
-.kvbox{border:1px solid var(--line);background:var(--pnl);border-radius:4px;padding:20px 22px}
+.kvbox{position:relative;border:1px solid var(--line);background:var(--pnl);border-radius:4px;padding:22px 24px}
+.kvbox::before,.kvbox::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--red);opacity:.75}
+.kvbox::before{left:-1px;top:-1px;border-right:none;border-bottom:none}
+.kvbox::after{right:-1px;bottom:-1px;border-left:none;border-top:none}
 .kvbox h4{margin:0 0 12px;font-size:12px;letter-spacing:2px;color:var(--dim2);font-family:var(--mono)}
 .kvbox dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13px}
 .kvbox dt{color:var(--dim2)}
@@ -115,38 +111,25 @@ section{padding:96px 0;border-top:1px solid var(--line2);position:relative}
 
 /* 功能卡 */
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 @media(max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr)}.about{grid-template-columns:1fr}
-  .hero .wrap{grid-template-columns:1fr}.hero-art{order:-1}.hero-art img{max-width:380px}}
-@media(max-width:640px){.grid4,.grid3,.grid2{grid-template-columns:1fr}}
-.fcard{border:1px solid var(--line);background:var(--pnl);border-radius:4px;padding:22px 20px;
-  transition:.22s;position:relative;overflow:hidden}
+  .hero .wrap{grid-template-columns:1fr}.hero-art{order:-1;min-height:auto}.hero-art .ch{height:46svh}}
+@media(max-width:640px){.grid4,.grid2{grid-template-columns:1fr}}
+.fcard{position:relative;border:1px solid var(--line);background:var(--pnl);border-radius:4px;
+  padding:24px 20px;transition:.22s;overflow:hidden}
 .fcard::before{content:"";position:absolute;left:0;top:0;width:2px;height:0;background:var(--red);transition:.3s}
 .fcard:hover{background:var(--pnl2);transform:translateY(-3px)}
 .fcard:hover::before{height:100%}
-.fcard .ic{height:44px;display:flex;align-items:center;margin-bottom:14px}
-.fcard .ic img{height:38px;width:auto;display:block;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
-.fcard .ic span{font-family:var(--mono);font-size:22px;color:var(--red2)}
+.fcard .ic{height:52px;display:flex;align-items:center;margin-bottom:14px}
+.fcard .ic img{height:46px;width:auto;display:block;filter:drop-shadow(0 6px 14px rgba(0,0,0,.55))}
 .fcard h3{margin:0 0 8px;font-size:15.5px;font-weight:700}
 .fcard p{margin:0;color:var(--dim);font-size:13.5px;line-height:1.7}
 
-/* 副官档案 */
-.charwrap{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start}
-.char-main{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;
-  background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(217,117,123,.06))}
-.char-main img{width:100%;display:block}
-.char-main .tagname{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:11px;
-  letter-spacing:2px;color:var(--dim2)}
-.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
-.slot{aspect-ratio:4/5;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:flex-end;
-  padding:8px;font-family:var(--mono);font-size:10px;line-height:1.4;color:var(--dim2);
-  background:rgba(255,255,255,.02);word-break:break-all}
-.note-line{color:var(--dim2);font-size:12.5px;margin:14px 0 0}
-@media(max-width:900px){.charwrap{grid-template-columns:1fr}}
-
 /* 架构 */
-.arch{border:1px solid var(--line);border-radius:4px;background:#0b0d10;padding:22px 24px;overflow:auto}
+.arch{position:relative;border:1px solid var(--line);border-radius:4px;background:#0b0d10cc;padding:24px 26px;overflow:auto}
+.arch::before,.arch::after{content:"";position:absolute;width:18px;height:18px;border:2px solid var(--red);opacity:.7}
+.arch::before{left:-1px;top:-1px;border-right:none;border-bottom:none}
+.arch::after{right:-1px;bottom:-1px;border-left:none;border-top:none}
 .arch pre{margin:0;font-family:var(--mono);font-size:12.6px;line-height:1.75;color:#c9ced3}
 .arch pre b{color:var(--red2);font-weight:600}
 .arch pre i{color:var(--tx);font-style:normal}
@@ -156,51 +139,61 @@ section{padding:96px 0;border-top:1px solid var(--line2);position:relative}
 @media(max-width:900px){.steps{grid-template-columns:1fr}}
 .step{border:1px solid var(--line);border-radius:4px;padding:22px 20px;background:var(--pnl)}
 .step .n{font-family:var(--mono);font-size:12px;color:var(--red);letter-spacing:2px}
-.step h3{margin:8px 0 8px;font-size:16px}
+.step h3{margin:8px 0;font-size:16px}
 .step p{margin:0;color:var(--dim);font-size:13.5px}
 
-/* 表格 */
 table{width:100%;border-collapse:collapse;font-size:13.8px}
 th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line2)}
 th{color:var(--dim2);font-weight:600;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase}
 
 /* 单位代码推广条 */
-.promo{display:grid;grid-template-columns:1fr auto;gap:26px;align-items:center;
-  border:1px solid var(--line);border-radius:4px;padding:30px 34px;position:relative;overflow:hidden;
-  background:linear-gradient(120deg,rgba(217,117,123,.09),rgba(255,255,255,.02))}
-.promo::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;
-  background:radial-gradient(circle,rgba(217,117,123,.22),transparent 70%)}
-.promo h3{margin:0 0 8px;font-size:22px}
-.promo p{margin:0;color:var(--dim);max-width:640px;font-size:14px}
-@media(max-width:760px){.promo{grid-template-columns:1fr}}
+.promo{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;
+  display:grid;grid-template-columns:1.1fr .9fr;gap:0;align-items:center;min-height:260px}
+.promo .pbg{position:absolute;inset:0;background:url('assets/units_banner.jpg') center/cover no-repeat;
+  opacity:.62}
+.promo .pveil{position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(12,14,17,.95),rgba(12,14,17,.55) 60%,rgba(12,14,17,.25))}
+.promo .pc{position:relative;z-index:2;padding:34px 36px}
+.promo .art{position:relative;z-index:2;align-self:end;display:flex;justify-content:flex-end}
+.promo .art img{height:250px;width:auto;display:block;filter:drop-shadow(0 16px 34px rgba(0,0,0,.6))}
+.promo h3{margin:0 0 10px;font-size:24px}
+.promo p{margin:0 0 18px;color:var(--dim);max-width:560px;font-size:14px}
+@media(max-width:860px){.promo{grid-template-columns:1fr}.promo .art{display:none}}
 
-footer{padding:56px 0 70px;border-top:1px solid var(--line2);color:var(--dim2);font-size:12.6px;line-height:1.95}
+footer{position:relative;padding:60px 0 76px;border-top:1px solid var(--line2);z-index:1}
+footer .fl{position:absolute;inset:0;z-index:-1;background:url('assets/bg_footer.jpg') center/cover no-repeat;opacity:.45}
+footer .fl::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(14,16,19,.9),rgba(14,16,19,.98))}
+footer .lg{height:26px;margin-bottom:16px;opacity:.85}
+footer p{margin:0 0 6px;color:var(--dim2);font-size:12.7px;line-height:1.95}
 footer b{color:var(--dim)}
 </style>
 </head>
 <body>
 
+<div class="grid-tex"></div>
+<div class="scan"></div>
+
 <!-- ================= 导航 ================= -->
 <div class="nav"><div class="wrap">
-  <a class="logo" href="#top"><img src="assets/logo_ra3copilot.png" alt="" onerror="this.remove()"><i></i>RA3-COPILOT</a>
+  <a class="logo" href="#top"><img src="assets/logo_ra3copilot.png" alt="RA3-COPILOT"></a>
   <nav>
-    <a href="#about">简介</a><a href="#features">功能</a><a href="#gallery">立绘</a>
-    <a href="#arch">架构</a><a href="#usage">使用</a><a href="#mcp">脑机接口</a>
-    <a href="units.html">单位代码</a>
+    <a href="#about">简介</a><a href="#features">功能</a><a href="#arch">架构</a>
+    <a href="#usage">使用</a><a href="#mcp">脑机接口</a><a href="units.html">单位代码</a>
   </nav>
 </div></div>
 
 <!-- ================= 主视觉 ================= -->
 <header class="hero" id="top">
-  <div class="bggrid"></div>
-  <div class="bgart" style="background-image:url('assets/hero_bg.jpg')"></div>
+  <div class="bgart"></div>
+  <div class="veil"></div>
   <div class="wrap">
     <div class="hero-copy">
       <span class="tag">◈ 红色警戒 3 · 日冕 MOD · 作战辅助系统</span>
       <h1>RA3-<em>COPILOT</em></h1>
       <div class="en">IN-GAME TACTICAL ASSISTANT</div>
-      <p>进程内接入游戏的<b>作战辅助系统</b>：以局内覆盖层呼出战术面板，
-         接管资源、战斗、单位与召唤；并把战局开放给 <b>AI 副官</b> —— 读态势、下指令、投部队。</p>
+      <p>进程内接入游戏的<b>作战辅助系统</b>：以局内覆盖层呼出战术面板，接管资源、战斗、单位与召唤；
+         并把战局开放给 <b>AI 副官</b> —— 读态势、下指令、投部队。</p>
       <div class="hero-cta">
         <a class="btn primary" href="#usage">▸ 快速上手</a>
         <a class="btn" href="units.html">◈ 单位代码查询器</a>
@@ -214,12 +207,10 @@ footer b{color:var(--dim)}
       </div>
     </div>
     <div class="hero-art">
-      <div class="frame"></div>
-      <div class="ph">
-        <img src="assets/character_base.png" alt="RA3-COPILOT 副官" class="softmask"
-             onerror="this.style.display='none';this.parentNode.classList.add('isph');">
-        <span class="phlabel">assets/character_base.png</span>
-      </div>
+      <div class="hud"></div>
+      <img class="ch" src="assets/character_full.png" alt="RA3-COPILOT 副官"
+           onerror="this.classList.add('miss')">
+      <img class="ret" src="assets/reticle.png" alt="">
     </div>
   </div>
 </header>
@@ -228,6 +219,7 @@ footer b{color:var(--dim)}
 
 <!-- ================= 简介 ================= -->
 <section id="about">
+  <div class="seclayer" style="background-image:url('assets/bg_about.jpg')"></div>
   <div class="sec-h"><span class="no">/ 01</span><h2>作战辅助系统</h2><span class="line"></span></div>
   <p class="sec-sub">不是外挂式的作弊器，而是一套「可观测、可干预、可被 AI 驱动」的战术面板。</p>
   <div class="about">
@@ -255,65 +247,36 @@ footer b{color:var(--dim)}
   </div>
 </section>
 
+<div class="divider"></div>
+
 <!-- ================= 功能 ================= -->
 <section id="features">
+  <div class="seclayer" style="background-image:url('assets/bg_features.jpg')"></div>
   <div class="sec-h"><span class="no">/ 02</span><h2>战术模块</h2><span class="line"></span></div>
   <p class="sec-sub">八大模块，覆盖从资源到战场的全部干预点。</p>
   <div class="grid4">
-    <div class="fcard"><div class="ic"><img src="assets/icon_resource.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'▤'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_resource.png" alt=""></div>
       <h3>资源</h3><p>资金实时读写、电力与科技点、全科技解锁。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_build.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'▥'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_build.png" alt=""></div>
       <h3>建造</h3><p>快速建造、免费建造、封锁敌方建造队列。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_combat.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'✦'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_combat.png" alt=""></div>
       <h3>战斗</h3><p>己方无敌、弹药满、超武就绪 / 压制敌方超武。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_unit.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'⬢'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_unit.png" alt=""></div>
       <h3>单位</h3><p>选中单位变速 / 改血 / 收编 / 摧毁 / 满级。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_summon.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'↧'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_summon.png" alt=""></div>
       <h3>召唤</h3><p>按代码投放单位与基地车，落点可控。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_crate.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'▣'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_crate.png" alt=""></div>
       <h3>空投</h3><p>现金 / 治疗 / 晋升箱，支持周期自动空投。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_mcp.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'◈'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_mcp.png" alt=""></div>
       <h3>脑机接口</h3><p>把战局开放给 AI：读态势、下指令、投部队。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_http.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'⌘'}))"></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_http.png" alt=""></div>
       <h3>调试接口</h3><p>进程内 HTTP，只读端点可高频查询。</p></div>
-  </div>
-</section>
-
-<!-- ================= 立绘 ================= -->
-<section id="gallery">
-  <div class="sec-h"><span class="no">/ 03</span><h2>副官档案</h2><span class="line"></span></div>
-  <p class="sec-sub">RA3-COPILOT 的视觉形象：一名在指挥所待命的技术副官。</p>
-  <div class="charwrap">
-    <div class="char-main">
-      <img src="assets/character_base.png" class="softmask" alt="RA3-COPILOT 副官">
-      <span class="tagname">CHARACTER_BASE // 基准立绘</span>
-    </div>
-    <div class="char-info">
-      <div class="kvbox">
-        <h4>档案 / PROFILE</h4>
-        <dl>
-          <dt>身份</dt><dd>技术副官 · 战术操作员</dd>
-          <dt>发色</dt><dd>银白短发 · 白色猫耳</dd>
-          <dt>瞳色</dt><dd>红</dd>
-          <dt>制服</dt><dd>灰白双排扣军装</dd>
-          <dt>配件</dt><dd>头戴式耳机 · 皮质文件夹</dd>
-          <dt>气质</dt><dd>冷静 · 克制 · 话少</dd>
-        </dl>
-      </div>
-      <div class="mini">
-        <div class="slot">assets/character_alt_1.png · 差分「作战中」</div>
-        <div class="slot">assets/character_alt_2.png · 差分「联络」</div>
-        <div class="slot">assets/character_chibi.png · Q 版</div>
-      </div>
-      <p class="note-line">整站美术围绕她展开；待补差分与场景资源的**提示词**见
-        <code>docs/美术资源清单.md</code>。生成后按文件名丢进 <code>site/assets/</code> 即自动点亮。</p>
-    </div>
   </div>
 </section>
 
 <!-- ================= 架构 ================= -->
 <section id="arch">
-  <div class="sec-h"><span class="no">/ 04</span><h2>系统架构</h2><span class="line"></span></div>
+  <div class="sec-h"><span class="no">/ 03</span><h2>系统架构</h2><span class="line"></span></div>
   <p class="sec-sub">功能核（内存挂钩）+ 渲染层（inline-hook）+ 副官接口，三层协作。</p>
   <div class="arch"><pre>injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► <i>ra3trainer.dll</i> (in-game)
                                                             │
@@ -325,9 +288,11 @@ footer b{color:var(--dim)}
             壳（MASM）→ 改内存 / 记录对象              → Present 内渲染 ImGui          → AI 读战局 / 投放部队</pre></div>
 </section>
 
+<div class="divider"></div>
+
 <!-- ================= 使用 ================= -->
 <section id="usage">
-  <div class="sec-h"><span class="no">/ 05</span><h2>快速上手</h2><span class="line"></span></div>
+  <div class="sec-h"><span class="no">/ 04</span><h2>快速上手</h2><span class="line"></span></div>
   <p class="sec-sub">需要先进入对局；注入器与游戏同为 32 位。</p>
   <div class="steps">
     <div class="step"><div class="n">STEP 01</div><h3>启动游戏</h3><p>通过启动器进入对局（遭遇战 / 战役均可）。</p></div>
@@ -338,7 +303,8 @@ footer b{color:var(--dim)}
 
 <!-- ================= 脑机接口 ================= -->
 <section id="mcp">
-  <div class="sec-h"><span class="no">/ 06</span><h2>脑机接口</h2><span class="line"></span></div>
+  <div class="seclayer" style="background-image:url('assets/bg_mcp.jpg')"></div>
+  <div class="sec-h"><span class="no">/ 05</span><h2>脑机接口</h2><span class="line"></span></div>
   <p class="sec-sub">把进程内能力包装成标准 MCP 工具，让 AI 客户端成为你的副官。</p>
   <div class="grid2">
     <div>
@@ -369,22 +335,27 @@ footer b{color:var(--dim)}
 
 <!-- ================= 单位代码 ================= -->
 <section id="units">
-  <div class="sec-h"><span class="no">/ 07</span><h2>单位代码</h2><span class="line"></span></div>
+  <div class="sec-h"><span class="no">/ 06</span><h2>单位代码</h2><span class="line"></span></div>
   <div class="promo">
-    <div>
+    <div class="pbg"></div><div class="pveil"></div>
+    <div class="pc">
       <h3>全量对象代码 · 可离线复算</h3>
       <p>创建单位用的是 32 位对象类型哈希：<code>StringHasher.Hash(模板名.lower())</code>。
          我们把日冕全量 <b>5461</b> 条代码整理成可检索的清单，其中「可召唤且能用」<b>410</b> 条。</p>
+      <a class="btn primary" href="units.html">▸ 打开查询器</a>
     </div>
-    <div><a class="btn primary" href="units.html">▸ 打开查询器</a></div>
+    <div class="art"><img src="assets/character_bust.png" alt=""
+      onerror="this.style.display='none'"></div>
   </div>
 </section>
 
 <footer>
-  <div>
-    <b>RA3-COPILOT</b> · 红色警戒 3 日冕 Mod 作战辅助系统。
-    仅供单机学习与研究使用，禁止用于联机对战或破坏他人游戏体验。<br>
-    版本强绑定 <code>v1.12.3444.25830</code>；本仓库不含游戏素材与第三方数据。
+  <div class="fl"></div>
+  <div class="wrap">
+    <img class="lg" src="assets/logo_ra3copilot.png" alt="RA3-COPILOT">
+    <p><b>RA3-COPILOT</b> · 红色警戒 3 日冕 Mod 作战辅助系统。</p>
+    <p>仅供单机学习与研究使用，禁止用于联机对战或破坏他人游戏体验。</p>
+    <p>版本强绑定 <code>v1.12.3444.25830</code>；本仓库不含游戏素材与第三方数据。</p>
   </div>
 </footer>
 

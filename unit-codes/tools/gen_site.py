@@ -68,6 +68,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>单位代码查询器 · Ra3-Copilot</title>
 <meta name="description" content="红色警戒3 日冕 Mod 单位代码（SAGE 对象类型哈希）查询器，支持按名字离线计算代码。">
+<link rel="icon" href="assets/favicon.png">
 <style>
 :root{
   --bg:#101215;--bg2:#15181c;--pnl:#191d21;--line:#2a2f35;--line2:#21262b;
@@ -87,7 +88,8 @@ code,kbd{font-family:var(--mono)}
 .top{position:sticky;top:0;z-index:20;background:rgba(12,16,22,.92);backdrop-filter:blur(8px);
   border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:14px;height:52px;flex-wrap:wrap}
-.top .brand{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.top .brand{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:10px}
+.top .brand img{height:20px;display:block}
 .top .brand i{width:8px;height:8px;border-radius:2px;background:var(--red);display:inline-block}
 .top nav{display:flex;gap:16px;font-size:13px;margin-left:6px}
 .top nav a{color:var(--dim)}.top nav a:hover{color:var(--tx);text-decoration:none}
@@ -180,7 +182,7 @@ footer b{color:var(--dim)}
 <body>
 
 <div class="top"><div class="wrap">
-  <span class="brand"><i></i>Ra3-Copilot · 单位代码</span>
+  <span class="brand"><img src="assets/logo_ra3copilot.png" alt=""><i></i>单位代码</span>
   <nav>
     <a href="#query">查询器</a><a href="#algo">算法</a><a href="#usable">可用性判据</a>
     <a href="#pipeline">提取流程</a><a href="#data">数据与工具</a>

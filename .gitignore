@@ -21,6 +21,9 @@
 /unit-codes/out/
 /unit-codes/**/__pycache__/
 
+# ---- 站点美术：原始未抠图备份不入库（只留抠好 alpha 的成品）----
+/site/assets/_raw/
+
 
 # ---- 构建产物 ----
 x64/
