@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""gen_site.py - 生成「RA3 日冕 · 单位代码」项目网站（纯静态）
+"""gen_site.py - 生成「RA3 日冕 · 单位代码查询器」页面
 
 输出：
-  unit-codes/site/index.html   项目站点（介绍 / 算法 / 提取流程 / 可搜索总表）
+  unit-codes/site/index.html   主体 = 查询器（名字→代码计算 + 全量检索表）
+                               下方 = 研究过程披露（算法 / 判据 / 提取流程 / 限制）
   unit-codes/site/data.js      单位代码数据（由 data/unit_codes_all.tsv 生成）
 
 用法：python gen_site.py
@@ -38,40 +39,27 @@ def build_data_json(rows):
     out = []
     for r in rows:
         out.append({
-            'c': r['code_hex'],
-            'd': r['code_dec'],
-            'n': r['name'],
-            'cn': r['chinese_name'],
-            'f': r['faction'],
-            'fam': r['family'],
-            'p': r['is_primary'],
-            'note': r['note'],
-            't': r['type_line'],
-            'k': r['kind'],
-            'kc': r['kind_cn'],
-            's': r['summonable'] or 'na',
-            'db': r['db_category'],
-            'u': r['unit_class'],
-            'src': r['source'],
+            'c': r['code_hex'], 'd': r['code_dec'], 'n': r['name'],
+            'cn': r['chinese_name'], 'f': r['faction'], 'fam': r['family'],
+            'p': r['is_primary'], 'note': r['note'], 't': r['type_line'],
+            'k': r['kind'], 'kc': r['kind_cn'], 's': r['summonable'] or 'na',
+            'u': r['unit_class'], 'src': r['source'],
         })
     return out
 
 
 def stats(rows):
-    n = len(rows)
-    n_sum = sum(1 for r in rows if r['summonable'] == 'yes')
-    n_play = sum(1 for r in rows if r['kind_cn'] == '可玩对象(单位/建筑)')
-    n_cn = sum(1 for r in rows if r['chinese_name'])
-    n_build = sum(1 for r in rows if r['unit_class'] == '建筑')
-    n_inf = sum(1 for r in rows if r['unit_class'] == '步兵')
-    n_veh = sum(1 for r in rows if r['unit_class'] == '载具')
-    # 经可用性筛选后的最终可召唤清单（callable_final.tsv）
     n_final = 0
     if os.path.exists(FINAL):
         with io.open(FINAL, encoding='utf-8') as f:
             n_final = max(0, sum(1 for _ in f) - 1)
-    return dict(n=n, n_sum=n_sum, n_play=n_play, n_cn=n_cn, n_final=n_final,
-                n_build=n_build, n_inf=n_inf, n_veh=n_veh)
+    return dict(
+        n=len(rows),
+        n_sum=sum(1 for r in rows if r['summonable'] == 'yes'),
+        n_play=sum(1 for r in rows if r['kind_cn'] == '可玩对象(单位/建筑)'),
+        n_cn=sum(1 for r in rows if r['chinese_name']),
+        n_final=n_final,
+    )
 
 
 TEMPLATE = r"""<!DOCTYPE html>
@@ -79,114 +67,110 @@ TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RA3 日冕 · 单位代码 | Ra3-Copilot</title>
-<meta name="description" content="红色警戒3 日冕 Mod 的单位代码（SAGE 对象类型哈希）总表与提取方法。">
+<title>单位代码查询器 · Ra3-Copilot</title>
+<meta name="description" content="红色警戒3 日冕 Mod 单位代码（SAGE 对象类型哈希）查询器，支持按名字离线计算代码。">
 <style>
 :root{
-  --bg:#0c1016; --bg2:#111823; --pnl:#151d29; --line:#242f3e; --line2:#1b2431;
-  --tx:#dfe7f1; --dim:#8b9bad; --dim2:#5d6b7c;
-  --red:#e8534a; --red2:#ff7a70; --gold:#e2b33c; --grn:#5fd08a; --blu:#59a9ff;
+  --bg:#0c1016;--bg2:#111823;--pnl:#151d29;--line:#242f3e;--line2:#1b2431;
+  --tx:#dfe7f1;--dim:#8b9bad;--dim2:#5d6b7c;
+  --red:#e8534a;--red2:#ff7a70;--gold:#e2b33c;--grn:#5fd08a;--blu:#59a9ff;
   --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--tx);
   font:15px/1.7 "Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif}
-a{color:var(--blu);text-decoration:none}
-a:hover{text-decoration:underline}
+a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 code,kbd{font-family:var(--mono)}
-.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
 
-/* ---------- hero ---------- */
-header.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);
-  background:
-    radial-gradient(1100px 380px at 82% -60px, rgba(232,83,74,.20), transparent 60%),
-    radial-gradient(900px 420px at 8% 120%, rgba(89,169,255,.12), transparent 60%),
-    linear-gradient(180deg,#0e141d,#0c1016)}
-.hero .wrap{padding:66px 24px 52px}
-.badge{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--red2);
-  border:1px solid rgba(232,83,74,.35);background:rgba(232,83,74,.08);
-  border-radius:999px;padding:5px 13px;letter-spacing:.4px}
-.hero h1{margin:18px 0 10px;font-size:40px;line-height:1.15;font-weight:750;letter-spacing:-.5px}
-.hero h1 span{color:var(--red)}
-.hero .lead{max-width:760px;color:var(--dim);font-size:16px}
-.hero .lead b{color:var(--tx)}
-.formula{margin:22px 0 0;display:inline-block;font-family:var(--mono);font-size:15px;
-  background:#0a0f16;border:1px solid var(--line);border-radius:10px;padding:13px 18px;color:var(--tx)}
-.formula em{color:var(--gold);font-style:normal}
-.formula i{color:var(--grn);font-style:normal}
+/* 顶栏 */
+.top{position:sticky;top:0;z-index:20;background:rgba(12,16,22,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:14px;height:52px;flex-wrap:wrap}
+.top .brand{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.top .brand i{width:8px;height:8px;border-radius:2px;background:var(--red);display:inline-block}
+.top nav{display:flex;gap:16px;font-size:13px;margin-left:6px}
+.top nav a{color:var(--dim)}.top nav a:hover{color:var(--tx);text-decoration:none}
+.top .back{margin-left:auto;font-size:13px}
 
-/* ---------- stats ---------- */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:34px}
-.card{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-.card .num{font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-.5px}
-.card .num.g{color:var(--grn)} .card .num.r{color:var(--red2)} .card .num.b{color:var(--blu)}
-.card .lbl{color:var(--dim);font-size:12.5px;margin-top:2px}
-@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.hero h1{font-size:30px}}
+/* 查询器头部 */
+.qhead{padding:34px 0 20px}
+.qhead h1{margin:0 0 6px;font-size:30px;font-weight:750;letter-spacing:-.4px}
+.qhead p{margin:0;color:var(--dim);font-size:14.5px;max-width:780px}
+.calc{margin-top:20px;display:grid;grid-template-columns:1.15fr 1fr;gap:16px}
+@media(max-width:820px){.calc{grid-template-columns:1fr}}
+.panel{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.panel .cap{font-size:12.5px;color:var(--dim);margin-bottom:9px;letter-spacing:.3px}
+.inrow{display:flex;gap:9px;flex-wrap:wrap}
+.inrow input{flex:1;min-width:190px}
+.out{margin-top:12px;font-family:var(--mono);font-size:27px;font-weight:700;letter-spacing:1px;
+  color:var(--red2);word-break:break-all;min-height:40px}
+.out small{display:block;font-size:12.5px;font-weight:400;letter-spacing:0;color:var(--dim);
+  margin-top:5px;font-family:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.chip{background:#0a0f16;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12.5px;color:var(--dim)}
+.chip b{color:var(--tx);font-family:var(--mono)}
 
-/* ---------- sections ---------- */
-section{padding:56px 0 8px;border-bottom:1px solid var(--line2)}
-section h2{font-size:22px;font-weight:700;margin:0 0 6px;letter-spacing:-.2px}
-section .hint{color:var(--dim);font-size:14px;margin:0 0 22px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-@media(max-width:860px){.grid2{grid-template-columns:1fr}}
-.box{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
-.box h3{margin:0 0 8px;font-size:15px;color:var(--tx)}
-.box p{margin:6px 0;color:var(--dim);font-size:14px}
-pre{margin:0;background:#0a0f16;border:1px solid var(--line);border-radius:10px;
-  padding:15px 17px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.65;color:#cfe0f2}
-pre .c{color:var(--dim2)} pre .k{color:var(--red2)} pre .s{color:var(--grn)} pre .f{color:var(--gold)}
-
-/* 流程 */
-.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin-top:6px}
-.step{flex:1 1 190px;background:var(--pnl);border:1px solid var(--line);border-radius:10px;padding:13px 15px;min-width:180px}
-.step .s-n{font-family:var(--mono);font-size:11px;color:var(--red2);letter-spacing:1px}
-.step .s-t{font-weight:600;margin:3px 0 4px;font-size:14px}
-.step .s-d{color:var(--dim);font-size:12.5px;line-height:1.55}
-.step .s-d code{color:var(--gold);font-size:11.5px;word-break:break-all}
-.arrow{align-self:center;color:var(--dim2);font-size:18px}
-
-/* 判据 */
-table.kind{width:100%;border-collapse:collapse;font-size:13.5px}
-table.kind th,table.kind td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2)}
-table.kind th{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.4px}
-table.kind code{color:var(--gold);font-size:12.5px}
-
-/* ---------- 数据表 ---------- */
-.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:4px 0 14px}
-input,select{background:#0a0f16;color:var(--tx);border:1px solid var(--line);border-radius:8px;
+/* 通用控件 */
+input,select,button{background:#0a0f16;color:var(--tx);border:1px solid var(--line);border-radius:8px;
   padding:9px 12px;font:inherit;font-size:13.5px;outline:none}
-input[type=text]{min-width:280px;flex:1}
 input:focus,select:focus{border-color:var(--blu)}
+button{cursor:pointer;background:#1b2534}
+button:hover{border-color:var(--blu)}
 label.chk{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;
   background:#0a0f16;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer}
-label.chk input{accent-color:var(--blu)}
-.stat{color:var(--dim);font-size:13px;white-space:nowrap}
+label.chk input{accent-color:var(--blu);padding:0}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 12px}
+.bar input[type=text]{min-width:270px;flex:1}
+.stat{color:var(--dim);font-size:13px;white-space:nowrap;margin-left:auto}
 .stat b{color:var(--tx)}
-.tablewrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:72vh;overflow-y:auto}
+
+.tablewrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:66vh;overflow-y:auto}
 table.data{width:100%;border-collapse:collapse}
 table.data th{position:sticky;top:0;z-index:2;background:var(--pnl);text-align:left;font-weight:600;
   font-size:11.5px;color:var(--dim);padding:10px 13px;border-bottom:1px solid var(--line);
   letter-spacing:.4px;text-transform:uppercase;white-space:nowrap}
 table.data td{padding:7px 13px;border-bottom:1px solid var(--line2);font-size:13px;vertical-align:top}
 table.data tbody tr{cursor:pointer}
-table.data tbody tr:hover td{background:#17213000}
 table.data tbody tr:hover{background:#172130}
 tr[data-u="na"]{opacity:.5}
-tr[data-u="yes"]{background:#12201a} tr[data-u="yes"]:hover{background:#16281f}
+tr[data-u="yes"]{background:#12201a}tr[data-u="yes"]:hover{background:#16281f}
 td.code{font-family:var(--mono);color:var(--red2);white-space:nowrap}
-td.name{font-family:var(--mono);color:var(--grn);word-break:break-all;max-width:340px}
+td.name{font-family:var(--mono);color:var(--grn);word-break:break-all;max-width:360px}
 td.cn,td.fac,td.uc{white-space:nowrap}
-td.fac{color:var(--blu)} td.uc{color:var(--gold)} td.tl{color:#7fb3d5;font-size:12px;white-space:nowrap}
+td.fac{color:var(--blu)}td.uc{color:var(--gold)}td.tl{color:#7fb3d5;font-size:12px;white-space:nowrap}
 td.note{color:var(--dim);font-size:12px;white-space:nowrap}
-td.src{color:var(--dim2);font-size:11.5px;white-space:nowrap}
-.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line)}
-.pill.y{color:var(--grn);border-color:rgba(95,208,138,.4);background:rgba(95,208,138,.08)}
 
+/* 披露区 */
+section.disc{padding:44px 0 6px;border-top:1px solid var(--line)}
+.disc-h{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
+.disc-h h2{font-size:21px;font-weight:700;margin:0}
+.disc-h span{font-size:12.5px;color:var(--dim2);letter-spacing:1px}
+.disc .sub{color:var(--dim);font-size:14px;margin:8px 0 20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.box{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:17px 19px}
+.box h3{margin:0 0 8px;font-size:15px}
+.box p{margin:6px 0;color:var(--dim);font-size:14px}
+.box p b{color:var(--tx)}
+pre{margin:0;background:#0a0f16;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  overflow:auto;font-family:var(--mono);font-size:12.8px;line-height:1.65;color:#cfe0f2}
+pre .c{color:var(--dim2)}pre .k{color:var(--red2)}pre .s{color:var(--grn)}pre .f{color:var(--gold)}
+table.kind{width:100%;border-collapse:collapse;font-size:13.5px}
+table.kind th,table.kind td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2)}
+table.kind th{color:var(--dim);font-weight:600;font-size:12px}
+table.kind code{color:var(--gold);font-size:12.5px}
+.flow{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+.step{flex:1 1 180px;background:var(--pnl);border:1px solid var(--line);border-radius:10px;padding:13px 15px;min-width:170px}
+.step .s-n{font-family:var(--mono);font-size:11px;color:var(--red2);letter-spacing:1px}
+.step .s-t{font-weight:600;margin:3px 0 4px;font-size:14px}
+.step .s-d{color:var(--dim);font-size:12.5px;line-height:1.55}
+.step .s-d code{color:var(--gold);font-size:11.5px;word-break:break-all}
+.arrow{align-self:center;color:var(--dim2);font-size:18px}
 .res{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
-.res a{display:block;background:var(--pnl);border:1px solid var(--line);border-radius:10px;
-  padding:11px 15px;font-size:13.5px}
-footer{padding:40px 0 60px;color:var(--dim2);font-size:12.5px;line-height:1.9}
+.res a{display:block;background:var(--pnl);border:1px solid var(--line);border-radius:10px;padding:11px 15px;font-size:13.5px}
+footer{padding:38px 0 60px;color:var(--dim2);font-size:12.5px;line-height:1.9}
 footer b{color:var(--dim)}
 .toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);opacity:0;
   background:#1c2736;border:1px solid var(--line);color:var(--tx);border-radius:999px;
@@ -196,107 +180,46 @@ footer b{color:var(--dim)}
 </head>
 <body>
 
-<header class="hero">
-  <div class="wrap">
-    <span class="badge">◆ Ra3-Copilot · 单位代码研究</span>
-    <h1>红色警戒 3 日冕 <span>单位代码</span>总表</h1>
-    <p class="lead">
-      游戏里每个单位 / 建筑 / 对象都有一个 32 位 <b>对象类型哈希</b>，创建对象时用它查模板。
-      本项目把 <b>全量 __N__ 条</b>代码整理成可离线复算的表 ——
-      代码不再需要逐个查，<b>用名字就能算出来</b>。
-    </p>
-    <div class="formula">代码 = <em>StringHasher.Hash</em>( <i>对象模板名</i>.lower() )</div>
-
-    <div class="stats">
-      <div class="card"><div class="num b">__N__</div><div class="lbl">全量对象代码</div></div>
-      <div class="card"><div class="num g">__FINAL__</div><div class="lbl">可召唤且能用（已筛）</div></div>
-      <div class="card"><div class="num r">__PLAY__</div><div class="lbl">可玩对象（单位/建筑）</div></div>
-      <div class="card"><div class="num">__CN__</div><div class="lbl">带中文名</div></div>
-    </div>
-  </div>
-</header>
+<div class="top"><div class="wrap">
+  <span class="brand"><i></i>Ra3-Copilot · 单位代码</span>
+  <nav>
+    <a href="#query">查询器</a><a href="#algo">算法</a><a href="#usable">可用性判据</a>
+    <a href="#pipeline">提取流程</a><a href="#data">数据与工具</a>
+  </nav>
+  <a class="back" href="../../site/index.html">← 项目首页</a>
+</div></div>
 
 <div class="wrap">
 
-<section id="algo">
-  <h2>哈希算法</h2>
-  <p class="hint">代码不是随便编的随机数 —— 它是 SAGE 引擎对「对象模板名」做的一次字符串哈希。</p>
-  <div class="grid2">
-    <div class="box">
-      <h3>三条要点</h3>
-      <p><b>① 先小写。</b>哈希不区分大小写，<code>AlliedBarracks</code> 与 <code>ALLIEDBARRACKS</code> 同码。</p>
-      <p><b>② 是 SuperFastHash 的变体</b>（Paul Hsieh 算法），不是 CRC32 / FNV / DJB2 ——
-         这就是早期"算不出来、只能查表"的原因。</p>
-      <p><b>③ 32 位无符号结果</b>，一般写成 <code>0x</code> 十六进制。</p>
+<!-- ============ 查询器（主体） ============ -->
+<div class="qhead" id="query">
+  <h1>单位代码查询器</h1>
+  <p>游戏里每个单位 / 建筑 / 对象都有一个 32 位<b>对象类型哈希</b>。下面可以直接<b>按名字离线算出代码</b>，
+     也可以检索全量 __N__ 条清单（点行复制代码）。</p>
+
+  <div class="calc">
+    <div class="panel">
+      <div class="cap">名字 → 代码（离线计算，与游戏一致）</div>
+      <div class="inrow">
+        <input type="text" id="hname" placeholder="输入对象模板名，如 AlliedBarracks" autocomplete="off" spellcheck="false">
+        <button id="hcopy">复制</button>
+      </div>
+      <div class="out" id="hout"></div>
     </div>
-    <div class="box">
-      <h3>既有实现（自检 408/408 全中）</h3>
-      <pre><span class="c">// 代码 = hash(name.lower())</span>
-<span class="k">uint32_t</span> <span class="f">StringHasher_Hash</span>(<span class="k">const char</span>* s){
-  <span class="k">uint32_t</span> h = len;
-  <span class="k">for</span> (每 2 字节) {              <span class="c">// SuperFastHash 主体</span>
-    h += lo; h ^= h&lt;&lt;<span class="s">16</span>; h *= <span class="s">0x21f0aaad</span>;
-    h ^= h&gt;&gt;<span class="s">15</span>;
-    h += hi; h ^= h&lt;&lt;<span class="s">13</span>; h *= <span class="s">0x2c1b3c6d</span>;
-    h ^= h&gt;&gt;<span class="s">16</span>;
-  }
-  <span class="c">// 尾部按剩余字节数做 avalanche</span>
-}</pre>
-      <p>完整实现见 <code>tools/sage_hash.py</code>。</p>
+    <div class="panel">
+      <div class="cap">清单概览</div>
+      <div class="chips">
+        <span class="chip">全量 <b>__N__</b></span>
+        <span class="chip">可召唤且能用 <b>__FINAL__</b></span>
+        <span class="chip">可玩对象 <b>__PLAY__</b></span>
+        <span class="chip">带中文名 <b>__CN__</b></span>
+      </div>
+      <p style="color:var(--dim);font-size:12.8px;margin:12px 0 0">
+        代码 = <code>StringHasher.Hash(模板名.lower())</code>（SAGE 引擎的 SuperFastHash 变体）。<br>
+        支持中英文名、模板名、十六进制代码搜索。</p>
     </div>
   </div>
-</section>
 
-<section id="usable">
-  <h2>「能召唤」≠「召唤出来能用」</h2>
-  <p class="hint">最容易踩的坑：模板能创建出来，不代表它在游戏里可用。</p>
-  <div class="grid2">
-    <div class="box">
-      <pre>波塞冬巡洋舰
-  0x9356389F  AlliedAntiNavyShipTech3     <span class="s">✓ 正常召唤可用</span>
-  0xDB5A5941  AlliedChronoBeacon_Poseidon <span class="k">✗ 能创建，但不可选、不可用</span></pre>
-      <p>两个模板运行时都能在模板库里找到，所以光靠"能不能创建"筛不出来。</p>
-    </div>
-    <div class="box">
-      <h3>判据：官方图鉴的 <code>kind_of</code> 位掩码</h3>
-      <table class="kind">
-        <tr><th>标志</th><th>含义</th></tr>
-        <tr><td>含 <code>SELECTABLE</code></td><td>玩家能选中、能操作 = <b>可用</b></td></tr>
-        <tr><td><code>IGNORES_SELECT_ALL</code></td><td>超时空传送 / 空投的抵达体</td></tr>
-        <tr><td><code>TRANSPORT</code></td><td>运输 / 搭载体</td></tr>
-        <tr><td><code>SUMMONED</code>+<code>UNATTACKABLE</code></td><td>技能召唤的临时装置</td></tr>
-      </table>
-    </div>
-  </div>
-</section>
-
-<section id="pipeline">
-  <h2>提取流程</h2>
-  <p class="hint">整条链路都是可复现的 —— 从官方数据到修改器用的头文件，每一步都有脚本。</p>
-  <div class="flow">
-    <div class="step"><div class="s-n">STEP 1</div><div class="s-t">官方图鉴</div>
-      <div class="s-d">日冕官方单位图鉴数据<br><code>cor-games.com</code> 的 <code>game_objects.jsonl</code></div></div>
-    <div class="arrow">→</div>
-    <div class="step"><div class="s-n">STEP 2</div><div class="s-t">名字 → 代码</div>
-      <div class="s-d">用 SAGE 哈希算法复算<br><code>tools/sage_hash.py</code>（自检全中）</div></div>
-    <div class="arrow">→</div>
-    <div class="step"><div class="s-n">STEP 3</div><div class="s-t">全量清单</div>
-      <div class="s-d">合并清单 / 图鉴 / 字符串表<br><code>tools/gen_unit_codes.py</code></div></div>
-    <div class="arrow">→</div>
-    <div class="step"><div class="s-n">STEP 4</div><div class="s-t">运行时实测</div>
-      <div class="s-d">逐条查模板是否存在<br><code>probe_callable.py</code></div></div>
-    <div class="arrow">→</div>
-    <div class="step"><div class="s-n">STEP 5</div><div class="s-t">可用性过滤</div>
-      <div class="s-d">按 <code>SELECTABLE</code> 判据剔除<br><code>tools/filter_usable.py</code></div></div>
-    <div class="arrow">→</div>
-    <div class="step"><div class="s-n">STEP 6</div><div class="s-t">生成头文件</div>
-      <div class="s-d">供修改器直接查表<br><code>units_corona.h</code></div></div>
-  </div>
-</section>
-
-<section id="browse">
-  <h2>浏览全量代码</h2>
-  <p class="hint">点任意一行可复制它的代码。搜索支持模板名 / 中文名 / 十六进制代码。</p>
   <div class="bar">
     <input type="text" id="q" placeholder="搜索：模板名 / 中文名 / 0x9356389F ..." autocomplete="off">
     <select id="f"><option value="">全部阵营</option>
@@ -322,25 +245,124 @@ footer b{color:var(--dim)}
       <tbody id="tb"></tbody>
     </table>
   </div>
+</div>
+
+<!-- ============ 研究过程披露 ============ -->
+<div class="disc-h" style="padding:56px 0 0">
+  <h2>研究过程披露</h2><span>RESEARCH NOTES</span>
+</div>
+<p class="sub">查询器背后的算法、判据与数据来源，全部可复现。</p>
+
+<section class="disc" id="algo" style="border-top:none;padding-top:8px">
+  <div class="disc-h"><h2>一、哈希算法</h2></div>
+  <p class="sub">代码不是随机数 —— 它是 SAGE 引擎对「对象模板名」做的一次字符串哈希。</p>
+  <div class="grid2">
+    <div class="box">
+      <h3>三条要点</h3>
+      <p><b>① 先小写。</b>哈希不区分大小写，<code>AlliedBarracks</code> 与 <code>ALLIEDBARRACKS</code> 同码。</p>
+      <p><b>② 是 SuperFastHash 的变体</b>（Paul Hsieh 算法），不是 CRC32 / FNV / DJB2 ——
+         这就是早期"算不出来、只能查表"的原因。</p>
+      <p><b>③ 32 位无符号结果</b>，一般写成 <code>0x</code> 十六进制。</p>
+      <p>出处：SAGE 工具链 <code>WrathEd</code> 的 <code>SAGE/StringHasher.cs</code>。本项目已用
+         <b>408 条运行时实测</b>反算全部命中。</p>
+    </div>
+    <div class="box">
+      <h3>核心循环（本页查询器即用此实现）</h3>
+      <pre><span class="c">// 名字小写后逐 4 字节处理，再做尾部与 avalanche</span>
+<span class="k">let</span> h = n;
+<span class="k">for</span> (每 4 字节) {
+  h += b[i] | (b[i+1]&lt;&lt;<span class="s">8</span>);
+  tmp = ((b[i+2] | b[i+3]&lt;&lt;<span class="s">8</span>) ^ (h&lt;&lt;<span class="s">5</span>));
+  h  ^= tmp &lt;&lt; <span class="s">11</span>;
+  h  += h &gt;&gt;&gt; <span class="s">11</span>;
+}
+<span class="c">// 尾部按剩余 1/2/3 字节分支，最后统一 avalanche</span></pre>
+      <p>参考实现：<code>tools/sage_hash.py</code>（自检 408/408）。</p>
+    </div>
+  </div>
 </section>
 
-<section id="links">
-  <h2>数据与工具</h2>
-  <p class="hint">完整报告、命令行小工具、C++ 头文件都在仓库的 <code>unit-codes/</code> 目录。</p>
-  <div class="res">
-    <a href="../README.md">unit-codes/README.md · 目录索引与结论</a>
-    <a href="../单位代码与哈希算法.md">单位代码与哈希算法.md · 完整研究报告</a>
-    <a href="../tools/sage_hash.py">tools/sage_hash.py · 哈希既有实现</a>
-    <a href="../tools/unitcode.py">tools/unitcode.py · 命令行查询</a>
-    <a href="../data/callable_final.tsv">data/callable_final.tsv · 可召唤清单</a>
+<section class="disc" id="usable">
+  <div class="disc-h"><h2>二、「能召唤」≠「召唤出来能用」</h2></div>
+  <p class="sub">最容易踩的坑：模板能创建出来，不代表它在游戏里可用。</p>
+  <div class="grid2">
+    <div class="box">
+      <pre>波塞冬巡洋舰
+  0x9356389F  AlliedAntiNavyShipTech3     <span class="s">✓ 正常召唤可用</span>
+  0xDB5A5941  AlliedChronoBeacon_Poseidon <span class="k">✗ 能创建，但不可选、不可用</span></pre>
+      <p>两个模板运行时都能在模板库里找到，所以光靠"能不能创建"筛不出来。</p>
+      <p><b>判据</b>：官方图鉴数据里 <code>kind_of</code> 位掩码含 <code>SELECTABLE</code> → 可用。</p>
+    </div>
+    <div class="box">
+      <h3>缺 <code>SELECTABLE</code> 的几类</h3>
+      <table class="kind">
+        <tr><th>特征标志位</th><th>是什么</th></tr>
+        <tr><td><code>IGNORES_SELECT_ALL</code></td><td>超时空传送 / 空投的抵达体</td></tr>
+        <tr><td><code>TRANSPORT</code></td><td>运输 / 搭载体</td></tr>
+        <tr><td><code>SUMMONED</code>+<code>UNATTACKABLE</code></td><td>技能召唤的临时装置</td></tr>
+        <tr><td>（无标志）</td><td>自杀 / 俯冲类特攻机</td></tr>
+      </table>
+      <p>本次据此从 441 条实测清单里剔除 31 条，剩 <b>410 条</b>。</p>
+    </div>
+  </div>
+</section>
+
+<section class="disc" id="pipeline">
+  <div class="disc-h"><h2>三、提取流程</h2></div>
+  <p class="sub">从官方数据到修改器用的头文件，每一步都有脚本，整条链路可复现。</p>
+  <div class="flow">
+    <div class="step"><div class="s-n">STEP 1</div><div class="s-t">官方图鉴</div>
+      <div class="s-d">日冕官方单位图鉴数据<br><code>cor-games.com</code> 的 <code>game_objects.jsonl</code></div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="s-n">STEP 2</div><div class="s-t">名字 → 代码</div>
+      <div class="s-d">用 SAGE 哈希算法复算<br><code>tools/sage_hash.py</code></div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="s-n">STEP 3</div><div class="s-t">全量清单</div>
+      <div class="s-d">合并清单 / 图鉴 / 字符串表<br><code>tools/gen_unit_codes.py</code></div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="s-n">STEP 4</div><div class="s-t">运行时实测</div>
+      <div class="s-d">逐条查模板是否存在<br><code>probe_callable.py</code></div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="s-n">STEP 5</div><div class="s-t">可用性过滤</div>
+      <div class="s-d">按 <code>SELECTABLE</code> 判据剔除<br><code>tools/filter_usable.py</code></div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="s-n">STEP 6</div><div class="s-t">生成头文件</div>
+      <div class="s-d">供修改器直接查表<br><code>units_corona.h</code></div></div>
+  </div>
+</section>
+
+<section class="disc" id="data">
+  <div class="disc-h"><h2>四、数据、验证与限制</h2></div>
+  <div class="grid2">
+    <div class="box">
+      <h3>验证（408/408）</h3>
+      <p>① 运行时实测过的 名字→代码 <b>全部复算命中</b>；</p>
+      <p>② 与社区《增援代码》表逐条一致；</p>
+      <p>③ 与官方图鉴的 <code>editor_name</code> 逐条一致。</p>
+      <h3 style="margin-top:14px">同一个单位为何有多个代码</h3>
+      <p>每个形态（<code>_Naval</code>/<code>_Dropped</code>/<code>_Enhanced</code>/<code>ChronoBeacon_*</code>…）
+         都是独立模板。基准形态判据 = 该家族里唯一带 <code>DESC:</code>（面板说明）的那条。</p>
+    </div>
+    <div class="box">
+      <h3>已知限制</h3>
+      <p>· 名册是"所有已知来源的并集"，原版对象 XML 未随游戏发布，只能反推；</p>
+      <p>· 无中文名的一大批是<b>地图场景 / 中立物</b>（约 2400 条，<code>XX_</code> 地区前缀），它们从不显示名字；</p>
+      <p>· 可用性判据依赖官方图鉴，未被收录的对象无法核验（按保守保留处理）。</p>
+      <h3 style="margin-top:14px">数据与工具</h3>
+      <div class="res" style="margin-top:4px">
+        <a href="../README.md">README.md · 索引与结论</a>
+        <a href="../单位代码与哈希算法.md">完整研究报告</a>
+        <a href="../tools/unitcode.py">tools/unitcode.py</a>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer>
   <div>
-    <b>Ra3-Copilot</b> · 单位代码研究。数据由 <code>tools/gen_site.py</code> 从
+    <b>Ra3-Copilot</b> · 单位代码查询器。数据由 <code>tools/gen_site.py</code> 从
     <code>data/unit_codes_all.tsv</code> 生成。<br>
-    哈希算法出处：SAGE 引擎的 <code>StringHasher</code>（SuperFastHash 变体）。
+    哈希算法出自 SAGE 引擎的 <code>StringHasher</code>（SuperFastHash 变体）。
     仅供学习与研究使用；本页只收录代码哈希与名称这类事实性数据，不含游戏素材。
   </div>
 </footer>
@@ -349,29 +371,74 @@ footer b{color:var(--dim)}
 <div class="toast" id="toast"></div>
 <script src="data.js"></script>
 <script>
+/* ---------- SAGE 哈希（与 tools/sage_hash.py 一致） ---------- */
+function sageHash(value){
+  const s = String(value).toLowerCase();
+  const enc = new TextEncoder().encode(s);
+  const n = enc.length;
+  if (n === 0) return 0;
+  if (n === 10 && enc[0] === 0x30 && enc[1] === 0x78){
+    const v = parseInt(s.slice(2), 16);
+    if (!isNaN(v)) return v >>> 0;
+  }
+  const nb = Math.floor(n / 4), extra = n % 4;
+  let h = n >>> 0, idy = 0;
+  for (let i = 0; i < nb; i++){
+    h = (h + ((enc[idy+1] << 8) | enc[idy])) >>> 0;
+    const tmp = (((enc[idy+3] << 8) | enc[idy+2]) ^ ((h << 5) >>> 0)) >>> 0;
+    h = (h ^ ((tmp << 11) >>> 0)) >>> 0;
+    h = (h + (h >>> 11)) >>> 0;
+    idy += 4;
+  }
+  if (extra === 1){
+    h = (h + enc[idy]) >>> 0;
+    h = (((h << 10) >>> 0) ^ h) >>> 0;
+    h = (h + (h >>> 1)) >>> 0;
+  } else if (extra === 2){
+    h = (h + ((enc[idy+1] << 8) | enc[idy])) >>> 0;
+    h = (h ^ ((h << 11) >>> 0)) >>> 0;
+    h = (h + (h >>> 17)) >>> 0;
+  } else if (extra === 3){
+    h = (h + ((enc[idy+1] << 8) | enc[idy])) >>> 0;
+    const t = (h ^ ((enc[idy+2] << 2) >>> 0)) >>> 0;
+    h = (h ^ ((t << 16) >>> 0)) >>> 0;
+    h = (h + (h >>> 11)) >>> 0;
+  }
+  h = (h ^ ((h << 3) >>> 0)) >>> 0;
+  h = (h + (h >>> 5)) >>> 0;
+  h = (h ^ ((h << 2) >>> 0)) >>> 0;
+  h = (h + (h >>> 15)) >>> 0;
+  h = (h ^ ((h << 10) >>> 0)) >>> 0;
+  return h >>> 0;
+}
+function hex8(v){ return '0x' + (v >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+
+/* ---------- 数据表 ---------- */
 const ROWS = window.RA3_UNITS || [];
+const byCode = new Map();
+for (const r of ROWS) if (!byCode.has(r.c.toUpperCase())) byCode.set(r.c.toUpperCase(), r);
+
 const tb = document.getElementById('tb'), q = document.getElementById('q'),
       fs = document.getElementById('f'), ks = document.getElementById('k'),
       us = document.getElementById('u'), ps = document.getElementById('p'),
       st = document.getElementById('st'), toast = document.getElementById('toast');
-const fmt = document.createElement('template');
 
-function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function esc(s){ return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(){
   const parts = [];
   for (const r of ROWS){
-    const hl = (r.n+' '+r.cn+' '+r.fam+' '+r.c).toLowerCase();
+    const hl = (r.n + ' ' + r.cn + ' ' + r.fam + ' ' + r.c).toLowerCase();
     parts.push(
-      '<tr data-u="'+esc(r.s)+'" data-h="'+esc(hl)+'" data-f="'+esc(r.f)+'" '+
-      'data-k="'+esc(r.u)+'" data-p="'+esc(r.p)+'" title="点击复制代码">'+
-      '<td class="code">'+esc(r.c)+'</td>'+
-      '<td class="name">'+esc(r.n)+'</td>'+
-      '<td class="cn">'+esc(r.cn)+'</td>'+
-      '<td class="fac">'+esc(r.f)+'</td>'+
-      '<td class="uc">'+esc(r.u)+'</td>'+
-      '<td class="tl">'+esc(r.t)+'</td>'+
-      '<td class="note">'+esc(r.note)+'</td></tr>');
+      '<tr data-u="' + esc(r.s) + '" data-h="' + esc(hl) + '" data-f="' + esc(r.f) + '" ' +
+      'data-k="' + esc(r.u) + '" data-p="' + esc(r.p) + '">' +
+      '<td class="code">' + esc(r.c) + '</td>' +
+      '<td class="name">' + esc(r.n) + '</td>' +
+      '<td class="cn">' + esc(r.cn) + '</td>' +
+      '<td class="fac">' + esc(r.f) + '</td>' +
+      '<td class="uc">' + esc(r.u) + '</td>' +
+      '<td class="tl">' + esc(r.t) + '</td>' +
+      '<td class="note">' + esc(r.note) + '</td></tr>');
   }
   tb.innerHTML = parts.join('');
 }
@@ -397,16 +464,44 @@ q.addEventListener('input', run); fs.addEventListener('change', run);
 ks.addEventListener('change', run); us.addEventListener('change', run);
 ps.addEventListener('change', run); run();
 
+/* 名字 → 代码 计算器 */
+const hname = document.getElementById('hname'), hout = document.getElementById('hout');
+let lastHash = '';
+function calc(){
+  const v = hname.value.trim();
+  if (!v){ hout.innerHTML = '<span style="color:var(--dim2);font-size:15px">输入模板名后自动计算…</span>'; lastHash = ''; return; }
+  const h = sageHash(v), hex = hex8(h);
+  lastHash = hex;
+  const hit = byCode.get(hex.toUpperCase());
+  const extra = hit
+    ? '<small>清单命中：' + esc(hit.cn || '（无中文名）') + ' · ' + esc(hit.f || '—') + ' · ' +
+      esc(hit.u || '—') + ' · ' + (hit.s === 'yes' ? '可召唤' : hit.s === 'no' ? '不可用' : '未标记') + '</small>'
+    : '<small>该代码不在本清单中（可能未收录，或拼写不同）</small>';
+  hout.innerHTML = hex + extra;
+}
+hname.addEventListener('input', calc);
+hname.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && lastHash){ q.value = lastHash; run(); document.getElementById('q').focus(); }
+});
+document.getElementById('hcopy').addEventListener('click', () => {
+  if (!lastHash) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(lastHash).then(
+    () => showToast('已复制 ' + lastHash), () => showToast(lastHash));
+  else showToast(lastHash);
+});
+calc();
+
+/* 点行复制 */
 function showToast(msg){
   toast.textContent = msg; toast.classList.add('on');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(()=>toast.classList.remove('on'), 1200);
+  showToast._t = setTimeout(() => toast.classList.remove('on'), 1200);
 }
-tb.addEventListener('click', e=>{
+tb.addEventListener('click', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const code = tr.querySelector('td.code').textContent.trim();
   if (navigator.clipboard) navigator.clipboard.writeText(code).then(
-    ()=>showToast('已复制 '+code), ()=>showToast(code));
+    () => showToast('已复制 ' + code), () => showToast(code));
   else showToast(code);
 });
 </script>
@@ -419,8 +514,7 @@ def main():
     rows = load_rows()
     os.makedirs(OUTDIR, exist_ok=True)
 
-    data = build_data_json(rows)
-    js = 'window.RA3_UNITS = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n'
+    js = 'window.RA3_UNITS = ' + json.dumps(build_data_json(rows), ensure_ascii=False, separators=(',', ':')) + ';\n'
     with io.open(os.path.join(OUTDIR, 'data.js'), 'w', encoding='utf-8') as f:
         f.write(js)
 
@@ -435,9 +529,8 @@ def main():
         f.write(doc)
 
     print('wrote site/index.html + site/data.js')
-    print('  rows=%d final=%d marked=%d playable=%d cn_named=%d (build=%d inf=%d veh=%d)'
-          % (s['n'], s['n_final'], s['n_sum'], s['n_play'], s['n_cn'],
-             s['n_build'], s['n_inf'], s['n_veh']))
+    print('  rows=%d final=%d marked=%d playable=%d cn_named=%d'
+          % (s['n'], s['n_final'], s['n_sum'], s['n_play'], s['n_cn']))
 
 
 if __name__ == '__main__':

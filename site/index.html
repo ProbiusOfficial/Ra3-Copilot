@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ra3-Copilot · 红色警戒3 日冕 注入型修改器</title>
+<meta name="description" content="红色警戒3 日冕 Mod 的注入型进程内修改器：局内覆盖层 + 功能钩子 + MCP 脑机接口。">
+<style>
+:root{
+  --bg:#0c1016;--pnl:#151d29;--line:#242f3e;--line2:#1b2431;
+  --tx:#dfe7f1;--dim:#8b9bad;--dim2:#5d6b7c;
+  --red:#e8534a;--red2:#ff7a70;--gold:#e2b33c;--grn:#5fd08a;--blu:#59a9ff;
+  --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.75 "Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif}
+a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:var(--mono);color:var(--gold)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+.top{position:sticky;top:0;z-index:20;background:rgba(12,16,22,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:14px;height:54px;flex-wrap:wrap}
+.brand{font-weight:750;font-size:15px;display:flex;align-items:center;gap:9px;letter-spacing:.2px}
+.brand i{width:9px;height:9px;border-radius:2px;background:var(--red);display:inline-block;
+  box-shadow:0 0 10px rgba(232,83,74,.7)}
+.top nav{display:flex;gap:16px;font-size:13px;margin-left:8px}
+.top nav a{color:var(--dim)}.top nav a:hover{color:var(--tx);text-decoration:none}
+
+header.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(1100px 400px at 84% -70px, rgba(232,83,74,.20), transparent 62%),
+    radial-gradient(900px 420px at 6% 130%, rgba(89,169,255,.12), transparent 60%),
+    linear-gradient(180deg,#0e141d,#0c1016)}
+.hero .wrap{padding:70px 24px 56px}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--red2);
+  border:1px solid rgba(232,83,74,.35);background:rgba(232,83,74,.08);
+  border-radius:999px;padding:5px 13px;letter-spacing:.4px}
+.hero h1{margin:18px 0 10px;font-size:46px;line-height:1.1;font-weight:780;letter-spacing:-1px}
+.hero h1 span{color:var(--red)}
+.hero .lead{max-width:800px;color:var(--dim);font-size:16.5px}
+.hero .lead b{color:var(--tx)}
+.hero-grid{display:grid;grid-template-columns:1.32fr .68fr;gap:30px;align-items:center}
+.hero-art{text-align:center}
+.hero-art img{width:100%;max-width:330px;border-radius:16px;border:1px solid var(--line);
+  box-shadow:0 20px 55px rgba(0,0,0,.5);display:inline-block}
+.art-cap{margin-top:10px;font-size:12.5px;color:var(--dim2);letter-spacing:.4px}
+@media(max-width:880px){.hero-grid{grid-template-columns:1fr;gap:22px}.hero-art img{max-width:240px}}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;
+  padding:11px 18px;font-size:14px;color:var(--tx);background:var(--pnl)}
+.btn:hover{border-color:var(--blu);text-decoration:none}
+.btn.primary{background:linear-gradient(180deg,#e8534a,#c8403a);border-color:#e8534a;color:#fff;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.kv{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.kv span{font-size:12.5px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:6px 13px}
+.kv b{color:var(--tx);font-family:var(--mono)}
+
+section{padding:56px 0 6px;border-bottom:1px solid var(--line2)}
+section h2{font-size:23px;font-weight:730;margin:0 0 6px;letter-spacing:-.3px}
+section .hint{color:var(--dim);font-size:14.5px;margin:0 0 22px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+.card{background:var(--pnl);border:1px solid var(--line);border-radius:12px;padding:17px 19px}
+.card h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
+.card h3 em{font-style:normal;font-size:11px;color:var(--red2);font-family:var(--mono);
+  border:1px solid rgba(232,83,74,.3);border-radius:5px;padding:1px 6px}
+.card p{margin:6px 0;color:var(--dim);font-size:14px}
+.card ul{margin:6px 0 0;padding-left:18px;color:var(--dim);font-size:14px}
+.card li{margin:3px 0}
+pre{margin:0;background:#0a0f16;border:1px solid var(--line);border-radius:10px;padding:15px 17px;
+  overflow:auto;font-family:var(--mono);font-size:12.8px;line-height:1.7;color:#cfe0f2}
+pre b{color:var(--red2);font-weight:600}pre i{color:var(--grn);font-style:normal}pre u{color:var(--gold);text-decoration:none}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line2)}
+th{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.4px;text-transform:uppercase}
+td code{font-size:12.8px}
+footer{padding:40px 0 64px;color:var(--dim2);font-size:12.7px;line-height:1.9}
+footer b{color:var(--dim)}
+.note{border-left:2px solid var(--red);background:rgba(232,83,74,.05);border-radius:0 8px 8px 0;
+  padding:12px 16px;color:var(--dim);font-size:13.5px;margin-top:16px}
+.note b{color:var(--tx)}
+</style>
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <span class="brand"><i></i>Ra3-Copilot</span>
+  <nav>
+    <a href="#features">功能</a><a href="#arch">架构</a><a href="#render">渲染</a>
+    <a href="#usage">使用</a><a href="#mcp">脑机接口</a><a href="#units">单位代码</a><a href="#build">构建</a>
+  </nav>
+</div></div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <span class="badge">◆ 注入型进程内修改器 · 局内覆盖层</span>
+        <h1>Ra3-<span>Copilot</span></h1>
+        <p class="lead">
+          红色警戒 3 <b>日冕 Mod</b> 的进程内修改器：以 <b>局内覆盖层</b>（overlay）形式接入游戏，
+          按 <code>INSERT</code> 呼出菜单，提供资源 / 战斗 / 单位 / 召唤等辅助能力；
+          内置 <b>HTTP 调试接口</b> 与 <b>MCP 脑机接口</b>，让 AI 能读战局、投放部队。
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/ProbiusOfficial/Ra3-Copilot">GitHub 仓库</a>
+          <a class="btn" href="../unit-codes/site/index.html">单位代码查询器 →</a>
+          <a class="btn" href="#usage">快速上手</a>
+        </div>
+        <div class="kv">
+          <span>目标 <b>ra3_1.12.game</b></span>
+          <span>版本 <b>v1.12.3444.25830</b></span>
+          <span>架构 <b>x86 (PE32)</b></span>
+          <span>渲染 <b>d3d9 inline-hook</b></span>
+          <span>接口 <b>127.0.0.1:17832</b></span>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img src="assets/ra3_copilot_adjutant_main.png" alt="Ra3-Copilot 作战副官">
+        <div class="art-cap">作战副官 · 读战局 / 投放部队</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="features">
+  <h2>功能一览</h2>
+  <p class="hint">所有变更类操作都由游戏主线程（渲染线程）执行，并在「输出记录」里留痕；注入前对每个挂钩点做 AOB 字节级校验（fail-closed，不符绝不 patch）。</p>
+  <div class="grid3">
+    <div class="card"><h3>渲染 <em>overlay</em></h3>
+      <p>MinHook inline-hook d3d9 的 <code>Present</code>/<code>EndScene</code>，用 ImGui 直接画在游戏画面内。</p>
+      <ul><li>不抢焦点、切窗口不静音</li><li>鼠标在面板内自动穿透</li></ul></div>
+    <div class="card"><h3>资源 <em>resource</em></h3>
+      <ul><li>加钱 / 设置资金（实时读取）</li><li>电力满、科技点满、全科技</li><li>快速建造、免费建造</li><li>敌方无法建造</li></ul></div>
+    <div class="card"><h3>战斗 <em>combat</em></h3>
+      <ul><li>玩家无敌、选中单位弹药满</li><li>超武就绪 / 禁用敌方超武</li><li>危险等级干预、全图去迷雾</li><li>秒杀模式</li></ul></div>
+    <div class="card"><h3>单位 <em>unit</em></h3>
+      <ul><li>选中单位变速 / 改血 / 收编 / 摧毁 / 满级</li><li>召唤单位与基地车</li><li>空投箱子（可周期自动）</li></ul></div>
+    <div class="card"><h3>调试接口 <em>http</em></h3>
+      <p>进程内 HTTP（<code>127.0.0.1:17832</code>），只读端点由 HTTP 线程直接应答。</p>
+      <ul><li><code>/state</code> <code>/snapshot</code> <code>/read</code> <code>/peek</code></li>
+          <li><code>/summon</code> <code>/poke</code> <code>/call</code></li></ul></div>
+    <div class="card"><h3>脑机接口 <em>mcp</em></h3>
+      <p>把进程内能力包装成标准 MCP 工具，任意支持 MCP 的 AI 客户端都能读取战局并给玩家投放单位 / 箱子。</p>
+      <ul><li>默认总闸关闭，只读不受影响</li></ul></div>
+  </div>
+</section>
+
+<section id="arch">
+  <h2>架构</h2>
+  <p class="hint">功能核（进程内内存 patch）+ 渲染层（inline-hook）+ 输入线程，三者协作。</p>
+  <pre>injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► ra3trainer.dll (in-game)
+                                                              │
+                     ┌────────────────────────────────────────┼──────────────────────────┐
+                     ▼                                        ▼                          ▼
+            <u>features.cpp</u> (功能核)                 <u>overlay.cpp</u> (渲染层)             <u>输入线程</u>
+            ├ 表驱动 hooks（kHooks[]）              ① 造 dummy window + dummy D3D9 device
+            │   名/RVA/AOB/壳/返回地址               ② 读 device vtable[16/17/42] = Reset/Present/EndScene 的函数地址
+            │   push/ret 与 E9 detour               ③ MinHook inline-hook 这些函数(+SwapChain::Present)
+            └ 壳（stubs.asm）→ 洞内动作              ④ 销毁 dummy
+                （改内存 / 记录对象）                 ⑤ Present detour 里用「游戏 device + 游戏窗口」渲染 ImGui → 再调原 Present</pre>
+  <div class="grid3" style="margin-top:16px">
+    <div class="card"><h3>功能核</h3><p>表驱动：新增功能 = 表里加一行 + 写一个 MASM 壳 + UI 加勾选框。</p></div>
+    <div class="card"><h3>壳代码</h3><p>MASM 编进 DLL <code>.text</code>，靠 PE 重定位补全局地址、<code>FF 25</code> 间接跳回游戏（无 ±2GB 限制）。</p></div>
+    <div class="card"><h3>地址自愈</h3><p>符号解析器（AOB 特征码 + 结构推导）替代硬编码 RVA，换版本 / 换 mod 后可重新定位。</p></div>
+  </div>
+</section>
+
+<section id="render">
+  <h2>渲染原理</h2>
+  <p class="hint">为什么是 inline-hook「函数本身」，而不是改 vtable 数组、也不是自建窗口。</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>正解</h3>
+      <pre>1. 自建 dummy 窗口 + dummy device
+2. 读 <b>vtable[16/17/42]</b> 得到 Reset/Present/EndScene 的<b>函数地址</b>
+   （这些地址落在 <i>d3d9.dll</i> 里，被游戏自己的 device 共用）
+3. <b>MH_CreateHook(函数地址, detour, &amp;原函数)</b> → MH_EnableHook
+4. 销毁 dummy（hook 完就拆）</pre>
+    </div>
+    <div class="card">
+      <h3>走过的弯路</h3>
+      <table>
+        <tr><th>做法</th><th>结果</th></tr>
+        <tr><td>改 dummy device 的 vtable 数组</td><td>游戏 device 用另一张表 → 计数恒 0</td></tr>
+        <tr><td>扫内存找游戏 device</td><td>三次崩溃，误挂率高</td></tr>
+        <tr><td>自建置顶窗口</td><td>独立窗口，抢焦点、切窗口静音</td></tr>
+      </table>
+      <p style="margin-top:10px">正确判据：hook <b>函数本身</b>，任何 device 调用它都会命中。</p>
+    </div>
+  </div>
+</section>
+
+<section id="usage">
+  <h2>快速上手</h2>
+  <p class="hint">需要先启动游戏并进入对局；注入器必须与游戏同为 32 位。</p>
+  <div class="grid3">
+    <div class="card"><h3>① 启动游戏</h3><p>通过启动器进入对局（遭遇战 / 战役均可）。</p></div>
+    <div class="card"><h3>② 注入</h3><p>运行 <code>trainer-v2\deploy.bat</code>（自动 UAC 提权 → 注入 → 打印诊断）。</p></div>
+    <div class="card"><h3>③ 呼出菜单</h3><p>游戏内按 <code>INSERT</code> 显示 / 隐藏菜单，<code>F7</code> 加钱。</p></div>
+  </div>
+  <div class="note"><b>注意：</b>显示菜单时会抢焦点（RTS 失焦会暂停），这是有意的 —— 否则鼠标键盘无法操作 UI。</div>
+</section>
+
+<section id="mcp">
+  <h2>脑机接口（MCP）</h2>
+  <p class="hint">把修改器的进程内接口包装成标准 MCP 工具，让 AI 客户端读战局、投放部队。</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>工具</h3>
+      <table>
+        <tr><th>工具</th><th>说明</th></tr>
+        <tr><td><code>get_battle_state</code></td><td>我方/敌方部队建筑数、资金、选中单位</td></tr>
+        <tr><td><code>search_units</code></td><td>单位检索（中文名 / 模板名 / 哈希）</td></tr>
+        <tr><td><code>summon_unit</code></td><td>召唤单位</td></tr>
+        <tr><td><code>drop_crate</code></td><td>空投箱子</td></tr>
+        <tr><td><code>selected_action</code></td><td>复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级</td></tr>
+        <tr><td><code>toggle_feature</code></td><td>电力/全科技/免费建造/去迷雾/无敌…</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>接入</h3>
+      <pre>{
+  "mcpServers": {
+    "ra3-copilot": {
+      "command": "python",
+      "args": ["&lt;仓库&gt;/trainer-v2/mcp/ra3_mcp.py"]
+    }
+  }
+}</pre>
+      <p style="margin-top:10px">游戏内「脑机接口」面板点开总闸后，AI 才能执行变更类操作；只读始终可用。</p>
+    </div>
+  </div>
+</section>
+
+<section id="units">
+  <h2>单位代码研究</h2>
+  <p class="hint">创建单位时用的是 32 位对象类型哈希 —— 本项目把它整理成了可检索、可离线复算的清单。</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>代码 = <code>StringHasher.Hash(模板名.lower())</code></h3>
+      <p>SAGE 引擎的 SuperFastHash 变体，已用 408 条运行时实测反算全部命中。</p>
+      <div class="cta" style="margin-top:14px">
+        <a class="btn primary" href="../unit-codes/site/index.html">打开单位代码查询器 →</a>
+      </div>
+    </div>
+    <div class="card">
+      <h3>包含</h3>
+      <ul>
+        <li>全量 <b>5461</b> 条对象代码（可搜索 / 可筛选）</li>
+        <li>「可召唤且能用」<b>410</b> 条（经可用性筛选）</li>
+        <li>哈希算法、可用性判据、提取流程披露</li>
+        <li>可复现的提取脚本（<code>unit-codes/tools/</code>）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="build">
+  <h2>构建</h2>
+  <p class="hint">产物均为 x86 —— 游戏是 32 位进程，注入器必须同位数。</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>要求</h3>
+      <ul>
+        <li>VS2019 BuildTools（x86 工具链 + MASM <code>ml.exe</code>）</li>
+        <li>Windows SDK 10.0.19041</li>
+      </ul>
+      <pre style="margin-top:10px">trainer-v2\build.bat</pre>
+    </div>
+    <div class="card">
+      <h3>产物</h3>
+      <ul>
+        <li><code>ra3trainer.dll</code> —— 注入模块</li>
+        <li><code>injector.exe</code> —— 注入器</li>
+      </ul>
+      <h3 style="margin-top:14px">第三方组件</h3>
+      <ul>
+        <li>MinHook 1.3.3（BSD-2-Clause）</li>
+        <li>Dear ImGui v1.91.4（MIT）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>
+    <b>Ra3-Copilot</b> · 红色警戒 3 日冕 Mod 修改器。<b>仅供单机学习与研究使用</b>，
+    禁止用于联机对战或任何破坏他人游戏体验的场景。<br>
+    版本强绑定 <code>v1.12.3444.25830</code>，注入前执行 AOB 字节级校验（fail-closed）。
+    本仓库不含游戏素材与第三方数据。
+  </div>
+</footer>
+
+</div>
+</body>
+</html>

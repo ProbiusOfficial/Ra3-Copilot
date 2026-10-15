@@ -40,6 +40,7 @@ trainer-v2\build.bat
 ## 目录
 
 ```
+├── site/                  项目官网（静态站点：浏览器直接打开 index.html）
 ├── trainer-v2/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions / stubs.asm（MASM 壳）
 │   ├── imgui/             Dear ImGui v1.91.4（MIT）
@@ -48,13 +49,20 @@ trainer-v2\build.bat
 │   ├── mcp/               脑机接口（MCP stdio 服务器 + 单位目录）
 │   ├── build.bat / deploy.bat / refresh_dll.bat
 │   └── README.md          架构 / 钩子清单 / 渲染原理（详细版）
-├── unit-codes/            单位代码（SAGE 对象类型哈希）研究
+├── unit-codes/            单位代码（SAGE 对象类型哈希）
+│   ├── site/              单位代码查询器（浏览器直接打开 index.html）
 │   ├── README.md / 单位代码与哈希算法.md   结论与完整报告
-│   ├── site/              项目网站：浏览器直接打开 index.html（可搜索全量代码）
 │   ├── data/              派生清单（.tsv / .h）
 │   └── tools/             提取逻辑：哈希算法 / 图鉴拉取 / 清单生成 / 建站
 └── docs/                  局内渲染方案 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口 / LLM 接入调研
 ```
+
+## 站点
+
+- **项目官网** → `site/index.html`
+- **单位代码查询器** → `unit-codes/site/index.html`（按名字离线算代码 + 全量检索；下方附研究过程披露）
+
+均为纯静态页面，浏览器直接打开即可，无需服务器。
 
 ## 单位代码
 
@@ -65,7 +73,7 @@ trainer-v2\build.bat
 ```
 
 本项目把日冕全量 **5461 条**对象代码整理成表并可离线复算，其中「可召唤且能用」**410 条**。
-浏览站点：用浏览器打开 **`unit-codes/site/index.html`**（纯静态、离线可用）。
+查询器：用浏览器打开 **`unit-codes/site/index.html`**（纯静态、离线可用，支持按名字离线算代码）。
 
 ## 第三方组件
 
@@ -74,6 +82,6 @@ trainer-v2\build.bat
 
 ## 仓库边界
 
-本仓库收录 **Ra3-Copilot 产品本体（`trainer-v2/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
+本仓库收录 **Ra3-Copilot 产品本体（`trainer-v2/`）、项目官网（`site/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
 
 游戏原始数据抽取物与第三方图鉴数据（`unit-codes/data/source/`）亦不随仓库分发，可由 `unit-codes/tools/` 自行重新生成。
