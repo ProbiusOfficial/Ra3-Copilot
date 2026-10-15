@@ -6,7 +6,7 @@
 
 当前状态（2026-10-15）：**可召唤且能用 = 408 条单位 + 54 个箱子**，已刷新进 `trainer-v2/src/units_corona.h`。
 
-> 🌐 **查询器**：浏览器直接打开 `site/index.html` —— 主体是「按名字离线算代码 + 全量检索」，下方附研究过程披露。
+> 🌐 **查询器**：站点在仓库根 `site/` —— 浏览器打开 **`site/units.html`**（主体是「按名字离线算代码 + 全量检索」，下方附研究过程披露）。
 
 ---
 
@@ -16,9 +16,6 @@
 unit-codes/
 ├── README.md                     ← 你正在看的这份
 ├── 单位代码与哈希算法.md           ← 完整研究报告（原理 / 验证 / 形态 / 场景物件 / 社区资源）
-├── site/                         ★ 单位代码查询器（纯静态；主体=查询，下方=研究过程披露）
-│   ├── index.html                   名字→代码计算 + 全量检索表 + 研究过程披露
-│   └── data.js                      单位代码数据（由 tools/gen_site.py 生成）
 ├── data/
 │   ├── callable_final.tsv        ★ 修改器当前使用的召唤清单（运行时实测 ∩ 可用性筛选）
 │   ├── callable_dropped.tsv      被剔除的条目 + 原因（留档，别删）
@@ -34,7 +31,7 @@ unit-codes/
 │   ├── filter_usable.py          ★ 给召唤清单做可用性过滤
 │   ├── fetch_official.py         ★ 重新拉取官方图鉴数据
 │   ├── gen_unit_codes.py         生成 data/*.tsv|h
-│   ├── gen_site.py               ★ 生成 site/（项目网站）
+│   ├── gen_site.py               ★ 生成站点查询器（输出到 仓库根 site/units.html + site/data.js）
 │   ├── csf_read2.py              RA3 CSF 字符串表解析器（值是按位取反的 UTF-16LE）
 │   ├── big_ls.py                 BIG4 归档目录/统计
 │   ├── scan_object_names.py      在 BIG 里按字节搜名字
@@ -164,7 +161,7 @@ trainer-v2/src/units_corona.h             （408 单位 + 54 箱子）
 cd unit-codes/tools
 python fetch_official.py --proxy http://127.0.0.1:7890   # 可选：拉最新图鉴
 python gen_unit_codes.py
-python gen_site.py                                      # 生成 site/index.html + site/data.js
+python gen_site.py                                      # 生成 仓库根 site/units.html + site/data.js
 
 # 给现有召唤清单再做一次可用性过滤（不需要游戏）
 python filter_usable.py            # 就地过滤 callable_final.tsv，原文件自动备份

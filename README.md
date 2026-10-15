@@ -40,7 +40,7 @@ trainer-v2\build.bat
 ## 目录
 
 ```
-├── site/                  项目官网（静态站点：浏览器直接打开 index.html）
+├── site/                  项目官网（index.html 首页 + units.html 单位代码子页面 + assets/）
 ├── trainer-v2/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions / stubs.asm（MASM 壳）
 │   ├── imgui/             Dear ImGui v1.91.4（MIT）
@@ -50,17 +50,16 @@ trainer-v2\build.bat
 │   ├── build.bat / deploy.bat / refresh_dll.bat
 │   └── README.md          架构 / 钩子清单 / 渲染原理（详细版）
 ├── unit-codes/            单位代码（SAGE 对象类型哈希）
-│   ├── site/              单位代码查询器（浏览器直接打开 index.html）
 │   ├── README.md / 单位代码与哈希算法.md   结论与完整报告
 │   ├── data/              派生清单（.tsv / .h）
 │   └── tools/             提取逻辑：哈希算法 / 图鉴拉取 / 清单生成 / 建站
-└── docs/                  局内渲染方案 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口 / LLM 接入调研
+└── docs/                  局内渲染方案 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口 / 美术资源清单
 ```
 
 ## 站点
 
-- **项目官网** → `site/index.html`
-- **单位代码查询器** → `unit-codes/site/index.html`（按名字离线算代码 + 全量检索；下方附研究过程披露）
+- **官网首页** → `site/index.html`（视觉优先；立绘资源见 `docs/美术资源清单.md`）
+- **单位代码查询器** → `site/units.html`（名字→代码离线计算 + 全量检索；下方附研究过程披露）
 
 均为纯静态页面，浏览器直接打开即可，无需服务器。
 

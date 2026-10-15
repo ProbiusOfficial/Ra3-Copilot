@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""gen_site.py - 生成「RA3 日冕 · 单位代码查询器」页面
+"""gen_site.py - 生成「单位代码查询器」子页面（站点为 <repo>/site/）
 
 输出：
-  unit-codes/site/index.html   主体 = 查询器（名字→代码计算 + 全量检索表）
-                               下方 = 研究过程披露（算法 / 判据 / 提取流程 / 限制）
-  unit-codes/site/data.js      单位代码数据（由 data/unit_codes_all.tsv 生成）
+  site/units.html   单位代码查询器（主体=查询，下方=研究过程披露）
+  site/data.js      单位代码数据（由 data/unit_codes_all.tsv 生成）
 
 用法：python gen_site.py
 """
@@ -18,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVE = os.path.abspath(os.path.join(HERE, '..'))
 SRC = os.path.join(ARCHIVE, 'data', 'unit_codes_all.tsv')
 FINAL = os.path.join(ARCHIVE, 'data', 'callable_final.tsv')
-OUTDIR = os.path.join(ARCHIVE, 'site')
+OUTDIR = os.path.abspath(os.path.join(ARCHIVE, '..', 'site'))
 
 FAC_ORDER = {'神州': 0, '盟军': 1, '苏联': 2, '帝国': 3, '中立': 4, '平民': 5, '特殊': 6, '': 9}
 CLASS_ORDER = {'建筑': 0, '步兵': 1, '载具': 2, '舰船': 3, '飞行器': 4, '箱子': 5, '其他': 6, '': 9}
@@ -71,9 +70,9 @@ TEMPLATE = r"""<!DOCTYPE html>
 <meta name="description" content="红色警戒3 日冕 Mod 单位代码（SAGE 对象类型哈希）查询器，支持按名字离线计算代码。">
 <style>
 :root{
-  --bg:#0c1016;--bg2:#111823;--pnl:#151d29;--line:#242f3e;--line2:#1b2431;
-  --tx:#dfe7f1;--dim:#8b9bad;--dim2:#5d6b7c;
-  --red:#e8534a;--red2:#ff7a70;--gold:#e2b33c;--grn:#5fd08a;--blu:#59a9ff;
+  --bg:#101215;--bg2:#15181c;--pnl:#191d21;--line:#2a2f35;--line2:#21262b;
+  --tx:#e7e9ea;--dim:#9aa1a8;--dim2:#6b737a;
+  --red:#d9757b;--red2:#ec8f95;--gold:#c7ccd1;--grn:#d3d7da;--blu:#c7ccd1;
   --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
 }
 *{box-sizing:border-box}
@@ -134,12 +133,12 @@ table.data th{position:sticky;top:0;z-index:2;background:var(--pnl);text-align:l
 table.data td{padding:7px 13px;border-bottom:1px solid var(--line2);font-size:13px;vertical-align:top}
 table.data tbody tr{cursor:pointer}
 table.data tbody tr:hover{background:#172130}
-tr[data-u="na"]{opacity:.5}
-tr[data-u="yes"]{background:#12201a}tr[data-u="yes"]:hover{background:#16281f}
+tr[data-u="na"]{opacity:.55}
+tr[data-u="yes"]{background:rgba(217,117,123,.09)}tr[data-u="yes"]:hover{background:rgba(217,117,123,.15)}
 td.code{font-family:var(--mono);color:var(--red2);white-space:nowrap}
-td.name{font-family:var(--mono);color:var(--grn);word-break:break-all;max-width:360px}
+td.name{font-family:var(--mono);color:var(--tx);word-break:break-all;max-width:360px}
 td.cn,td.fac,td.uc{white-space:nowrap}
-td.fac{color:var(--blu)}td.uc{color:var(--gold)}td.tl{color:#7fb3d5;font-size:12px;white-space:nowrap}
+td.fac{color:var(--dim)}td.uc{color:var(--dim2)}td.tl{color:var(--dim);font-size:12px;white-space:nowrap}
 td.note{color:var(--dim);font-size:12px;white-space:nowrap}
 
 /* 披露区 */
@@ -186,7 +185,7 @@ footer b{color:var(--dim)}
     <a href="#query">查询器</a><a href="#algo">算法</a><a href="#usable">可用性判据</a>
     <a href="#pipeline">提取流程</a><a href="#data">数据与工具</a>
   </nav>
-  <a class="back" href="../../site/index.html">← 项目首页</a>
+  <a class="back" href="index.html">← 返回官网</a>
 </div></div>
 
 <div class="wrap">
@@ -525,10 +524,10 @@ def main():
            .replace('__SUM__', str(s['n_sum']))
            .replace('__PLAY__', str(s['n_play']))
            .replace('__CN__', str(s['n_cn'])))
-    with io.open(os.path.join(OUTDIR, 'index.html'), 'w', encoding='utf-8') as f:
+    with io.open(os.path.join(OUTDIR, 'units.html'), 'w', encoding='utf-8') as f:
         f.write(doc)
 
-    print('wrote site/index.html + site/data.js')
+    print('wrote site/units.html + site/data.js')
     print('  rows=%d final=%d marked=%d playable=%d cn_named=%d'
           % (s['n'], s['n_final'], s['n_sum'], s['n_play'], s['n_cn']))
 
