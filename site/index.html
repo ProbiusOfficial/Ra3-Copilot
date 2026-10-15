@@ -79,6 +79,9 @@ code{font-family:var(--mono);color:var(--red2)}
 .hero-art{position:relative;align-self:end;display:flex;justify-content:center;align-items:flex-end}
 .hero-art img{width:100%;max-width:560px;display:block;
   filter:drop-shadow(0 30px 60px rgba(0,0,0,.65))}
+/* 非透明底图（暂无 alpha）→ 用径向遮罩把方框边缘融进暗色背景 */
+.softmask{-webkit-mask-image:radial-gradient(112% 98% at 50% 42%,#000 50%,transparent 90%);
+          mask-image:radial-gradient(112% 98% at 50% 42%,#000 50%,transparent 90%)}
 .hero-art .frame{position:absolute;inset:12% 6% 6% 6%;border:1px solid var(--line);pointer-events:none;
   clip-path:polygon(0 0,34% 0,34% 1px,100% 1px,100% 100%,0 100%)}
 .hero-art .frame::before,.hero-art .frame::after{content:"";position:absolute;width:26px;height:26px;
@@ -211,7 +214,8 @@ footer b{color:var(--dim)}
     <div class="hero-art">
       <div class="frame"></div>
       <div class="ph">
-        <img src="assets/character_full.png" alt="RA3-COPILOT 副官" onerror="this.parentNode.classList.add('isph')">
+        <img src="assets/character_full.png" alt="RA3-COPILOT 副官"
+             onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_final.png';this.classList.add('softmask');}else{this.style.display='none';this.parentNode.classList.add('isph');}">
         <span class="phlabel">assets/character_full.png</span>
       </div>
     </div>
@@ -278,12 +282,12 @@ footer b{color:var(--dim)}
   <div class="sec-h"><span class="no">/ 03</span><h2>副官档案</h2><span class="line"></span></div>
   <p class="sec-sub">RA3-COPILOT 的视觉形象：一名在指挥所待命的技术副官。</p>
   <div class="artwall">
-    <div class="cell"><img src="assets/character_full.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_full.png</span>'}))">
-      <div class="cap"><b>主立绘</b>全身 · 指挥所待命</div></div>
-    <div class="cell"><img src="assets/character_alt_1.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_1.png</span>'}))">
-      <div class="cap"><b>差分 · 作战中</b>半身 · HUD 侧光</div></div>
-    <div class="cell"><img src="assets/character_alt_2.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_2.png</span>'}))">
-      <div class="cap"><b>差分 · 联络</b>半身 · 通讯</div></div>
+    <div class="cell"><img src="assets/character_full.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_final.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_full.png</span>'}))}">
+      <div class="cap"><b>基准立绘</b>白发猫耳 · 指挥所待命</div></div>
+    <div class="cell"><img src="assets/character_alt_1.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_arknights.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_1.png</span>'}))}">
+      <div class="cap"><b>差分 · 冷调</b>灰发蓝瞳 · 同制服</div></div>
+    <div class="cell"><img src="assets/character_alt_2.png" alt="" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='assets/ra3_copilot_adjutant_loli.png';this.classList.add('softmask');}else{this.replaceWith(Object.assign(document.createElement('div'),{className:'ph isph',innerHTML:'<span class=&quot;phlabel&quot;>assets/character_alt_2.png</span>'}))}">
+      <div class="cap"><b>差分 · 作战室</b>全息战术地图</div></div>
   </div>
 </section>
 
