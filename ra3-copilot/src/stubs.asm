@@ -285,6 +285,10 @@ OneKillCaveStub PROC
     mov   eax, dword ptr [eax+20h]            ; 归属玩家 ID
     cmp   eax, g_localPlayerId
     je    ok_exit                              ; 自己的不动
+    ; 注：此处把 HP 写 0 **不会**产生"幽灵单位"—— 本钩子挂在游戏"写血量"的流程内
+    ;   （原指令 movss [esi+4],xmm0），写完游戏会继续走自己的死亡判定与销毁。
+    ;   实测：靶子 hp→0 后约 12s 被引擎回收（对象地址失效）。
+    ;   ⚠️ 反之，在游戏流程**之外**直接写血量 0 才会留下幽灵（对象永不回收、模型仍在）。
     xor   eax, eax
     mov   dword ptr [esi+04h], eax
     mov   dword ptr [esi+0Ch], eax

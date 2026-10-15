@@ -222,13 +222,18 @@ uintptr_t SelNext(SelIter& it) {
     return 0;
 }
 
-// body = [obj+0x138]（护栏只校验"要用到的那一小段"，别要求整块 0x430 —— 会把合法对象误杀）
+// 归一化到 Thing —— 所有单位操作都从这里拿"body"。
+//   Drawable（原生单位）：[obj+0x138] 才是 Thing；
+//   Thing（CreateUnit 返回的召唤物）：自身即 Thing，其 +0x138 是浮点值，
+//   判据改用 Thing 专有的血量体指针 [+0x33C]。
+//   只走前者时对召唤物恒定返回 0 → 定住/血量/收编/摧毁等全部静默跳过。
 uintptr_t BodyOf(uintptr_t obj) {
     if (!LooksLikeGameObject(obj)) return 0;
     uint32_t b = 0;
-    if (!SafeRead32(obj + OFF_BODY, b)) return 0;
-    if (!IsMemOk(b, 0x44, false)) return 0;     // 够读 +0x38/+0x3c/+0x40 即可
-    return b;
+    if (SafeRead32(obj + OFF_BODY, b) && IsMemOk(b, 0x44, false)) return b;   // 够读 +0x38/+0x3c/+0x40 即可
+    uint32_t hp = 0;
+    if (SafeRead32(obj + OFF_HPBODY, hp) && hp && IsMemOk(hp, 0x14, false)) return obj;
+    return 0;
 }
 
 // 速度档位（引擎读取 +8 处的速度因子）
@@ -575,7 +580,9 @@ int ActHealth(int mode) {
         else if (mode == 1) { SafeWriteFloat(hp + 4, 1.0f); }
         else if (mode == 2) {
             float bk = 0;
-            if (SafeReadFloat(hp + 0x10, bk) && PlausibleFloat(bk, 0.f, 1.0e7f)) {
+            // ★ 下限为 1（不允许 0）：写出 HP=0 会留下"幽灵单位"——
+            //   对象不被回收、模型仍在（基地车还能开走），但失去全部单位属性。
+            if (SafeReadFloat(hp + 0x10, bk) && PlausibleFloat(bk, 1.f, 1.0e7f)) {
                 SafeWriteFloat(hp + 4, bk); SafeWriteFloat(hp + 0xC, bk);
             } else { ++g_guardSkip; continue; }
         }
@@ -680,15 +687,13 @@ int ActRank() {
     int n = 0;
     uintptr_t obj;
     while ((obj = SelNext(it)) != 0) {
-        // 基于 CE 的 SelectUnitLevelUp：目标 = [[obj+0x138] + 0x3CC]
-        //   （先取 body=[obj+0x138]，再读 body+0x3CC；之前漏了 body 这一层）
-        uint32_t body32 = 0, tgt32 = 0;
+        // 基于 CE 的 SelectUnitLevelUp：目标 = [body + 0x3CC]
+        //   body 经 BodyOf 归一化（Drawable → [obj+0x138]；召唤物自身即 Thing）
+        uint32_t tgt32 = 0;
         uintptr_t tgt = 0;
-        if (SafeRead32(obj + OFF_BODY, body32) && IsMemOk(body32, 0x3D0, false) &&
-            SafeRead32(body32 + 0x3CC, tgt32) && tgt32 && LooksLikeGameObject(tgt32))
+        uintptr_t body = BodyOf(obj);
+        if (body && SafeRead32(body + 0x3CC, tgt32) && tgt32 && LooksLikeGameObject(tgt32))
             tgt = tgt32;
-        else if (LooksLikeGameObject(obj))
-            tgt = obj;
         if (!tgt) { ++g_guardSkip; continue; }   // 护栏：目标必须像游戏对象
         __try {
             CrashMark("LevelUp", tgt, obj, 0);
@@ -819,6 +824,10 @@ const char* PostProcLastError() { return g_postErr; }
 bool GetSummonStealth() { return g_summonStealth; }
 void SetSummonStealth(bool on) { g_summonStealth = on; }
 
+// 最近一次召唤创建的对象（Thing）—— 供"召唤后立刻对它操作"用
+static uintptr_t g_lastCreated[20] = { 0 };
+static int g_lastCreatedN = 0;
+
 // 指定召唤落点（跨线程：HTTP 线程写、渲染线程读；"用一次即清"）
 static float g_summonOv[3] = { 0, 0, 0 };
 static volatile LONG g_summonOvSet = 0;
@@ -830,6 +839,13 @@ void SetSummonPosOverride(bool on, float x, float y, float z) {
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name) {
     (void)owner;
     return SummonByHashFor(hash, count, 0, atMouse, name);
+}
+
+int LastCreatedObjs(uintptr_t* out, int max) {
+    if (!out || max <= 0) return 0;
+    const int n = (g_lastCreatedN < max) ? g_lastCreatedN : max;
+    for (int i = 0; i < n; ++i) out[i] = g_lastCreated[i];
+    return n;
 }
 
 // teamOverride != 0 → 用指定"队伍对象"当归属（可给敌方/任意玩家召唤）；0 → 本地玩家
@@ -932,6 +948,8 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
         }
     }
     if (made <= 0) { SetErr("CreateUnit 返回空对象"); return false; }
+    g_lastCreatedN = (made < 20) ? made : 20;
+    for (int i = 0; i < g_lastCreatedN; ++i) g_lastCreated[i] = created[i];
     Ding();
     // 2026-10-15 修复：「召唤/复制出来的单位技能灰、护盾/能力不回」
     //   根因：正常建造路径会在创建后把对象（Thing）的这 6 个状态字初始化成"可用态"；
@@ -1241,7 +1259,7 @@ int SelectedDiagText(char* buf, int n) {
         SafeRead32(obj, vt);                       // vtable
         SafeRead32(obj + 4, tmpl);                 // +0x04 = 对象模板指针
         if (tmpl) SafeRead32(tmpl + 8, hash);      // 模板 +0x08 = 类型哈希
-        SafeRead32(obj + OFF_BODY, body);          // +0x138 = body
+        body = static_cast<uint32_t>(BodyOf(obj)); // 归一化到 Thing（原生走 +0x138，召唤物自身）
 
         const bool vtOk = (vt >= base && vt < base + 0x940000);
         DiagAdd(buf, static_cast<size_t>(n), w,
@@ -1256,7 +1274,7 @@ int SelectedDiagText(char* buf, int n) {
         const bool bodyOk = body && IsMemOk(body, 0x44, false);
         DiagAdd(buf, static_cast<size_t>(n), w, "\n     body %08X   %s",
                 (unsigned)body,
-                bodyOk ? "OK" : "✗ 不是合法指针 → 未入世（对它操作会失败）");
+                bodyOk ? "OK" : "✗ 取不到 body（既非 Drawable 也非 Thing）");
 
         if (bodyOk) {
             uint32_t hp = 0, own = 0;
@@ -1306,9 +1324,8 @@ int SelectedHashHistogram(uint32_t* outHash, int* outCount, int maxKinds) {
     int n = 0;
     uintptr_t obj;
     while ((obj = SelNext(it)) != 0 && n < maxKinds) {
-        uint32_t thing = 0, tmpl = 0, hash = 0;
-        // 选中链表里是 Drawable，[d+0x138] 才是 Thing；取不到就认为 obj 本身是 Thing
-        if (!SafeRead32(obj + OFF_BODY, thing) || !thing) thing = static_cast<uint32_t>(obj);
+        uint32_t thing = static_cast<uint32_t>(BodyOf(obj)), tmpl = 0, hash = 0;
+        if (!thing) continue;
         if (!SafeRead32(static_cast<uintptr_t>(thing) + 4, tmpl) || !tmpl) continue;
         if (!SafeRead32(static_cast<uintptr_t>(tmpl) + 8, hash) || !hash) continue;
         int i = 0;

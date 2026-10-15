@@ -221,7 +221,14 @@ void ExecCmd(CmdSlot& c) {
     case 12: {   // 召唤：a1=hash a2=count a3=teamOverride(0=本地玩家)
         const bool ok = SummonByHashFor((uint32_t)c.a1, c.a2 > 0 ? c.a2 : 1,
                                         (uintptr_t)(uint32_t)c.a3, true, "api");
-        CmdReply("summon=%d %s", ok ? 1 : 0, SummonLastError());
+        uintptr_t objs[20];
+        const int nobj = LastCreatedObjs(objs, 20);
+        char list[192] = { 0 };
+        int w = 0;
+        for (int i = 0; i < nobj && w < (int)sizeof(list) - 12; ++i)
+            w += _snprintf_s(list + w, sizeof(list) - w, _TRUNCATE,
+                             "%s%08X", i ? "," : "", (unsigned)objs[i]);
+        CmdReply("summon=%d objs=[%s] %s", ok ? 1 : 0, list, SummonLastError());
         break;
     }
     case 13: {   // 空投 idx count

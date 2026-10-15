@@ -23,6 +23,8 @@ int ActRank();             // 满级（调游戏 +0x35C200 单位升级）
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name);
 // 带归属覆盖：teamOverride != 0 时用它当归属（可给敌方/任意玩家召唤），0 = 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name);
+// 最近一次召唤创建的对象（Thing 地址），返回个数（≤ max）—— 供"召唤后立刻对它操作"免去猜地址
+int LastCreatedObjs(uintptr_t* out, int max);
 // 指定召唤落点：下一次召唤生效一次后自动清除（跨线程安全；供 /summon?x=&y=&z= 用）
 void SetSummonPosOverride(bool on, float x, float y, float z);
 bool SummonMCV();          // 召唤三阵营基地车各一辆
