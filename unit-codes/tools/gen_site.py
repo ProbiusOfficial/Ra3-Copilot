@@ -182,7 +182,7 @@ footer b{color:var(--dim)}
 <body>
 
 <div class="top"><div class="wrap">
-  <span class="brand"><img src="assets/logo_ra3copilot.png" alt=""><i></i>单位代码</span>
+  <span class="brand"><img src="assets/emblem.png" alt=""><i></i>单位代码</span>
   <nav>
     <a href="#query">查询器</a><a href="#algo">算法</a><a href="#usable">可用性判据</a>
     <a href="#pipeline">提取流程</a><a href="#data">数据与工具</a>
