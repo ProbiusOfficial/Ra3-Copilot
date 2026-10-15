@@ -113,8 +113,10 @@ section > .seclayer::after{content:"";position:absolute;inset:0;
 .fcard::before{content:"";position:absolute;left:0;top:0;width:2px;height:0;background:var(--red);transition:.3s}
 .fcard:hover{background:var(--pnl2);transform:translateY(-3px)}
 .fcard:hover::before{height:100%}
-.fcard .ic{height:52px;display:flex;align-items:center;margin-bottom:14px}
-.fcard .ic img{height:46px;width:auto;display:block;filter:drop-shadow(0 6px 14px rgba(0,0,0,.55))}
+.fcard .ic{width:58px;height:58px;border-radius:10px;margin-bottom:16px;
+  background:rgba(0,0,0,.42);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center}
+.fcard .ic img{height:36px;width:auto;display:block;filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))}
 .fcard h3{margin:0 0 8px;font-size:15.5px;font-weight:700}
 .fcard p{margin:0;color:var(--dim);font-size:13.5px;line-height:1.7}
 
@@ -163,6 +165,45 @@ footer b{color:var(--dim)}
 </style>
 </head>
 <body>
+
+<!-- ================= 导航 ================= -->
+<div class="nav"><div class="wrap">
+  <a class="logo" href="#top"><img src="assets/emblem.png" alt=""><span>RA3-COPILOT</span></a>
+  <nav>
+    <a href="#about">简介</a><a href="#features">功能</a><a href="#arch">架构</a>
+    <a href="#usage">使用</a><a href="#mcp">脑机接口</a><a href="units.html">单位代码</a>
+  </nav>
+</div></div>
+
+<!-- ================= 主视觉 ================= -->
+<header class="hero" id="top">
+  <div class="bgart"></div>
+  <div class="veil"></div>
+  <div class="wrap">
+    <div class="hero-copy">
+      <span class="tag">◈ 红色警戒 3 · 日冕 MOD · 作战辅助系统</span>
+      <h1>RA3-<em>COPILOT</em></h1>
+      <div class="en">IN-GAME TACTICAL ASSISTANT</div>
+      <p>进程内接入游戏的<b>作战辅助系统</b>：以局内覆盖层呼出战术面板，接管资源、战斗、单位与召唤；
+         并把战局开放给 <b>AI 副官</b> —— 读态势、下指令、投部队。</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="#usage">▸ 快速上手</a>
+        <a class="btn" href="units.html">◈ 单位代码查询器</a>
+        <a class="btn" href="https://github.com/ProbiusOfficial/Ra3-Copilot">◇ GitHub</a>
+      </div>
+      <div class="herostats">
+        <div><b>20</b><span>挂载点</span></div>
+        <div><b>410</b><span>可召唤单位</span></div>
+        <div><b>5461</b><span>对象代码</span></div>
+        <div><b>MCP</b><span>脑机接口</span></div>
+      </div>
+    </div>
+    <div class="hero-art">
+      <img class="ch" src="assets/character_full.png" alt="RA3-COPILOT 副官"
+           onerror="this.classList.add('miss')">
+    </div>
+  </div>
+</header>
 
 <div class="wrap">
 
