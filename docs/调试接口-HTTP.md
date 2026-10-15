@@ -108,3 +108,31 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 
 - 端点已全部实现并**编译通过**，DLL 已同步到 `trainer-v2\ra3trainer.dll`（md5 `2eae16fb…`, 745984 B）。
 - 游戏未启动；**下次进对局注入后即可直接用**。
+
+---
+
+## 七、v25 增补（2026-10-16）
+
+### 1. 新增端点
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/snapshot[?fresh=1]` | 战场快照（我方/敌方部队统计） |
+| GET | `/objects?owner=&cls=&cat=&limit=` | 全图对象列表（按归属/类别过滤） |
+| GET | `/obj?addr=0x..` | 单个对象详情 |
+| GET | `/enemy` | 敌方对象 |
+| GET | `/units?q=..` | 单位检索 |
+| GET | `/ai/status` | AI 通道遥测计数 |
+| GET | `/scratch` | 临时草稿区 |
+| POST | `/order?unit=..&act=attack\|move\|idle` | 指挥单位（AI 控制层） |
+| POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 RVA 调 AI 类方法（RE 用） |
+| POST | `/postproc?on=0\|1` | 后处理开关 |
+| POST | `/ai/set?on=0\|1` | （保留）AI 通道标记 |
+
+### 2. 常驻监听，无闸门
+
+- 监听在**注入即常驻**（`overlay.cpp` 的 `HttpApiStart(17832)`），与任何开关无关。
+- 曾经的"脑机接口开关"只拦带 `&ai=1` 的请求，容易被误当成能力总开关 → **已彻底移除**。
+  现在变更类请求一律放行；`ai=1` 仅作遥测（`g_aiCalls` 计数 + 日志），`g_aiOpen` 恒 1、`g_aiRejects` 恒 0。
+- **安全边界靠"只绑 `127.0.0.1`"**，不靠开关。接入说明见 `docs/AI接入指南.md`。
+
