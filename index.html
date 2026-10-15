@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RA3-COPILOT · 红色警戒3 作战辅助系统</title>
+<meta name="description" content="面向红色警戒3（命令与征服）的进程内作战辅助系统：局内覆盖层 + 功能模块 + MCP 脑机接口。当前基线日冕 Mod，逐步适配更多版本。">
+<meta property="og:title" content="RA3-COPILOT · 作战辅助系统">
+<meta property="og:description" content="面向红色警戒3 的进程内作战辅助系统，愿景覆盖全部版本">
+<meta property="og:image" content="assets/og_cover.jpg">
+<link rel="icon" href="assets/favicon.png">
+<style>
+:root{
+  --bg:#0e1013;--pnl:rgba(255,255,255,.035);--pnl2:rgba(255,255,255,.065);
+  --line:rgba(255,255,255,.10);--line2:rgba(255,255,255,.06);
+  --tx:#e8eaec;--dim:#9aa1a8;--dim2:#666d74;
+  --red:#d9757b;--red2:#ef9a9f;--redglow:rgba(217,117,123,.35);
+  --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{margin:0;background:var(--bg);color:var(--tx);overflow-x:hidden;
+  font:15px/1.75 "Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  background-image:url('assets/bg_grid.png');background-size:512px 512px}
+a{color:inherit;text-decoration:none}
+code{font-family:var(--mono);color:var(--red2);overflow-wrap:anywhere}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px}
+
+/* 导航 */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;height:64px;
+  background:linear-gradient(180deg,rgba(10,12,15,.94),rgba(10,12,15,.45) 72%,transparent);
+  backdrop-filter:blur(6px)}
+.nav .wrap{display:flex;align-items:center;height:64px;gap:24px}
+.nav .logo{display:flex;align-items:center;gap:10px}
+.nav .logo img{height:28px;display:block}
+.nav .logo span{font-weight:800;letter-spacing:2.5px;font-size:14px;color:var(--tx)}
+.nav nav{display:flex;gap:22px;font-size:12.5px;letter-spacing:1.2px;margin-left:auto;text-transform:uppercase}
+.nav nav a{color:var(--dim);position:relative;padding:4px 0}
+.nav nav a:hover{color:var(--tx)}
+.nav nav a.on{color:var(--tx)}
+.nav nav a.on::after{right:0}
+.nav nav a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--red);transition:.25s}
+.nav nav a:hover::after{right:0}
+
+/* ---------- 主视觉 ---------- */
+.hero{position:relative;min-height:100svh;display:flex;align-items:center;overflow:hidden;isolation:isolate}
+.hero .bgart{position:absolute;inset:0;background:url('assets/hero_bg.jpg') center/cover no-repeat;
+  transform:scale(1.04)}
+.hero .veil{position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(10,12,15,.96) 0%,rgba(10,12,15,.82) 38%,rgba(10,12,15,.30) 66%,rgba(10,12,15,.55) 100%),
+             linear-gradient(180deg,rgba(10,12,15,.55),transparent 30%,rgba(14,16,19,.95))}
+.hero .wrap{position:relative;z-index:3;width:100%;display:grid;
+  grid-template-columns:.92fr 1.08fr;gap:20px;align-items:center;padding-top:74px}
+.hero-art{align-self:end}
+.hero-copy .tag{display:inline-flex;align-items:center;gap:9px;font-size:11.5px;letter-spacing:2px;
+  color:var(--red2);border:1px solid rgba(217,117,123,.35);padding:6px 14px;border-radius:2px;
+  background:rgba(217,117,123,.06)}
+.hero-copy h1{margin:22px 0 0;font-size:clamp(38px,6.4vw,84px);line-height:.98;font-weight:850;letter-spacing:-1.5px}
+.hero-copy h1 em{font-style:normal;color:var(--red);text-shadow:0 0 34px var(--redglow)}
+.hero-copy .en{margin-top:8px;font-family:var(--mono);font-size:12.5px;letter-spacing:6px;color:var(--dim2)}
+.hero-copy p{margin:20px 0 0;max-width:560px;color:var(--dim);font-size:15.5px}
+.hero-copy p b{color:var(--tx);font-weight:600}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 24px;font-size:13.5px;letter-spacing:1px;
+  border:1px solid var(--line);border-radius:2px;background:var(--pnl);transition:.2s}
+.btn:hover{background:var(--pnl2);border-color:rgba(255,255,255,.22)}
+.btn.primary{background:linear-gradient(100deg,#d9757b,#c1585f);border-color:transparent;color:#fff;
+  font-weight:650;box-shadow:0 12px 34px rgba(217,117,123,.24)}
+.btn.primary:hover{filter:brightness(1.08)}
+.herostats{display:flex;gap:28px;margin-top:36px;flex-wrap:wrap}
+.herostats div{font-family:var(--mono)}
+.herostats b{display:block;font-size:20px}
+.herostats span{font-size:11.5px;color:var(--dim2);letter-spacing:1.4px}
+
+.hero-art{position:relative;display:flex;justify-content:flex-end;align-items:flex-end;min-height:80vh;
+  margin-right:-64px}
+.hero-art .ch{position:relative;z-index:2;height:min(96svh,920px);width:auto;display:block;
+  filter:drop-shadow(0 40px 70px rgba(0,0,0,.7)) drop-shadow(0 0 26px rgba(217,117,123,.12))}
+.miss{display:none !important}
+
+/* ---------- 通用分区 ---------- */
+section{position:relative;padding:76px 0;border-top:1px solid var(--line2);z-index:1}
+section > .seclayer{position:absolute;inset:0;z-index:-1;background-size:cover;background-position:center;
+  opacity:.5;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent),
+                     linear-gradient(180deg,transparent,#000 10%,#000 90%,transparent);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent),
+             linear-gradient(180deg,transparent,#000 10%,#000 90%,transparent);
+  mask-composite:intersect}
+section > .seclayer::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(14,16,19,.94),rgba(14,16,19,.72) 45%,rgba(14,16,19,.96))}
+.sec-h{display:flex;align-items:baseline;gap:16px;margin-bottom:10px}
+.sec-h .no{font-family:var(--mono);font-size:12px;color:var(--red);letter-spacing:2px}
+.sec-h h2{font-size:clamp(24px,3vw,34px);margin:0;font-weight:800;letter-spacing:-.5px}
+.sec-h .line{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+.sec-sub{color:var(--dim);max-width:780px;font-size:14.8px;margin:0 0 30px}
+.divider{height:54px;margin:0 auto;max-width:1240px;background:url('assets/divider.png') center/contain no-repeat;
+  opacity:.6}
+
+/* 简介 */
+.about{display:grid;grid-template-columns:1.25fr .75fr;gap:30px;align-items:start}
+.about p{color:var(--dim);margin:0 0 14px;font-size:15px}
+.about p b{color:var(--tx)}
+.kvbox{position:relative;border:1px solid var(--line);background:var(--pnl);border-radius:4px;padding:22px 24px}
+.kvbox::before,.kvbox::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--red);opacity:.75}
+.kvbox::before{left:-1px;top:-1px;border-right:none;border-bottom:none}
+.kvbox::after{right:-1px;bottom:-1px;border-left:none;border-top:none}
+.kvbox h4{margin:0 0 12px;font-size:12px;letter-spacing:2px;color:var(--dim2);font-family:var(--mono)}
+.kvbox dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13px}
+.kvbox dt{color:var(--dim2)}
+.kvbox dd{margin:0;font-family:var(--mono);color:var(--tx)}
+
+/* 功能卡 */
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr)}.about{grid-template-columns:1fr}
+  .hero .wrap{grid-template-columns:1fr}
+  .hero-art{order:-1;min-height:auto;margin-right:0;min-width:0;justify-content:center}
+  .hero-art .ch{height:auto;max-height:44svh;max-width:100%;object-fit:contain}}
+@media(max-width:880px){.nav nav{gap:14px;font-size:11.5px;overflow-x:auto;min-width:0;
+  scrollbar-width:none;-ms-overflow-style:none}.nav nav::-webkit-scrollbar{display:none}
+  .nav .logo span{display:none}}
+@media(max-width:640px){.grid4,.grid2{grid-template-columns:1fr}}
+.fcard{position:relative;border:1px solid var(--line);background:var(--pnl);border-radius:4px;
+  padding:24px 20px;transition:.22s;overflow:hidden}
+.fcard::before{content:"";position:absolute;left:0;top:0;width:2px;height:0;background:var(--red);transition:.3s}
+.fcard:hover{background:var(--pnl2);transform:translateY(-3px)}
+.fcard:hover::before{height:100%}
+.fcard .ic{width:58px;height:58px;border-radius:10px;margin-bottom:16px;
+  background:rgba(0,0,0,.42);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center}
+.fcard .ic img{height:36px;width:auto;display:block;filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))}
+.fcard h3{margin:0 0 8px;font-size:15.5px;font-weight:700}
+.fcard p{margin:0;color:var(--dim);font-size:13.5px;line-height:1.7}
+
+/* 架构 */
+.arch{position:relative;border:1px solid var(--line);border-radius:4px;background:#0b0d10cc;padding:24px 26px;overflow:auto;
+  text-align:center;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.arch::-webkit-scrollbar{width:8px;height:8px}
+.arch::-webkit-scrollbar-track{background:transparent}
+.arch::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:4px}
+.arch::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.30)}
+.arch::-webkit-scrollbar-corner{background:transparent}
+.arch::before,.arch::after{content:"";position:absolute;width:18px;height:18px;border:2px solid var(--red);opacity:.7}
+.arch::before{left:0;top:0;border-right:none;border-bottom:none}
+.arch::after{right:0;bottom:0;border-left:none;border-top:none}
+.arch pre{margin:0;display:inline-block;text-align:left;font-family:var(--mono);font-size:12.6px;line-height:1.75;color:#c9ced3}
+.arch pre b{color:var(--red2);font-weight:600}
+.arch pre i{color:var(--tx);font-style:normal}
+
+/* 步骤 */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.steps{grid-template-columns:1fr}}
+.step{position:relative;border:1px solid var(--line);border-radius:4px;padding:22px 20px;background:var(--pnl);
+  transition:.22s;overflow:hidden}
+.step::before{content:"";position:absolute;left:0;top:0;width:2px;height:0;background:var(--red);transition:.3s}
+.step:hover{background:var(--pnl2);transform:translateY(-2px)}
+.step:hover::before{height:100%}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--red);letter-spacing:2px}
+.step h3{margin:8px 0;font-size:16px}
+.step p{margin:0;color:var(--dim);font-size:13.5px}
+
+table{width:100%;border-collapse:collapse;font-size:13.8px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line2)}
+th{color:var(--dim);font-weight:600;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase}
+
+/* 面板化表格（脑机接口工具表） */
+.tblpanel{border:1px solid var(--line);background:var(--pnl);border-radius:4px;overflow-x:auto;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.tblpanel::-webkit-scrollbar{width:8px;height:8px}
+.tblpanel::-webkit-scrollbar-track{background:transparent}
+.tblpanel::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:4px}
+.tblpanel table{width:100%;border-collapse:collapse}
+.tblpanel tbody tr{transition:.15s}
+.tblpanel tbody tr:hover{background:var(--pnl2)}
+.tblpanel tr:last-child td{border-bottom:none}
+.tblpanel td:first-child code{font-size:12.8px}
+/* 网格子项允许收缩（否则长内容撑破整页宽度） */
+.grid2 > *,.grid4 > *,.about > *,.steps > *{min-width:0}
+
+/* 滚动进场 */
+html.js .reveal{opacity:0;transform:translateY(14px);
+  transition:opacity .65s cubic-bezier(.2,.7,.3,1),transform .65s cubic-bezier(.2,.7,.3,1)}
+html.js .reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){html.js .reveal{opacity:1;transform:none;transition:none}}
+
+/* 单位代码推广条 */
+.promo{position:relative;border:1px solid var(--line);border-radius:4px;overflow:hidden;
+  display:grid;grid-template-columns:1.1fr .9fr;gap:0;align-items:center;min-height:260px}
+.promo .pbg{position:absolute;inset:0;background:url('assets/units_banner.jpg') center/cover no-repeat;
+  opacity:.4;filter:blur(1.5px) saturate(.85);transform:scale(1.03)}
+.promo .pveil{position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(12,14,17,.95),rgba(12,14,17,.55) 60%,rgba(12,14,17,.25))}
+.promo .pc{position:relative;z-index:2;padding:34px 36px}
+.promo .art{position:relative;z-index:2;align-self:end;display:flex;justify-content:flex-end}
+.promo .art img{height:250px;width:auto;display:block;filter:drop-shadow(0 16px 34px rgba(0,0,0,.6))}
+.promo h3{margin:0 0 10px;font-size:24px}
+.promo p{margin:0 0 18px;color:var(--dim);max-width:560px;font-size:14px}
+@media(max-width:860px){.promo{grid-template-columns:1fr}.promo .art{display:none}}
+
+footer{position:relative;padding:50px 0 58px;border-top:1px solid var(--line2);z-index:1}
+footer .fl{position:absolute;inset:0;z-index:-1;background:url('assets/bg_footer.jpg') center/cover no-repeat;opacity:.45}
+footer .fl::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(14,16,19,.9),rgba(14,16,19,.98))}
+footer .fgrid{display:grid;grid-template-columns:1.5fr .9fr 1fr;gap:28px;position:relative;z-index:1}
+.fbrand .lg{height:26px;margin-bottom:14px;opacity:.85;display:block}
+.fbrand p{margin:0 0 6px;color:var(--dim2);font-size:12.7px;line-height:1.95;max-width:520px}
+.fbrand p b{color:var(--dim)}
+footer h5{margin:0 0 12px;font-size:11.5px;letter-spacing:2px;color:var(--dim2);font-family:var(--mono);font-weight:600}
+footer .flinks{display:flex;flex-direction:column;gap:9px;font-size:13px}
+footer .flinks a{color:var(--dim);transition:.18s}
+footer .flinks a:hover{color:var(--red2)}
+footer .flinks span{color:var(--dim2);font-family:var(--mono);font-size:12.3px}
+footer .fbase{margin-top:34px;padding-top:16px;border-top:1px solid var(--line2);
+  display:flex;gap:14px;flex-wrap:wrap;align-items:center;color:var(--dim2);font-size:12px}
+footer .fbase b{color:var(--dim);font-weight:600}
+@media(max-width:860px){footer .fgrid{grid-template-columns:1fr;gap:22px}}
+
+/* 顶部阅读进度 */
+.progress{position:fixed;top:0;left:0;height:2px;width:100%;z-index:60;pointer-events:none;
+  transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,var(--red),var(--red2));
+  box-shadow:0 0 10px var(--redglow)}
+</style>
+</head>
+<body>
+
+<div class="progress" id="pg"></div>
+
+<!-- ================= 导航 ================= -->
+<div class="nav"><div class="wrap">
+  <a class="logo" href="#top"><img src="assets/emblem.png" alt=""><span>RA3-COPILOT</span></a>
+  <nav>
+    <a href="#about">简介</a><a href="#features">功能</a><a href="#arch">架构</a>
+    <a href="#usage">使用</a><a href="#mcp">脑机接口</a><a href="units.html">单位代码</a>
+  </nav>
+</div></div>
+
+<!-- ================= 主视觉 ================= -->
+<header class="hero" id="top">
+  <div class="bgart"></div>
+  <div class="veil"></div>
+  <div class="wrap">
+    <div class="hero-copy">
+      <span class="tag">◈ 命令与征服：红色警戒 3 · 作战辅助系统</span>
+      <h1>RA3-<em>COPILOT</em></h1>
+      <div class="en">IN-GAME TACTICAL ASSISTANT</div>
+      <p>进程内接入游戏的<b>作战辅助系统</b>：以局内覆盖层呼出战术面板，接管资源、战斗、单位与召唤；
+         并把战局开放给 <b>AI 副官</b> —— 读态势、下指令、投部队。</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="#usage">▸ 快速上手</a>
+        <a class="btn" href="units.html">◈ 单位代码查询器</a>
+        <a class="btn" href="https://github.com/ProbiusOfficial/Ra3-Copilot">◇ GitHub</a>
+      </div>
+      <div class="herostats">
+        <div><b>20</b><span>挂载点</span></div>
+        <div><b>410</b><span>可召唤单位</span></div>
+        <div><b>5461</b><span>对象代码</span></div>
+        <div><b>MCP</b><span>脑机接口</span></div>
+      </div>
+    </div>
+    <div class="hero-art">
+      <img class="ch" src="assets/character_operator.png" alt="RA3-COPILOT 副官"
+           onerror="this.classList.add('miss')">
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ================= 简介 ================= -->
+<section id="about">
+  <div class="seclayer" style="background-image:url('assets/bg_about.jpg')"></div>
+  <div class="sec-h"><span class="no">/ 01</span><h2>作战辅助系统</h2><span class="line"></span></div>
+  <p class="sec-sub">不是外挂式的作弊器，而是一套「可观测、可干预、可被 AI 驱动」的战术面板。挂载点采用「特征码 + RVA」双通道定位，愿景是覆盖红色警戒3 的全部版本。</p>
+  <div class="about">
+    <div>
+      <p><b>Ra3-Copilot</b> 以注入方式在<b>游戏进程内</b>运行，直接用游戏自己的渲染设备绘制菜单 ——
+        不弹独立窗口、不抢焦点、切出游戏也不会静音。</p>
+      <p>它由三部分组成：<b>功能核</b>（表驱动的内存挂钩，负责资源 / 战斗 / 单位操作）、
+        <b>渲染层</b>（inline-hook 游戏渲染管线，把面板画在画面内）、
+        <b>副官接口</b>（进程内 HTTP + MCP，让 AI 读取战局并下达指令）。</p>
+      <p>所有写入类操作都经过安全护栏，且只在<b>你主动触发</b>时执行；注入前对每个挂载点做
+        <b>特征码字节级校验</b>，不匹配就拒绝挂载。</p>
+    </div>
+    <div class="kvbox">
+      <h4>TECH SPEC</h4>
+      <dl>
+        <dt>目标引擎</dt><dd>红色警戒3 (C&C)</dd>
+        <dt>基线版本</dt><dd>v1.12.3444.25830</dd>
+        <dt>当前适配</dt><dd>日冕 Mod 3.258</dd>
+        <dt>适配愿景</dt><dd>覆盖全部 RA3 版本</dd>
+        <dt>架构</dt><dd>x86 / PE32</dd>
+        <dt>渲染</dt><dd>d3d9 inline-hook</dd>
+        <dt>面板</dt><dd>ImGui（游戏内）</dd>
+        <dt>接口</dt><dd>127.0.0.1:17832</dd>
+        <dt>AI 接入</dt><dd>MCP stdio</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 功能 ================= -->
+<section id="features">
+  <div class="seclayer" style="background-image:url('assets/bg_features.jpg')"></div>
+  <div class="sec-h"><span class="no">/ 02</span><h2>战术模块</h2><span class="line"></span></div>
+  <p class="sec-sub">八大模块，覆盖从资源到战场的全部干预点。</p>
+  <div class="grid4">
+    <div class="fcard"><div class="ic"><img src="assets/icon_resource.png" alt=""></div>
+      <h3>资源</h3><p>资金实时读写、电力与科技点、全科技解锁。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_build.png" alt=""></div>
+      <h3>建造</h3><p>快速建造、免费建造、封锁敌方建造队列。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_combat.png" alt=""></div>
+      <h3>战斗</h3><p>己方无敌、弹药满、超武就绪 / 压制敌方超武。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_unit.png" alt=""></div>
+      <h3>单位</h3><p>选中单位变速 / 改血 / 收编 / 摧毁 / 满级。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_summon.png" alt=""></div>
+      <h3>召唤</h3><p>按代码投放单位与基地车，落点可控。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_crate.png" alt=""></div>
+      <h3>空投</h3><p>现金 / 治疗 / 晋升箱，支持周期自动空投。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_mcp.png" alt=""></div>
+      <h3>脑机接口</h3><p>把战局开放给 AI：读态势、下指令、投部队。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/icon_http.png" alt=""></div>
+      <h3>调试接口</h3><p>进程内 HTTP，只读端点可高频查询。</p></div>
+  </div>
+</section>
+
+<!-- ================= 架构 ================= -->
+<section id="arch">
+  <div class="sec-h"><span class="no">/ 03</span><h2>系统架构</h2><span class="line"></span></div>
+  <p class="sec-sub">功能核（内存挂钩）+ 渲染层（inline-hook）+ 副官接口，三层协作。</p>
+  <div class="arch"><pre>injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► <i>ra3trainer.dll</i> (in-game)
+                                                            │
+                     ┌──────────────────────────────────────┼────────────────────────┐
+                     ▼                                      ▼                        ▼
+            <b>features</b> 功能核                          <b>overlay</b> 渲染层             <b>httpapi / mcp</b> 副官接口
+            表驱动挂钩（名/RVA/AOB/壳）               读 d3d9 vtable[16/17/42]        进程内 HTTP 127.0.0.1:17832
+            push-ret 与 E9 detour                    → MinHook inline-hook           MCP stdio 服务器
+            壳（MASM）→ 改内存 / 记录对象              → Present 内渲染 ImGui          → AI 读战局 / 投放部队</pre></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 使用 ================= -->
+<section id="usage">
+  <div class="sec-h"><span class="no">/ 04</span><h2>快速上手</h2><span class="line"></span></div>
+  <p class="sec-sub">需要先进入对局；注入器与游戏同为 32 位。</p>
+  <div class="steps">
+    <div class="step"><div class="n">STEP 01</div><h3>启动游戏</h3><p>通过启动器进入对局（遭遇战 / 战役均可）。</p></div>
+    <div class="step"><div class="n">STEP 02</div><h3>注入</h3><p>运行 <code>trainer-v2\deploy.bat</code>，自动提权并注入，随后打印诊断。</p></div>
+    <div class="step"><div class="n">STEP 03</div><h3>呼出面板</h3><p>游戏内按 <code>INSERT</code> 显示菜单，<code>F7</code> 加钱。</p></div>
+  </div>
+</section>
+
+<!-- ================= 脑机接口 ================= -->
+<section id="mcp">
+  <div class="seclayer" style="background-image:url('assets/bg_mcp.jpg')"></div>
+  <div class="sec-h"><span class="no">/ 05</span><h2>脑机接口</h2><span class="line"></span></div>
+  <p class="sec-sub">把进程内能力包装成标准 MCP 工具，让 AI 客户端成为你的副官。</p>
+  <div class="grid2">
+    <div>
+      <div class="tblpanel">
+      <table>
+        <tr><th>工具</th><th>作用</th></tr>
+        <tr><td><code>get_battle_state</code></td><td>我方 / 敌方兵力、资金、选中单位</td></tr>
+        <tr><td><code>search_units</code></td><td>单位检索（中文名 / 模板名 / 哈希）</td></tr>
+        <tr><td><code>summon_unit</code></td><td>投放单位</td></tr>
+        <tr><td><code>drop_crate</code></td><td>空投补给箱</td></tr>
+        <tr><td><code>selected_action</code></td><td>复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级</td></tr>
+        <tr><td><code>toggle_feature</code></td><td>资源 / 战斗 / 地图类开关</td></tr>
+      </table>
+      </div>
+    </div>
+    <div>
+      <div class="arch"><pre>{
+  "mcpServers": {
+    "ra3-copilot": {
+      "command": "python",
+      "args": ["&lt;仓库&gt;/trainer-v2/mcp/ra3_mcp.py"]
+    }
+  }
+}</pre></div>
+      <p style="color:var(--dim);font-size:13.5px;margin-top:14px">
+        默认总闸关闭时 AI 只能观战；在游戏内面板开启后，AI 才被允许下达变更指令。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 单位代码 ================= -->
+<section id="units">
+  <div class="sec-h"><span class="no">/ 06</span><h2>单位代码</h2><span class="line"></span></div>
+  <div class="promo">
+    <div class="pbg"></div><div class="pveil"></div>
+    <div class="pc">
+      <h3>全量对象代码 · 可离线复算</h3>
+      <p>创建单位用的是 32 位对象类型哈希：<code>StringHasher.Hash(模板名.lower())</code>。
+         我们把日冕全量 <b>5461</b> 条代码整理成可检索的清单，其中「可召唤且能用」<b>410</b> 条。</p>
+      <a class="btn primary" href="units.html">▸ 打开查询器</a>
+    </div>
+    <div class="art"><img src="assets/character_bust.png" alt=""
+      onerror="this.style.display='none'"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="fl"></div>
+  <div class="wrap">
+    <div class="fgrid">
+      <div class="fbrand">
+        <img class="lg" src="assets/emblem.png" alt="">
+        <p><b>RA3-COPILOT</b> · 红色警戒3 作战辅助系统。</p>
+        <p>仅供单机学习与研究使用，禁止用于联机对战或破坏他人游戏体验。</p>
+      </div>
+      <div>
+        <h5>NAVIGATION</h5>
+        <div class="flinks">
+          <a href="#about">简介</a><a href="#features">战术模块</a><a href="#arch">系统架构</a>
+          <a href="#usage">快速上手</a><a href="#mcp">脑机接口</a><a href="units.html">单位代码</a>
+        </div>
+      </div>
+      <div>
+        <h5>DATA &amp; SOURCE</h5>
+        <div class="flinks">
+          <a href="https://github.com/ProbiusOfficial/Ra3-Copilot">GitHub 仓库</a>
+          <span>基线 v1.12.3444.25830 · 日冕</span>
+          <span>接口 127.0.0.1:17832</span>
+          <a href="#top">返回顶部 ↑</a>
+        </div>
+      </div>
+    </div>
+    <div class="fbase">
+      <b>愿景适配红色警戒3 全版本</b>
+      <span>·</span><span>本仓库不含游戏素材与第三方数据</span>
+      <span style="margin-left:auto">工程与研究用途 · 请遵守游戏用户协议</span>
+    </div>
+  </div>
+</footer>
+
+</div>
+
+<script>
+/* 滚动进场（尊重系统"减少动态效果"设置；无 JS 时内容照常显示） */
+(function(){
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+  document.documentElement.classList.add('js');
+  var els = document.querySelectorAll('.sec-h,.sec-sub,.about > div,.fcard,.step,.arch,.promo');
+  var arr = [].slice.call(els);
+  arr.forEach(function(el){
+    el.classList.add('reveal');
+    var sibs = el.parentElement ? [].indexOf.call(el.parentElement.children, el) : 0;
+    el.style.transitionDelay = Math.min(Math.max(sibs, 0) * 70, 420) + 'ms';
+  });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, {rootMargin:'0px 0px -6% 0px', threshold:.06});
+  arr.forEach(function(el){ io.observe(el); });
+})();
+
+/* 顶部阅读进度 + 导航滚动高亮 */
+(function(){
+  var pg = document.getElementById('pg');
+  var links = [].slice.call(document.querySelectorAll('.nav nav a[href^="#"]'));
+  var secs = [].slice.call(document.querySelectorAll('section[id], header[id]'));
+  function onScroll(){
+    var de = document.documentElement;
+    var max = de.scrollHeight - de.clientHeight;
+    var r = max > 0 ? de.scrollTop / max : 0;
+    pg.style.transform = 'scaleX(' + Math.min(Math.max(r, 0), 1).toFixed(4) + ')';
+    var cur = '';
+    for (var i = 0; i < secs.length; i++){
+      if (secs[i].getBoundingClientRect().top <= 120) cur = '#' + secs[i].id;
+    }
+    links.forEach(function(a){ a.classList.toggle('on', a.getAttribute('href') === cur); });
+  }
+  var raf = 0;
+  window.addEventListener('scroll', function(){
+    if (raf) return;
+    raf = requestAnimationFrame(function(){ raf = 0; onScroll(); });
+  }, {passive:true});
+  window.addEventListener('resize', onScroll);
+  onScroll();
+})();
+
+/* 图片懒加载 */
+[].slice.call(document.querySelectorAll('img')).forEach(function(im){
+  if (im.closest('.hero') || im.closest('.nav')) return;
+  im.loading = 'lazy';
+  im.decoding = 'async';
+});
+</script>
+</body>
+</html>
