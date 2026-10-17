@@ -54,10 +54,6 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ## 目录
 
 ```
-├── site/                  项目官网，已部署 GitHub Pages
-│   ├── index.html         首页
-│   ├── units.html         单位代码查询器（全量检索 + 离线复算）
-│   └── assets/            全套美术资源
 ├── ra3-copilot/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions
 │   │                      aicmd（AIUpdate 直调）/ battlefield（战场枚举）/ httpapi / symres（符号解析）
@@ -75,6 +71,9 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 └── docs/                  局内渲染 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口
                            MCP 脑机接口 / AIUpdate 直调指挥方案 / 美术资源清单
 ```
+
+官网源码不在这棵树上 —— 它单独占 `gh-pages` 分支（`index.html` / `units.html` / `assets/`），
+改动提交后由该分支直接发布。
 
 ## 单位代码
 
@@ -96,6 +95,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 
 ## 仓库边界
 
-本仓库收录 **Ra3-Copilot 官网（`site/`，已部署 GitHub Pages）、产品本体（`ra3-copilot/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**。
+`main` 分支收录 **产品本体（`ra3-copilot/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**；
+官网源码在 `gh-pages` 分支，站点地址见上。
 
 游戏原始数据抽取物与第三方图鉴数据（`unit-codes/data/source/`）不随仓库分发，可由 `unit-codes/tools/` 自行重新生成。
