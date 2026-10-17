@@ -24,7 +24,9 @@
 """
 import json
 import os
+import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -342,6 +344,66 @@ def t_drop_crate(a):
     return "空投 %s ×%d → %s" % (u["n"], count, r)
 
 
+# 效果别名 → 箱子模板名。只有「炸弹箱」系列走死亡开火；属性箱（铁幕/加速/护甲…）的
+# 效果在拾取时 applyModifier，不在死亡链上，所以不列在这里。
+_BURST_EFFECTS = {
+    "freeze": "ForzenCrate", "frozen": "ForzenCrate", "冰冻": "ForzenCrate", "冻结": "ForzenCrate",
+    "bomb": "BombCrate", "炸弹": "BombCrate",
+    "superbomb": "SuperBombCrate", "超级炸弹": "SuperBombCrate",
+    "basebomb": "BaseBombCrate", "基地炸弹": "BaseBombCrate",
+    "vacuum": "VacuumBombCrate", "真空弹": "VacuumBombCrate",
+    "particle": "ParticleCannonCrate", "粒子炮": "ParticleCannonCrate",
+    "radar": "RadarCloseBombCrate", "雷达干扰": "RadarCloseBombCrate",
+    "metal": "SuperMetaImpactCrate", "金属冲击": "SuperMetaImpactCrate",
+    "telekinetic": "TelekineticBombCrate", "念力": "TelekineticBombCrate",
+    "emotion": "EmotionDissidentBombCrate", "煽动叛变": "EmotionDissidentBombCrate",
+    "nano": "NanoPointDefenceCrate", "纳米防御": "NanoPointDefenceCrate",
+    "heal": "HealCrate", "治疗": "HealCrate",
+    "money": "MoneyCrate", "现金": "MoneyCrate",
+}
+
+
+def t_burst_crate(a):
+    """空投箱子 → 延迟 → 对该箱子调引擎击杀（(6,1,0) = 拾取链原生参数）→ 死亡开火触发效果。"""
+    kind = a.get("effect") or a.get("kind") or a.get("crate") or "freeze"
+    key = str(kind).strip()
+    target = _BURST_EFFECTS.get(key.lower(), key)
+    u = CAT.resolve(target, crates_only=True)
+    if not u:
+        return ("没有这个箱子/效果「%s」。可用 effect: %s；也可直接给箱子中文名、模板名或哈希。"
+                % (kind, "、".join(sorted(set(_BURST_EFFECTS.keys())))))
+    delay = float(a.get("delay", 0.0) if a.get("delay") is not None else 0.0)
+    delay = max(0.0, min(delay, 6.0))
+    pos = ""
+    if a.get("x") is not None and a.get("y") is not None:
+        z = 0 if a.get("z") is None else a.get("z")
+        pos = "&x=%s&y=%s&z=%s" % (a["x"], a["y"], z)
+    r = api_post("/summon?hash=%s&count=1%s%s" % (u["h"], _place_qs(a), pos))
+    m = re.search(r"objs=\[([0-9A-Fa-f]+)", r)
+    if not m:
+        return "空投失败：%s" % r.strip()[:200]
+    obj = m.group(1)
+    time.sleep(delay)                      # 默认 0；实测 0~0.5s 都能正常触发（见 research/crates/06）
+    ok, info = http("/obj?addr=0x%s" % obj)
+    j = {}
+    if ok:
+        try:
+            j = json.loads(info)
+        except Exception:
+            j = {}
+    if not ok or not j.get("hash"):
+        return "箱子在引爆前已消失（多半被附近单位拾取、效果已提前触发）：%s" % info.strip()[:140]
+    if str(j.get("hash", "")).lower() != u["h"].lower():
+        # 地址被引擎回收复用（实测：箱子消耗后同地址会分配给新对象）——此时绝不能开火
+        return "引爆取消：对象地址已被复用（现为「%s」），未开火。" % j.get("name", "?")
+    kr = api_post("/aicall?fn=0x79EA50&this=0x%s&a0=6&a1=1&a2=0&na=3" % obj)
+    time.sleep(0.6)
+    ok2, info2 = http("/obj?addr=0x%s" % obj)
+    gone = (not ok2) or ('"hash"' not in (info2 or ""))
+    return ("已在落点释放「%s」：箱子 0x%s %s；引爆调用 %s"
+            % (u["n"], obj, "已消耗" if gone else "仍存在（销毁可能有延迟）", kr.strip()[:110]))
+
+
 _SPAWN_KINDS = {"view": "/view", "vision": "/view", "视野": "/view", "视野中心": "/view",
                 "selection": "/selected_pos", "selected": "/selected_pos",
                 "选中": "/selected_pos", "选中单位": "/selected_pos",
@@ -554,6 +616,28 @@ TOOLS = [
         },
     },
     {
+        "name": "burst_crate",
+        "description": "在目标位置空投一个箱子并立即引爆——用箱子的『死亡开火』在落点释放效果"
+                       "（冰冻箱=冻结附近单位、炸弹箱=爆炸、超级炸弹/真空弹/粒子炮/雷达干扰等）。"
+                       "适合『在指定坐标释放某个效果』，不用等单位去拾取。"
+                       "effect 支持 freeze/bomb/superbomb/vacuum/particle/radar/telekinetic/emotion/heal/money 等别名，"
+                       "也可给箱子中文名、模板名或哈希。"
+                       "★ 效果对敌我无差别（实测会冻到自己人），优先丢在敌方头上。"
+                       "★ 属性箱（铁幕/加速/护甲等）的效果走拾取链、不在死亡链上，本工具不适用。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "effect": {"type": "string", "description": "效果别名或箱子名（默认 freeze）"},
+                "x": {"type": "number", "description": "落点世界坐标 X（与 y 一起给才生效）"},
+                "y": {"type": "number", "description": "落点世界坐标 Y"},
+                "z": {"type": "number", "description": "落点世界坐标 Z（可省）"},
+                "place": {"type": "string", "enum": ["view", "selection", "cursor"],
+                          "description": "不给 x/y 时的落点来源（缺省=修改器设置）"},
+                "delay": {"type": "number", "description": "空投到引爆的等待秒数（默认 0 = 落地即爆；实测 0/0.1/0.25/0.5 均正常，一般不用改）"},
+            },
+        },
+    },
+    {
         "name": "selected_action",
         "description": "对游戏里当前选中的单位执行动作：copy 复制 / wnb 预设增援×8 / mcv 三阵营基地车 / "
                        "capture 收编 / kill 摧毁 / rank 满级。注意：需要先有选中单位。",
@@ -715,6 +799,7 @@ HANDLERS = {
     "search_units": t_search_units,
     "summon_unit": t_summon,
     "drop_crate": t_drop_crate,
+    "burst_crate": t_burst_crate,
     "get_spawn_point": t_spawn_point,
     "selected_action": t_selected_action,
     "set_units": t_set_units,

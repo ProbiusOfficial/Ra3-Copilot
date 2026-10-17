@@ -27,7 +27,7 @@
 | GET | `/ping` | 存活探测，返回 `pong` |
 | GET | `/state`、`/diag` | 状态大体检：模块基址、符号解析结果、相机诊断、落点三来源、选中单位结构、模板查找结果 |
 | GET | `/log?n=40` | 界面「输出记录」的尾部 n 行 |
-| GET | `/read?addr=0x..&n=128` | 内存十六进制 + ASCII 转储（n 上限 256） |
+| GET | `/read?addr=0x..&n=128` | 内存十六进制 + ASCII 转储（n 上限 256；别名 `/hex`） |
 | GET | `/peek?addr=0x..&type=u32` | 读单值，`type` = `u32`(默认) / `f32` / `u8` / `u16` / `ptr`（ptr 会多解一层） |
 | GET | `/resolve?hash=0x..` | 对象类型哈希 → 模板指针 |
 | GET | `/help` | 全部端点列表 |
@@ -135,10 +135,9 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 | GET | `/units?q=..` | 单位检索 |
 | GET | `/ai/status` | AI 通道遥测计数 |
 | GET | `/scratch` | 临时草稿区 |
-| POST | `/order?unit=..&act=attack\|move\|idle` | 指挥单位（AI 控制层） |
+| POST | `/order?unit=..&act=attack\|move`（`idle` 未实现） | 指挥单位（AI 控制层）：`attack` 需 `target=<Thing>`，`move` 需 `x=&y=&z=` |
 | POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 **VA**（绝对地址，非 RVA）调任意方法：正统 `thiscall`，`fn=0xVA` / `this=0x..` / `a0..a2` 栈参 / `na` 栈参个数（RE 用） |
 | POST | `/postproc?on=0\|1` | 后处理开关 |
-| POST | `/ai/set?on=0\|1` | 无实际作用 |
 
 ### 2. 监听与安全边界
 

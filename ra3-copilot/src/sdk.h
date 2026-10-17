@@ -24,7 +24,7 @@ constexpr uint32_t OFF_MONEY     = 0x04;   // [player+4]  = 现金 int32
 constexpr uint32_t OFF_PLAYERID  = 0x0C;   // [player+0xC] = 玩家 ID
 constexpr uint32_t OFF_LEVEL     = 0x418;  // [player+0x418] = 等级
 
-// ---- 附录弹药：v0.2 后续功能候选（未实现，先登记）----
+// ---- 功能 hook 的 RVA 备忘（现已在 features.cpp 的 kHooks 表中实装）----
 // 电力   RVA 0x6CFD0D  [eax+4]=100000, [eax+8]=0
 // 科技点 RVA 0x6CFE6C  [eax+0x34]=15
 // 全科技 RVA 0x6CFEB5  [edi+0x2c]=400.0f

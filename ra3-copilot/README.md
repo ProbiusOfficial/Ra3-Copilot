@@ -138,7 +138,7 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | `features.h` / `features.cpp` | 功能核：双 hook（表驱动）+ 资金接口 + 遥测 |
 | `overlay.h` / `overlay.cpp` | 渲染层：dummy device 取址 → MinHook → 局内绘制；菜单 / 日志 / 面板 |
 | `actions.h` / `actions.cpp` | 单位操作 / 召唤 / 空投：直调游戏函数 + 创建后状态字后处理 |
-| `aicmd.h` / `aicmd.cpp` | AI 指挥：AIUpdate 直调（移动 / 攻击 / 待机） |
+| `aicmd.h` / `aicmd.cpp` | AI 指挥：AIUpdate 直调（移动 / 攻击；待机未实现，`privateIdle` 槽位待认） |
 | `battlefield.h` / `battlefield.cpp` | 感知层：全图战场枚举 + 快照缓存 |
 | `battle_catalog.h` | 可玩对象目录（自动生成） |
 | `symres.h` / `symres.cpp` | 符号解析：AOB 全模块扫描 + 结构推导 |

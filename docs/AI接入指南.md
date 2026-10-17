@@ -22,7 +22,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 
 | 路径 | 适合 | 特点 |
 |---|---|---|
-| **MCP（推荐）** | 支持 MCP 协议的客户端 | 配一个 `mcpServers` 条目即可，得到 15 个高层工具（含参数校验、中文名检索） |
+| **MCP（推荐）** | 支持 MCP 协议的客户端 | 配一个 `mcpServers` 条目即可，得到 17 个高层工具（含参数校验、中文名检索；另有个 `raw` 需设 `RA3_MCP_ALLOW_RAW=1` 才注册） |
 | **HTTP 直连** | 任意语言 / 脚本 / Agent 框架 | 直接 `GET/POST 127.0.0.1:17832`，最灵活、无中间层 |
 
 两条路径**等价**：MCP 服务器 `mcp/ra3_mcp.py` 就是一个零依赖的 Python 包装，内部全是对该 HTTP 接口的调用。
@@ -91,9 +91,8 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 | `POST /aicall?fn=0xVA&this=0x..&a0=&a1=&a2=&na=0..3` | **正统 thiscall 调用**（指挥层核心；`na` 必须精确等于栈参数个数） |
 | `POST /order?unit=0x..&act=attack&target=0x..` | **指挥单位**：攻击目标 Thing |
 | `POST /order?unit=0x..&act=move&x=&y=&z=` | **指挥单位**：走向世界坐标 |
-| `POST /order?unit=0x..&act=idle` | 待机 |
+| `POST /order?unit=0x..&act=idle` | 待机 —— **未实现**（`privateIdle` 槽位未认），返回失败 |
 | `POST /postproc?obj=0x..` | 对单个对象手动跑创建后处理 |
-| `POST /ai/set?on=0\|1` | 无实际作用 |
 
 > **变更类请求的执行时机**：HTTP 线程写入命令槽 → 渲染线程每帧取走执行 → HTTP 线程等结果（超时 2.5s）。
 > 所以单条变更命令的典型延迟是**一到几帧**（约 0.05–1s）。批量操作请**串行**发（接口单线程）。
@@ -212,8 +211,9 @@ python auto_attack.py --loop 20         # 每 20 秒重新分析、分配
 | `search_units` | 单位目录检索（中文 / 拼音 / 英文 / 哈希） |
 | `summon_unit` | 召唤单位（可指定坐标、归属） |
 | `build_structure` | 建造建筑（等价于召唤建筑码） |
-| `command_unit` | 指挥单位（攻击 / 移动 / 待机） |
+| `command_unit` | 指挥单位（攻击 / 移动；待机未实现） |
 | `drop_crate` | 空投箱子 |
+| `burst_crate` | 空投箱子并引爆：在目标位置释放效果（`freeze` 冰冻 / `bomb` 爆炸 / `vacuum` 等） |
 | `selected_action` | 复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级 |
 | `set_units` | 调速 / 改血 |
 | `toggle_feature` / `set_freebuild` | 功能开关 / 免费建造 |

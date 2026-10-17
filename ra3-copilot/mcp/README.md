@@ -38,6 +38,7 @@ unit_catalog.json     1008 单位 + 54 箱子（由 tools/gen_mcp_catalog.py 生
 | `summon_unit` | 召唤单位（名字/模板名/哈希，count ≤ 30）；落点用 `place=view\|selection\|cursor` |
 | `get_spawn_point` | 查可用落点：`view` 视野中心（玩家在看的位置）/ `selection` 选中单位 / `cursor` 鼠标 / `auto` |
 | `drop_crate` | 空投箱子（治疗 / 现金 / 晋升 / 属性箱…） |
+| `burst_crate` | 空投箱子并立即引爆：在目标位置释放该箱子的死亡效果（`freeze` 冰冻 / `bomb` 爆炸 / `superbomb` / `vacuum`…） |
 | `selected_action` | 复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级 |
 | `set_units` | 调速（fast/slow/freeze/restore）/ 改血（god/hurt/restore） |
 | `toggle_feature` | 电力无限 / 全科技 / 免费建造 / 去迷雾 / 无敌 / 秒杀… |
