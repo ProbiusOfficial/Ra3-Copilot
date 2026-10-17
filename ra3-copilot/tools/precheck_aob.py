@@ -9,7 +9,7 @@ precheck_aob.py - 交付前 AOB 预检（零依赖）
 然后逐个对着游戏 exe 的 PE 镜像（RVA -> 文件偏移）比对字节。
 
 = 替游戏先跑一遍 fail-closed 校验（VerifyBytes 用的就是这套 AOB + RVA）。
-改钩子 / 改 AOB 后，先跑本脚本，再让游戏进局。
+改 hook / 改 AOB 后，先跑本脚本，再让游戏进局。
 
 用法:
   python precheck_aob.py [--game <exe路径>] [--src <features.cpp路径>]
@@ -127,7 +127,7 @@ def main():
     print("-" * 68)
     print("结果: %d/%d 通过" % (ok, ok + bad))
     if bad:
-        print("[!] 有 %d 处不匹配 —— 游戏加载时这些钩子会被 fail-closed 跳过" % bad)
+        print("[!] 有 %d 处不匹配 —— 游戏加载时这些 hook 会被 fail-closed 跳过" % bad)
     else:
         print("[+] 全部通过，可交付进局")
     return 0 if bad == 0 else 1

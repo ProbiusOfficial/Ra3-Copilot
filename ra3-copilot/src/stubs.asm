@@ -1,25 +1,25 @@
-; stubs.asm - Ra3-Copilot 钩子壳代码（MASM, x86）
+; stubs.asm - Ra3-Copilot hook stub（MASM, x86）
 ; 编译进 DLL .text：全局符号引用由 PE 重定位自动解析，无需运行时 patch 绝对地址
 ; 跳回游戏一律间接跳 jmp [g_retXxx]，无 +-2GB 距离限制
 ;
 ; 注意 1: MASM 整数默认十进制，十六进制必须写 h 后缀
-; 注意 2: 每个壳末尾"原指令重放"的字节必须与钩子点的 AOB 逐字节一致
+; 注意 2: 每个 stub 末尾"原指令重放"的字节必须与 hook 点的 AOB 逐字节一致
 ;        （dumpbin /disasm 反汇编核对）
-; 注意 3: 洞内 pushad/pushfd 全保现场，可自由破坏寄存器；重放前已恢复
+; 注意 3: cave 内 pushad/pushfd 全保现场，可自由破坏寄存器；重放前已恢复
 ; 注意 4: movss/cvttss2si 等为 SSE 指令，需 .686 + .XMM
 .686
 .XMM
 .model flat, C
 
 EXTERNDEF g_localPlayerId : DWORD   ; 本地玩家 ID（= [[eax+28]+0x20]，整数）
-EXTERNDEF g_localPlayerObj: DWORD   ; 本地"队伍/玩家"对象（= [eax+28]，PlayerID 钩子写；召唤当 team）
-EXTERNDEF g_moneyObj     : DWORD    ; 加钱钩子看到的"资金对象"（UI 读资金；与上者不同类，勿混用）
-EXTERNDEF g_selUnit      : DWORD    ; 弹药钩子遍历到的"当前选中单位"（对象指针）
+EXTERNDEF g_localPlayerObj: DWORD   ; 本地"队伍/玩家"对象（= [eax+28]，PlayerID hook 写；召唤当 team）
+EXTERNDEF g_moneyObj     : DWORD    ; 加钱 hook 看到的"资金对象"（UI 读资金；与上者不同类，勿混用）
+EXTERNDEF g_selUnit      : DWORD    ; 弹药 hook 遍历到的"当前选中单位"（对象指针）
 EXTERNDEF g_selHits      : DWORD    ; 选中单位命中计数（每单位每帧 +1，UI 估数量用）
 EXTERNDEF g_selTick      : DWORD    ; 最近一次命中的时标（由 C++ 每帧写 g_tickNow）
 EXTERNDEF g_tickNow      : DWORD    ; C++ 每帧更新的帧计数
 EXTERNDEF g_okUnit       : DWORD    ; 秒杀用：当前处理的单位
-EXTERNDEF g_okBody       : DWORD    ; 秒杀用：当前单位血量体（与挂钩点 esi 比较）
+EXTERNDEF g_okBody       : DWORD    ; 秒杀用：当前单位血量体（与 hook 点 esi 比较）
 EXTERNDEF g_retZoom      : DWORD
 EXTERNDEF g_retOneKill   : DWORD
 EXTERNDEF g_retOKData1   : DWORD
@@ -27,10 +27,10 @@ EXTERNDEF g_retOKData2   : DWORD
 EXTERNDEF g_moneyOp      : DWORD    ; 0=无 1=加钱 2=设置（一次性）
 EXTERNDEF g_moneyValue   : DWORD    ; 金额
 EXTERNDEF g_flags        : BYTE     ; 功能开关数组（索引对齐 CE 的 FLAGS 偏移）
-EXTERNDEF g_telemEnter   : DWORD    ; 遥测：资金洞执行次数
+EXTERNDEF g_telemEnter   : DWORD    ; 遥测：money cave 执行次数
 EXTERNDEF g_telemApplied : DWORD    ; 遥测：加钱生效次数
 
-; ---- 各钩子返回地址（运行时由 C++ 填充 = site + 重放长度）----
+; ---- 各 hook 返回地址（运行时由 C++ 填充 = site + 重放长度）----
 EXTERNDEF g_retMoney        : DWORD
 EXTERNDEF g_retPlayerId     : DWORD
 EXTERNDEF g_retPower        : DWORD
@@ -285,7 +285,7 @@ OneKillCaveStub PROC
     mov   eax, dword ptr [eax+20h]            ; 归属玩家 ID
     cmp   eax, g_localPlayerId
     je    ok_exit                              ; 自己的不动
-    ; 注：此处把 HP 写 0 **不会**产生"幽灵单位"—— 本钩子挂在游戏"写血量"的流程内
+    ; 注：此处把 HP 写 0 **不会**产生"幽灵单位"—— 本 hook 挂在游戏"写血量"的流程内
     ;   （原指令 movss [esi+4],xmm0），写完游戏会继续走自己的死亡判定与销毁。
     ;   实测：靶子 hp→0 后约 12s 被引擎回收（对象地址失效）。
     ;   ⚠️ 反之，在游戏流程**之外**直接写血量 0 才会留下幽灵（对象永不回收、模型仍在）。

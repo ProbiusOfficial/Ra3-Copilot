@@ -417,6 +417,22 @@ uintptr_t FindTeamByIdx(int idx) {
     return 0;
 }
 
+// 找敌方归属：非本地、且不是中立(idx 0)。优先"有单位/建筑"的。
+uintptr_t FindEnemyTeam() {
+    BattleSummary s;
+    if (!ScanBattlefield(&s, false)) return 0;
+    for (int i = 0; i < s.owners && i < 16; ++i) {
+        const BattleOwner& o = s.list[i];
+        if (o.isLocal || !o.addr || o.idx <= 0) continue;
+        if (o.units + o.structs > 0) return o.addr;
+    }
+    for (int i = 0; i < s.owners && i < 16; ++i) {
+        const BattleOwner& o = s.list[i];
+        if (!o.isLocal && o.addr && o.idx > 0) return o.addr;
+    }
+    return 0;
+}
+
 // 手动钉住 Thing vtable（/snapshot?vtab=0x..）—— 免重编的热修
 void SetThingVtOverride(uint32_t vt) {
     g_vtOverride = vt;

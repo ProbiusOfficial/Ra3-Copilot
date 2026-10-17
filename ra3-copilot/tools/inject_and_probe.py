@@ -266,7 +266,7 @@ def main():
     base = exe[0][1] if exe else 0
     say(f'[*] main base=0x{base:08x}')
 
-    # ---- 2. 钩子补丁字节 ----
+    # ---- 2. hook 补丁字节 ----
     sm = base + RVA_MONEY
     bb = rd(sm, 5)
     say(f'[*] money site   0x{sm:08x}: {bb.hex() if bb else "FAIL"}'

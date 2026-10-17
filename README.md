@@ -2,7 +2,7 @@
 
 红色警戒 3 日冕 Mod（`ra3_1.12.game`，v1.12.3444.25830，32 位）的**注入型进程内作战辅助系统**——以局内覆盖层（overlay）形式接入游戏，按 `INSERT` 呼出菜单，提供资源 / 战斗 / 单位 / 召唤 / 空投等辅助能力，并通过 **MCP 脑机接口**把战局开放给 AI。
 
-> 仅用于单机学习与研究。**版本强绑定**：钩子 RVA 硬编码于 v1.12.3444.25830，注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
+> 仅用于单机学习与研究。**版本强绑定**：hook RVA 硬编码于 v1.12.3444.25830，注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
 > 适配基线：日冕 Mod v1.12；其他版本需重新定位 RVA / AOB。
 
 **官网** → <https://probiusofficial.github.io/Ra3-Copilot/>
@@ -37,7 +37,7 @@ ra3-copilot\build.bat
 > `build.bat` 不调用 `vcvars32.bat`（其内部调用的 `reg.exe` 会被部分环境的安全策略拦截），而显式设置 `PATH/INCLUDE/LIB`。
 > `.bat` 必须保持 CRLF 行尾 + 纯 ASCII 内容，仓库已通过 `.gitattributes` 保证检出为 CRLF。
 
-改钩子 / 改 AOB 后，交付前先用真实游戏 exe 做字节级预检：
+改 hook / 改 AOB 后，交付前先用真实游戏 exe 做字节级预检：
 
 ```bat
 python ra3-copilot\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
@@ -61,13 +61,13 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ├── ra3-copilot/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions
 │   │                      aicmd（AIUpdate 直调）/ battlefield（战场枚举）/ httpapi / symres（符号解析）
-│   │                      stubs.asm（MASM 壳）/ units_corona.h（可召唤单位代码表）
+│   │                      stubs.asm（MASM stub）/ units_corona.h（可召唤单位代码表）
 │   ├── imgui/             Dear ImGui v1.91.4（MIT）
 │   ├── third_party/       MinHook 1.3.3（BSD-2-Clause）
 │   ├── tools/             AOB 预检 / 注入诊断 / 渲染探针等脚本
 │   ├── mcp/               脑机接口（MCP stdio 服务器 + 单位目录）
 │   ├── build.bat / deploy.bat / refresh_dll.bat
-│   └── README.md          架构 / 钩子清单 / 渲染原理
+│   └── README.md          架构 / hook 清单 / 渲染原理
 ├── unit-codes/            单位代码（SAGE 对象类型哈希）
 │   ├── README.md / 单位代码与哈希算法.md   结论与完整报告
 │   ├── data/              派生清单（.tsv / .h）

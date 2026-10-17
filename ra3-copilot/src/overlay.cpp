@@ -36,6 +36,7 @@ namespace ra3 {
 
 OverlayConfig g_cfg;
 OverlayStatus g_ov;
+HMODULE g_hSelf = nullptr;   // dllmain 保存；热重载 FreeLibraryAndExitThread 自卸载用
 
 namespace {
 
@@ -51,6 +52,18 @@ bool g_mhInited = false;
 
 void* g_hookedTargets[16] = {};
 int   g_hookedCount = 0;
+
+// ---------- 热重载（游戏内卸载）状态 ----------
+// 链路：/unload → g_wantUnload → 渲染线程在 Present detour 内完成全部拆卸（DoUnload）
+//   → g_silent → 卸载线程等 g_inHook 归零 + 安全间隔 → MH_Uninitialize → FreeLibraryAndExitThread。
+// g_inHook 覆盖 6 个 d3d9 detour + 窗口过程：FreeLibrary 前必须为 0（无人还在 DLL 代码里）。
+volatile LONG g_wantUnload = 0;   // 1=已受理卸载请求
+volatile LONG g_unloading  = 0;   // 1=拆卸已开始（防重入；中止后不复位，不自动重试）
+volatile LONG g_silent     = 0;   // 1=渲染线程已完成拆卸并即将离开 DLL 代码路径
+volatile LONG g_inHook     = 0;   // 正执行 DLL 内 detour / 窗口过程的计数
+volatile LONG g_stopInput  = 0;   // 输入线程退出标志
+HANDLE g_inputThread = nullptr;
+LPTOP_LEVEL_EXCEPTION_FILTER g_oldFilter = nullptr;   // 安装 Ra3CrashFilter 前的过滤器
 
 typedef HRESULT (STDMETHODCALLTYPE* EndScene_t)(IDirect3DDevice9*);
 typedef HRESULT (STDMETHODCALLTYPE* Present_t)(IDirect3DDevice9*, const RECT*, const RECT*,
@@ -73,7 +86,7 @@ WNDPROC       g_origWndProc     = nullptr;
 float g_panelRects[12][4] = { {0,0,0,0} };
 volatile LONG g_panelRectN = 0;
 
-// d3d9 视图矩阵（相机）——用于"视角中心"落点
+// d3d9 视图矩阵（相机）——仅诊断：游戏不走 SetTransform 传 3D 相机，落点不用它
 float g_viewMat[16] = { 0 };
 float g_projMat[16] = { 0 };
 int   g_viewport[4] = { 0, 0, 0, 0 };   // x,y,w,h
@@ -235,7 +248,15 @@ HWND FindGameWnd() {
     return found;
 }
 
+// g_inHook 计数包装：窗口消息处理期间同样禁止 FreeLibrary（卸载线程靠它判「无人还在 DLL 里」）
+LRESULT CALLBACK OverlayWndProcBody(HWND h, UINT msg, WPARAM w, LPARAM l);
 LRESULT CALLBACK OverlayWndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
+    InterlockedIncrement(&g_inHook);
+    const LRESULT r = OverlayWndProcBody(h, msg, w, l);
+    InterlockedDecrement(&g_inHook);
+    return r;
+}
+LRESULT CALLBACK OverlayWndProcBody(HWND h, UINT msg, WPARAM w, LPARAM l) {
     // 关键：鼠标落在菜单上时，把鼠标消息**吞掉**，不要传给游戏
     //   （否则点菜单等于点游戏世界 → 选择丢失/下错命令）
     if (g_ov.imguiReady && g_cfg.visible && g_cfg.blockInput) {
@@ -295,6 +316,7 @@ HWND GetDeviceWindow(IDirect3DDevice9* dev) {
 }
 
 void EnsureImGui(IDirect3DDevice9* dev) {
+    if (g_unloading) return;   // 卸载中/已卸载：不再重建 UI（否则会把刚释放的资源又装回来）
     if (g_ov.imguiReady || !dev) return;
     HWND hwnd = GetDeviceWindow(dev);
     if (!hwnd || !IsWindow(hwnd)) return;
@@ -387,13 +409,14 @@ void RenderOverlay(IDirect3DDevice9* dev) {
     g_telemRenderOnce++;
 }
 
-// ===================== 钩子 =====================
+// ===================== hook =====================
 HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev);
 HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
                                       HWND h, const RGNDATA* c);
 HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp);
 HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a, const RECT* b,
                                           HWND h, const RGNDATA* c, DWORD fl);
+void DoUnload(IDirect3DDevice9* dev);   // 热重载：在 Present detour 内执行的拆卸流程
 // 4x4 转置（列主序 → 转成行向量约定，供反投影统一使用）
 static void Transpose4(const D3DMATRIX* m, float out[16]) {
     const float* a = reinterpret_cast<const float*>(m);
@@ -402,14 +425,14 @@ static void Transpose4(const D3DMATRIX* m, float out[16]) {
             out[i * 4 + j] = a[j * 4 + i];
 }
 
-// SetTransform（vtable[44]）：抓 VIEW 矩阵 → 用来算"视角中心"落点
-HRESULT STDMETHODCALLTYPE HookSetTransform(IDirect3DDevice9* dev, D3DTRANSFORMSTATETYPE st,
-                                           const D3DMATRIX* m) {
+// SetTransform（vtable[44]）：抓 VIEW 矩阵 —— 仅诊断
+static HRESULT STDMETHODCALLTYPE HookSetTransformBody(IDirect3DDevice9* dev, D3DTRANSFORMSTATETYPE st,
+                                                      const D3DMATRIX* m) {
     if (m) {
         __try {
             if (st == D3DTS_VIEW) {
                 // 只接受"像 3D 场景相机"的视图矩阵（前向朝下，fz 明显为负），
-                //   否则会抓到 UI/2D 那一遍的矩阵 → 视角中心算出垃圾
+                //   否则会抓到 UI/2D 那一遍的矩阵 → 诊断数字失真
                 const float fz = m->_33;      // 行向量约定：第 3 行 = 相机前向，_33 = 前向的 z 分量
                 // 诊断：无条件记录（不过滤）—— 用来核对过滤阈值/行列约定是否搞反
                 memcpy(g_viewLast, m, sizeof(float) * 16);
@@ -442,6 +465,13 @@ HRESULT STDMETHODCALLTYPE HookSetTransform(IDirect3DDevice9* dev, D3DTRANSFORMST
     if (g_origSetTransform) return g_origSetTransform(dev, st, m);
     return D3D_OK;
 }
+HRESULT STDMETHODCALLTYPE HookSetTransform(IDirect3DDevice9* dev, D3DTRANSFORMSTATETYPE st,
+                                           const D3DMATRIX* m) {
+    InterlockedIncrement(&g_inHook);
+    const HRESULT hr = HookSetTransformBody(dev, st, m);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
 
 bool HookFunction(void* target, void* detour, void** orig, const char* name) {
     if (!target || !orig) return false;
@@ -449,10 +479,10 @@ bool HookFunction(void* target, void* detour, void** orig, const char* name) {
         if (g_hookedTargets[i] == target) return true;
     g_telemScanRounds++;
     MH_STATUS st = MH_CreateHook(target, detour, orig);
-    if (st != MH_OK) { AddLog(LOG_ERR, "[钩子] %s 失败 MH=%d", name, st); return false; }
+    if (st != MH_OK) { AddLog(LOG_ERR, "[hook] %s 失败 MH=%d", name, st); return false; }
     if (g_hookedCount < 16) g_hookedTargets[g_hookedCount++] = target;
     g_telemVtablesHooked++;
-    AddLog(LOG_OK, "[钩子] 已挂 %s @ %p", name, target);
+    AddLog(LOG_OK, "[hook] 已挂 %s @ %p", name, target);
     return true;
 }
 
@@ -491,7 +521,7 @@ void HookDeviceVtable(IDirect3DDevice9* dev) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// ===================== 学习钩子：定位游戏的"创建对象"函数 =====================
+// ===================== 学习 hook：定位游戏的"创建对象"函数 =====================
 // 已确认 Find(RVA 0x3E4230, this=ThingFactory, hash->template) 在本构建有效；
 // 游戏自己造单位时必然先 Find 再"创建"。挂住 Find：
 //   ① 记下调用者返回地址；② 顺着调用者机器码往后解码，找紧跟的 call（= 创建函数候选）。
@@ -551,7 +581,7 @@ void InstallRenderHooks() {
     if (g_mhInited) return;
     MH_STATUS mi = MH_Initialize();
     if (mi != MH_OK && mi != MH_ERROR_ALREADY_INITIALIZED) {
-        AddLog(LOG_ERR, "[钩子] MH_Initialize 失败 %d", mi);
+        AddLog(LOG_ERR, "[hook] MH_Initialize 失败 %d", mi);
         return;
     }
     g_mhInited = true;
@@ -607,20 +637,103 @@ void InstallRenderHooks() {
     }
     if (wnd) DestroyWindow(wnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    InstallLearnHooks();             // 学习钩子（挂 Find，用于定位创建函数）
+    InstallLearnHooks();             // 学习 hook（挂 Find，用于定位创建函数）
     MH_EnableHook(MH_ALL_HOOKS);
-    AddLog(LOG_OK, "[钩子] 已就绪：%d 个 d3d9 函数，等待首帧", g_hookedCount);
+    AddLog(LOG_OK, "[hook] 已就绪：%d 个 d3d9 函数，等待首帧", g_hookedCount);
 }
 
-HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev) {
+// ===================== 热重载：拆卸 + 自卸载 =====================
+// 由渲染线程在 Present detour 内调用（全进程唯一「我们可控、且能证明此刻没有别人在 DLL 里」的时机）。
+// 任何一步失败 → 中止且不自动重试：现场保留可诊断，重新注入新 DLL 即恢复全部功能。
+DWORD WINAPI UnloadThread(LPVOID) {
+    while (!g_silent) Sleep(5);
+    // 等所有 detour / 窗口过程退出（单线程下早已为 0；多线程场景这是真正的护栏）
+    while (InterlockedCompareExchange(&g_inHook, 0, 0) != 0) Sleep(1);
+    Sleep(100);                          // 余量：让最后一个 detour 的收尾指令跑完
+    if (g_mhInited) MH_Uninitialize();   // 释放 MinHook 池（trampoline 已无人使用）
+    if (g_hSelf) FreeLibraryAndExitThread(g_hSelf, 0);   // 不返回
+    return 0;
+}
+
+void DoUnload(IDirect3DDevice9* dev) {
+    if (InterlockedExchange(&g_unloading, 1) != 0) return;
+    AddLog(LOG_WARN, "[卸载] 受理（tid=%u）—— 开始停辅助线程", (unsigned)GetCurrentThreadId());
+    (void)dev;
+    bool ok = true;
+
+    // 1) 停 HTTP 线程（join 最长 3s；等待期间本帧会卡住，卸载场景可接受）—— 端口随之释放
+    HttpApiStop();
+    if (!HttpApiJoin()) { AddLog(LOG_ERR, "[卸载] HTTP 线程未退出 → 中止"); ok = false; }
+
+    // 2) 停输入线程（Sleep(25) 轮询 → 秒退）
+    if (ok) {
+        InterlockedExchange(&g_stopInput, 1);
+        if (g_inputThread && WaitForSingleObject(g_inputThread, 3000) != WAIT_OBJECT_0) {
+            AddLog(LOG_ERR, "[卸载] 输入线程未退出 → 中止");
+            ok = false;
+        }
+    }
+
+    // 3) 还原窗口过程 + 崩溃过滤器（之后窗口消息与异常都不再进本 DLL）
+    if (ok) {
+        if (g_ov.wnd && g_origWndProc) {
+            SetWindowLongPtrW(g_ov.wnd, GWLP_WNDPROC, (LONG_PTR)g_origWndProc);
+            g_origWndProc = nullptr;
+        }
+        SetUnhandledExceptionFilter(g_oldFilter);
+    }
+
+    // 4) 释放 ImGui / d3d9 资源（此刻 device 有效，正是释放时机）
+    if (ok && g_ov.imguiReady) {
+        __try {
+            ImGui_ImplDX9_Shutdown();
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        g_ov.imguiReady = false;
+        g_ov.device = nullptr;
+    }
+
+    // 5) 回写 20 个功能 hook（先验证、后拆 MinHook —— 不完全成功就保命中止）
+    if (ok) {
+        const int back = RemoveHooks();
+        if (back != g_hookSt.installed) {
+            AddLog(LOG_ERR, "[卸载] 功能 hook 回写 %d/%d 未全部成功 → 中止（现场保留）",
+                   back, g_hookSt.installed);
+            ok = false;
+        }
+    }
+
+    // 6) 拆全部 MinHook hook（site 字节还原；trampoline 留给卸载线程在静默后释放）
+    if (ok) {
+        for (int i = 0; i < g_hookedCount; ++i) MH_DisableHook(g_hookedTargets[i]);
+        AddLog(LOG_OK, "[卸载] hook 全部还原（功能 %d + MinHook %d）→ 静默，交给卸载线程",
+               g_hookSt.installed, g_hookedCount);
+        HANDLE ut = CreateThread(nullptr, 0, UnloadThread, nullptr, 0, nullptr);
+        if (!ut) {
+            AddLog(LOG_ERR, "[卸载] 卸载线程创建失败 —— DLL 保持加载（hook 已拆）");
+        } else {
+            CloseHandle(ut);
+            InterlockedExchange(&g_silent, 1);
+        }
+    }
+    if (!ok) AddLog(LOG_ERR, "[卸载] 中止：本实例保持加载，重新注入新 DLL 可恢复功能");
+}
+
+static HRESULT STDMETHODCALLTYPE HookEndSceneBody(IDirect3DDevice9* dev) {
     InterlockedIncrement(reinterpret_cast<LONG*>(&g_telemEndScene));
     if (g_origEndScene) return g_origEndScene(dev);
     return D3D_OK;
 }
+HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev) {
+    InterlockedIncrement(&g_inHook);
+    const HRESULT hr = HookEndSceneBody(dev);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
 
-HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
-                                      HWND h, const RGNDATA* c) {
-    InterlockedIncrement(reinterpret_cast<LONG*>(&g_telemPresent));
+static HRESULT STDMETHODCALLTYPE HookPresentBody(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
+                                                 HWND h, const RGNDATA* c) {
     if (dev) {
         __try {
             if (!g_hasView || !g_hasProj) {   // 兜底：游戏可能用常量表而非 SetTransform
@@ -664,8 +777,23 @@ HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, cons
     if (g_origPresent) return g_origPresent(dev, a, b, h, c);
     return D3D_OK;
 }
+HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
+                                      HWND h, const RGNDATA* c) {
+    InterlockedIncrement(reinterpret_cast<LONG*>(&g_telemPresent));
+    InterlockedIncrement(&g_inHook);
+    // 卸载触发点：全进程唯一「我们可控、且能证明此刻没有别人在 DLL 里」的时机（详见 DoUnload）
+    if (g_wantUnload && !g_unloading) {
+        __try { DoUnload(dev); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            AddLog(LOG_ERR, "[卸载] 拆卸途中异常 → 中止（保持加载）");
+        }
+    }
+    const HRESULT hr = HookPresentBody(dev, a, b, h, c);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
 
-HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
+static HRESULT STDMETHODCALLTYPE HookResetBody(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
     if (g_ov.imguiReady) {
         __try { ImGui_ImplDX9_InvalidateDeviceObjects(); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
@@ -675,9 +803,15 @@ HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS
     }
     return hr;
 }
+HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
+    InterlockedIncrement(&g_inHook);
+    const HRESULT hr = HookResetBody(dev, pp);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
 
-HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a, const RECT* b,
-                                          HWND h, const RGNDATA* c, DWORD fl) {
+static HRESULT STDMETHODCALLTYPE HookSwapPresentBody(IDirect3DSwapChain9* sc, const RECT* a, const RECT* b,
+                                                     HWND h, const RGNDATA* c, DWORD fl) {
     if (sc) {
         __try {
             IDirect3DDevice9* dev = nullptr;
@@ -694,10 +828,17 @@ HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a
     if (g_origSwapPresent) return g_origSwapPresent(sc, a, b, h, c, fl);
     return D3D_OK;
 }
+HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a, const RECT* b,
+                                          HWND h, const RGNDATA* c, DWORD fl) {
+    InterlockedIncrement(&g_inHook);
+    const HRESULT hr = HookSwapPresentBody(sc, a, b, h, c, fl);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
 
 // ===================== UI =====================
 // ===================== 快捷键表（基于 CE 的布局） =====================
-// 布局：Ctrl+F1..F12 + 单键 P/O/L/K/I/J、'-'/'+'、PgUp/PgDn、'['/']'/'\'、';'、Del、','/'.'/'/'、'''
+// 出厂默认布局：Ctrl+F1..F12 + 单键 P/O/L/K/I/J、'-'/'+'、PgUp/PgDn、'['/']'/'\'、';'、Del、','/'.'/'/'、'''
 enum {
     HK_MONEY = 1, HK_POWER, HK_SCPOINT, HK_HAVEALLSC, HK_FASTBUILD, HK_SUPERPOWER,
     HK_DISABLESP, HK_MAP, HK_ENEMYBUILD, HK_GODMODE, HK_KILLMODE,
@@ -706,37 +847,147 @@ enum {
     HK_DESTROY, HK_DANGERMAX, HK_DANGERMIN, HK_DANGERNORM, HK_OREMINE,
     HK_FREEBUILD, HK_MCV, HK_CAPTURE, HK_ZOOM, HK_CHANGEID, HK_COPY, HK_WNB,
 };
-struct HKDef { int vk; bool ctrl; int id; const char* label; const char* desc; };
-const HKDef kHK[] = {
-    { VK_F1,  true,  HK_MONEY,       "Ctrl+F1",  "加钱（每次金额）" },
-    { VK_F2,  true,  HK_POWER,       "Ctrl+F2",  "电力无限（开关）" },
-    { VK_F3,  true,  HK_SCPOINT,     "Ctrl+F3",  "科技点无限（开关）" },
-    { VK_F4,  true,  HK_HAVEALLSC,   "Ctrl+F4",  "全科技（开关）" },
-    { VK_F5,  true,  HK_FASTBUILD,   "Ctrl+F5",  "快速建造（开关）" },
-    { VK_F6,  true,  HK_SUPERPOWER,  "Ctrl+F6",  "超武就绪（开关）" },
-    { VK_F7,  true,  HK_DISABLESP,   "Ctrl+F7",  "禁用敌方超武（开关）" },
-    { VK_F9,  true,  HK_MAP,         "Ctrl+F9",  "全图 / 去迷雾（开关）" },
-    { VK_F10, true,  HK_ENEMYBUILD,  "Ctrl+F10", "敌人无法建造（开关）" },
-    { VK_F11, true,  HK_GODMODE,     "Ctrl+F11", "玩家无敌（开关）" },
-    { 'P',    false, HK_LEVELUP,     "P",        "升级单位（满级）" },
-    { 'O',    false, HK_CHANGEID,    "O",        "接管单位（把选中单位改成你的）" },
-    { 'I',    false, HK_COPY,        "I",        "复制选中单位 → 光标处" },
-    { VK_OEM_MINUS, false, HK_SPEEDMAX,  "-",       "加速（选中单位）" },
-    { VK_OEM_PLUS,  false, HK_SPEEDSLOW, "+",       "减速（选中单位）" },
-    { VK_PRIOR, false, HK_FREEZE,     "PageUp",   "定住单位" },
-    { VK_NEXT,  false, HK_SPEEDNORM,  "PageDown", "恢复速度" },
-    { VK_OEM_4, false, HK_HPMAX,      "[",        "无限血量" },
-    { VK_OEM_6, false, HK_HPMIN,      "]",        "残血（血量设为 1）" },
-    { VK_OEM_5, false, HK_HPNORM,     "\\",       "恢复血量" },
-    { VK_OEM_1, false, HK_AMMO,       ";",        "选中单位弹药满（开关）" },
-    { VK_DELETE,false, HK_DESTROY,    "Delete",   "摧毁选中" },
-    { VK_OEM_COMMA,  false, HK_DANGERMAX,  ",",   "危险等级 = 最高" },
-    { VK_OEM_PERIOD, false, HK_DANGERMIN,  ".",   "危险等级 = 最低" },
-    { VK_OEM_2, false, HK_DANGERNORM, "/",        "危险等级 = 不干预" },
-    { VK_OEM_7, false, HK_OREMINE,    "'",        "恢复矿场" },
-    { 'L',    false, HK_FREEBUILD,    "L",        "免费建造（开关）" },
-    { 'K',    false, HK_MCV,          "K",        "召唤基地车" },
+
+struct HKDef { int vk; bool ctrl; int id; const char* desc; };
+
+// 出厂绑定。用户改键的结果写进 kHK，并落盘 <DLL 目录>\ra3copilot_keys.ini（重注入后自动读回）。
+const HKDef kHKDefault[] = {
+    { VK_F1,  true,  HK_MONEY,      "加钱（每次金额）" },
+    { VK_F2,  true,  HK_POWER,      "电力无限（开关）" },
+    { VK_F3,  true,  HK_SCPOINT,    "科技点无限（开关）" },
+    { VK_F4,  true,  HK_HAVEALLSC,  "全科技（开关）" },
+    { VK_F5,  true,  HK_FASTBUILD,  "快速建造（开关）" },
+    { VK_F6,  true,  HK_SUPERPOWER, "超武就绪（开关）" },
+    { VK_F7,  true,  HK_DISABLESP,  "禁用敌方超武（开关）" },
+    { VK_F8,  true,  HK_ZOOM,       "无限缩放（开关）" },
+    { VK_F9,  true,  HK_MAP,        "全图 / 去迷雾（开关）" },
+    { VK_F10, true,  HK_ENEMYBUILD, "敌人无法建造（开关）" },
+    { VK_F11, true,  HK_GODMODE,    "玩家无敌（开关）" },
+    { 'P',    false, HK_LEVELUP,    "升级单位（满级）" },
+    { 'O',    false, HK_CHANGEID,   "接管单位（把选中单位改成你的）" },
+    { 'I',    false, HK_COPY,       "复制选中单位" },
+    { VK_OEM_MINUS, false, HK_SPEEDMAX, "加速（选中单位）" },
+    { VK_OEM_PLUS,  false, HK_SPEEDSLOW, "减速（选中单位）" },
+    { VK_PRIOR, false, HK_FREEZE,   "定住单位" },
+    { VK_NEXT,  false, HK_SPEEDNORM, "恢复速度" },
+    { VK_OEM_4, false, HK_HPMAX,    "无限血量" },
+    { VK_OEM_6, false, HK_HPMIN,    "残血（血量设为 1）" },
+    { VK_OEM_5, false, HK_HPNORM,   "恢复血量" },
+    { VK_OEM_1, false, HK_AMMO,     "选中单位弹药满（开关）" },
+    { VK_DELETE,false, HK_DESTROY,  "摧毁选中" },
+    { VK_OEM_COMMA,  false, HK_DANGERMAX, "危险等级 = 最高" },
+    { VK_OEM_PERIOD, false, HK_DANGERMIN, "危险等级 = 最低" },
+    { VK_OEM_2, false, HK_DANGERNORM, "危险等级 = 不干预" },
+    { VK_OEM_7, false, HK_OREMINE,  "恢复矿场" },
+    { 'L',    false, HK_FREEBUILD,  "免费建造（开关）" },
+    { 'K',    false, HK_MCV,        "召唤基地车" },
+    { 'J',    false, HK_WNB,        "预设增援（召唤 ×8）" },
 };
+constexpr int kHKCount = (int)(sizeof(kHKDefault) / sizeof(kHKDefault[0]));
+
+HKDef kHK[kHKCount];                 // 运行期绑定（LoadKeyBinds 初始化）
+volatile LONG g_hkEnabled = 1;       // 功能热键总开关；INSERT 不受它管
+volatile LONG g_hkRebind  = -1;      // 正在等待捕获新键的下标；-1 = 未在改键
+volatile LONG g_hkMsgKind = 0;       // 改键结果 1=成功 2=取消 3=冲突（输入线程写，渲染线程记日志）
+volatile LONG g_hkMsgIdx  = -1;
+volatile LONG g_hkMsgDup  = -1;
+
+// 键码 → 显示名（与 kHKDefault 的既有叫法一致）
+void KeyName(int vk, char* out, int n) {
+    if (vk >= VK_F1 && vk <= VK_F24) { _snprintf_s(out, n, _TRUNCATE, "F%d", vk - VK_F1 + 1); return; }
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) { out[0] = (char)vk; out[1] = 0; return; }
+    const char* s = nullptr;
+    switch (vk) {
+    case VK_OEM_MINUS:  s = "-";        break;
+    case VK_OEM_PLUS:   s = "+";        break;
+    case VK_OEM_4:      s = "[";        break;
+    case VK_OEM_6:      s = "]";        break;
+    case VK_OEM_5:      s = "\\";       break;
+    case VK_OEM_1:      s = ";";        break;
+    case VK_OEM_7:      s = "'";        break;
+    case VK_OEM_COMMA:  s = ",";        break;
+    case VK_OEM_PERIOD: s = ".";        break;
+    case VK_OEM_2:      s = "/";        break;
+    case VK_PRIOR:      s = "PageUp";   break;
+    case VK_NEXT:       s = "PageDown"; break;
+    case VK_DELETE:     s = "Delete";   break;
+    case VK_INSERT:     s = "Insert";   break;
+    case VK_HOME:       s = "Home";     break;
+    case VK_END:        s = "End";      break;
+    case VK_SPACE:      s = "Space";    break;
+    case VK_TAB:        s = "Tab";      break;
+    case VK_BACK:       s = "Backspace";break;
+    default:            _snprintf_s(out, n, _TRUNCATE, "VK%02X", vk); return;
+    }
+    _snprintf_s(out, n, _TRUNCATE, "%s", s);
+}
+
+// 第 i 条绑定 → 显示串（"Ctrl+F1" / "P"）
+void HKLabel(int i, char* out, int n) {
+    char k[16] = { 0 };
+    KeyName(kHK[i].vk, k, sizeof(k));
+    if (kHK[i].ctrl) _snprintf_s(out, n, _TRUNCATE, "Ctrl+%s", k);
+    else             _snprintf_s(out, n, _TRUNCATE, "%s", k);
+}
+
+void HKResetDefaults() { for (int i = 0; i < kHKCount; ++i) kHK[i] = kHKDefault[i]; }
+
+// 占用了 (vk,ctrl) 的其它条目下标；无则 -1
+int HKConflict(int self, int vk, bool ctrl) {
+    for (int i = 0; i < kHKCount; ++i)
+        if (i != self && kHK[i].vk == vk && kHK[i].ctrl == ctrl) return i;
+    return -1;
+}
+
+void HKFilePath(char* out, int n) {
+    _snprintf_s(out, n, _TRUNCATE, "%sra3copilot_keys.ini", DllDir());
+}
+
+// enabled= 行 + 每条 "<id> <vk> <ctrl>"；读到合法值才覆盖，其余保持默认。
+void LoadKeyBinds() {
+    HKResetDefaults();
+    g_hkEnabled = 1;
+    char path[MAX_PATH] = { 0 }; HKFilePath(path, sizeof(path));
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "r") != 0 || !f) return;
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '#') continue;
+        if (strncmp(line, "enabled=", 8) == 0) { g_hkEnabled = (line[8] == '1') ? 1 : 0; continue; }
+        int id = 0, vk = 0, ctrl = 0;
+        if (sscanf_s(line, "%d %d %d", &id, &vk, &ctrl) != 3) continue;
+        if (vk <= 0 || vk >= 0x100) continue;
+        for (int i = 0; i < kHKCount; ++i)
+            if (kHK[i].id == id) { kHK[i].vk = vk; kHK[i].ctrl = (ctrl != 0); break; }
+    }
+    fclose(f);
+}
+
+void SaveKeyBinds() {
+    char path[MAX_PATH] = { 0 }; HKFilePath(path, sizeof(path));
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "w") != 0 || !f) return;
+    fprintf(f, "enabled=%d\n", g_hkEnabled ? 1 : 0);
+    for (int i = 0; i < kHKCount; ++i)
+        fprintf(f, "%d %d %d\n", kHK[i].id, kHK[i].vk, kHK[i].ctrl ? 1 : 0);
+    fclose(f);
+}
+
+// 输入线程只记结果，日志由渲染线程写（AddLog 不在输入线程上调）
+void HKMsgTick() {
+    const LONG kind = g_hkMsgKind;
+    if (!kind) return;
+    const int idx = (int)g_hkMsgIdx, dup = (int)g_hkMsgDup;
+    InterlockedExchange(&g_hkMsgKind, 0);
+    if (kind == 1 && idx >= 0 && idx < kHKCount) {
+        char lbl[32] = { 0 }; HKLabel(idx, lbl, sizeof(lbl));
+        AddLog(LOG_OK, "[快捷键] %s → %s", kHK[idx].desc, lbl);
+    } else if (kind == 2) {
+        AddLog(LOG_INFO, "[快捷键] 已取消改键");
+    } else if (kind == 3 && dup >= 0 && dup < kHKCount) {
+        AddLog(LOG_WARN, "[快捷键] 该键已被「%s」占用，请换一个", kHK[dup].desc);
+    }
+}
 
 int  g_facIdx = 0;                 // 支援面板左侧阵营选中项（0=全部 … 末项=箱子）
 bool g_primaryOnly = true;         // 支援面板：只看基准形态
@@ -776,11 +1027,8 @@ std::vector<std::string> g_candName;
 std::vector<int> g_candCount;
 int  g_summonCount = 1;
 int  g_owner = 0;
-int  g_crateIdx = 0;
+int  g_crateIdx = 0;      // 空投箱类型下标（对接 HTTP /crate?idx=）
 int  g_crateCount = 2;
-bool g_crateAuto = false;
-float g_cratePeriod = 20.f;
-float g_crateTimer = 0.f;
 
 void LogAct(const char* what, int n) {
     if (n > 0) { AddLog(LOG_OK, "[单位] %s：影响 %d 个单位", what, n); Ding(); return; }
@@ -834,7 +1082,7 @@ void TabResource() {
     ImGui::SetNextItemWidth(140);
     ImGui::InputInt("每次金额", &g_cfg.addAmount, 100, 1000);
     ImGui::SameLine();
-    if (ImGui::Button("加钱 (F7)", ImVec2(120, 0))) MoneyAdd(g_cfg.addAmount);
+    if (ImGui::Button("加钱", ImVec2(120, 0))) MoneyAdd(g_cfg.addAmount);
 
     // 锁定金额：点一下把「当前资金」钉住（之后每帧回写），再点解除
     // 状态必须取"点击前"的副本：按钮回调会翻转 g_moneyLock，若 Push/Pop 各判一次
@@ -887,121 +1135,10 @@ void TabResource() {
     if (ImGui::Button("恢复矿场", ImVec2(120, 0))) TriggerOneShot(FID_OREMINE);
 }
 
-void TabBattle() {
-    bool b;
-    b = GetFeature(FID_GODMODE);
-    if (ImGui::Checkbox("玩家无敌", &b)) SetFeature(FID_GODMODE, b);
-    ImGui::SameLine(220);
-    b = GetFeature(FID_MAP);
-    if (ImGui::Checkbox("全图（去迷雾）", &b)) SetFeature(FID_MAP, b);
-    b = GetFeature(FID_UNITAMMO);
-    if (ImGui::Checkbox("选中单位弹药满", &b)) SetFeature(FID_UNITAMMO, b);
-    ImGui::SameLine(220);
-    b = GetFeature(FID_SUPERPOWER);
-    if (ImGui::Checkbox("超武就绪", &b)) SetFeature(FID_SUPERPOWER, b);
-    b = GetFeature(FID_DISABLESP);
-    if (ImGui::Checkbox("禁用敌方超武", &b)) SetFeature(FID_DISABLESP, b);
-    ImGui::SameLine(220);
-    b = GetFeature(FID_ENEMYBUILD);
-    if (ImGui::Checkbox("敌方无法建造", &b)) SetFeature(FID_ENEMYBUILD, b);
-
-    ImGui::Separator();
-    ImGui::Text("危险等级:");
-    ImGui::SameLine();
-    const int dg = g_flags[FID_DANGER];
-    if (ImGui::RadioButton("不干预", dg == 0)) g_flags[FID_DANGER] = 0;
-    ImGui::SameLine();
-    if (ImGui::RadioButton("最高", dg == 1)) g_flags[FID_DANGER] = 1;
-    ImGui::SameLine();
-    if (ImGui::RadioButton("最低", dg == 2)) g_flags[FID_DANGER] = 2;
-
-    ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "组合 / 其它");
-    {
-        bool km = GetFeature(FID_KILLMODE);
-        if (ImGui::Checkbox("秒杀模式（敌方单位即死）", &km)) {
-            SetFeature(FID_KILLMODE, km);
-            AddLog(km ? LOG_OK : LOG_INFO, "[秒杀] %s", km ? "开" : "关");
-        }
-        bool zi = GetFeature(FID_ZOOM_IN), zo = GetFeature(FID_ZOOM_OUT);
-        if (ImGui::Checkbox("视野放大", &zi)) { SetFeature(FID_ZOOM_IN, zi); if (zi) SetFeature(FID_ZOOM_OUT, false); }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("视野缩小", &zo)) { SetFeature(FID_ZOOM_OUT, zo); if (zo) SetFeature(FID_ZOOM_IN, false); }
-        if (ImGui::Button("复制选中单位 → 光标处", ImVec2(180, 0))) {
-            int r = ActCopySelected();
-            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[复制] 选中单位副本 %s", r > 0 ? "已生成" : "失败");
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("预设增援 ×8", ImVec2(140, 0))) {
-            int r = ActSummonSquad();
-            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[预设增援] %s", r > 0 ? "已生成 ×8" : "失败");
-        }
-        ImGui::TextDisabled("「复制」= 把你选中的单位类型新造一个到光标处；"
-                            "「收编」= 把选中（敌方）单位改成你的");
-    }
-
-    ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "选中单位操作");
-    ImGui::TextDisabled("需要先在游戏里选中单位（受影响的单位数会记到输出记录）");
-    if (ImGui::Button("超速", ImVec2(70, 0))) LogAct("超速", ActSpeed(0));
-    ImGui::SameLine();
-    if (ImGui::Button("慢速", ImVec2(70, 0))) LogAct("慢速", ActSpeed(1));
-    ImGui::SameLine();
-    if (ImGui::Button("定住", ImVec2(70, 0))) LogAct("定住", ActSpeed(2));
-    ImGui::SameLine();
-    if (ImGui::Button("恢复速度", ImVec2(86, 0))) LogAct("恢复速度", ActSpeed(3));
-    ImGui::SameLine();
-    if (ImGui::Button("满级升级", ImVec2(86, 0))) LogAct("满级升级", ActRank());
-
-    if (ImGui::Button("无敌", ImVec2(70, 0))) LogAct("无敌", ActHealth(0));
-    ImGui::SameLine();
-    if (ImGui::Button("残血", ImVec2(70, 0))) LogAct("残血", ActHealth(1));
-    ImGui::SameLine();
-    if (ImGui::Button("恢复血量", ImVec2(86, 0))) LogAct("恢复血量", ActHealth(2));
-    ImGui::SameLine();
-    if (ImGui::Button("收编敌方(改归属)", ImVec2(120, 0))) LogAct("收编敌方", ActSetOwner());
-
-    if (ImGui::Button("摧毁选中", ImVec2(86, 0))) LogAct("摧毁选中", ActKillSelected());
-    ImGui::SameLine();
-    if (ImGui::Button("召唤基地车", ImVec2(100, 0))) {
-        bool ok = SummonMCV();
-        AddLog(ok ? LOG_OK : LOG_WARN, "[召唤] 基地车 %s", ok ? "已生成" : "失败（看是否已进局/已选中）");
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("选中 %d 个", SelectedCount());
-
-    ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "空投箱（拾取类奖励）");
-    ImGui::TextDisabled("在落点刷出箱子，单位走过去随机出货");
-    if (g_crateIdx >= kCrateCount) g_crateIdx = 0;
-    static char crateItems[4096];
-    if (!crateItems[0]) {
-        size_t w = 0;
-        for (int i = 0; i < kCrateCount && w < sizeof(crateItems) - 64; ++i) {
-            int n = snprintf(crateItems + w, sizeof(crateItems) - w, "%s (%s)",
-                             kCrates[i].name, kCrates[i].id);
-            if (n <= 0) break;
-            w += (size_t)n + 1;
-            crateItems[w - 1] = '\0';
-        }
-        crateItems[sizeof(crateItems) - 1] = '\0';
-    }
-    ImGui::SetNextItemWidth(300);
-    ImGui::Combo("箱子类型", &g_crateIdx, crateItems);
-    ImGui::SetNextItemWidth(90);
-    ImGui::DragInt("数量", &g_crateCount, 1, 1, 20);
-    ImGui::SameLine();
-    if (ImGui::Button("立即空投", ImVec2(100, 0))) DropCrate(g_owner, g_crateCount, true);
-    ImGui::SameLine();
-    ImGui::Checkbox("自动空投", &g_crateAuto);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(110);
-    ImGui::DragFloat("间隔(秒)", &g_cratePeriod, 1.f, 3.f, 300.f, "%.0f");
-}
-
 // ===== 面板：单位操作（2026-10-15 重排）=====
-// 按钮顺序：升级单位 / 锁定血量 / 无限血量 / 加速 ‖ 恢复速度 / 减速 / 定住单位 / 接管单位 / 摧毁单位
+// 布局：无限弹药 / 复制 ‖ 升级单位 / 锁定血量 / 无限血量 / 恢复血量 ‖ 移速滑条 + 恢复原速 ‖ 接管单位 / 摧毁单位
 // 秒杀模式、We Need Back 已按需求移除；无限弹药与复制移到按钮区（秒杀原位置）。
+// 移速原为「加速 / 减速 / 定住单位 / 恢复速度」四个按钮，改为一根滑条：0 = 定住，右端 = 原「超速」。
 void PanelUnitOps() {
     ImGui::Text("选中 %d 个单位", SelectedCount());
     ImGui::SameLine();
@@ -1019,14 +1156,14 @@ void PanelUnitOps() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("开关：选中单位的弹药保持满弹（亮色=已开启）");
     ImGui::SameLine();
-    if (ImGui::Button("复制单位 → 光标处", ImVec2(-1, 0))) {
+    if (ImGui::Button("复制单位", ImVec2(-1, 0))) {
         int r = ActCopySelected();
         AddLog(r > 0 ? LOG_OK : LOG_WARN, "[复制] 选中单位副本 %s", r > 0 ? "已生成" : "失败");
     }
 
     ImGui::Separator();
 
-    // —— 第 1 排：升级 / 血量 / 加速 ——
+    // —— 第 1 排：升级 / 血量 ——
     if (ImGui::Button("升级单位", ImVec2(84, 0))) LogAct("升级单位", ActRank());
     ImGui::SameLine();
     const bool hpLocked = g_hpLock;                  // 同上：取点击前的副本
@@ -1045,21 +1182,72 @@ void PanelUnitOps() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("一次性把血量写成极大值（打不死）");
     ImGui::SameLine();
-    if (ImGui::Button("加速", ImVec2(84, 0))) LogAct("加速", ActSpeed(0));
+    if (ImGui::Button("恢复血量", ImVec2(84, 0))) LogAct("恢复血量", ActHealth(2));
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("恢复单位HP，重置HP上限");
 
-    // —— 第 2 排：速度 / 归属 / 摧毁 ——
-    if (ImGui::Button("恢复速度", ImVec2(84, 0))) LogAct("恢复速度", ActSpeed(3));
+    // —— 第 2 排：移速滑条（0 = 定住，越大越快；松开鼠标或回车才写入）——
+    static float s_speedSlider = 0.f;
+    ImGui::SetNextItemWidth(-124.f);
+    ImGui::SliderFloat("移速", &s_speedSlider, 0.f, 1000.f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+    const bool speedApply = ImGui::IsItemDeactivated();
+    if (ImGui::IsItemHovered()) {
+        const float cur = SelectedFirstSpeed();
+        if (cur >= 0.f)
+            ImGui::SetTooltip("选中单位的移动速度：0 = 定住，越大越快\n"
+                              "松开鼠标或回车才写入\n首个选中单位当前速度：%.0f", cur);
+        else
+            ImGui::SetTooltip("选中单位的移动速度：0 = 定住，越大越快\n"
+                              "松开鼠标或回车才写入");
+    }
     ImGui::SameLine();
-    if (ImGui::Button("减速", ImVec2(84, 0))) LogAct("减速", ActSpeed(1));
-    ImGui::SameLine();
-    if (ImGui::Button("定住单位", ImVec2(84, 0))) LogAct("定住单位", ActSpeed(2));
-    ImGui::SameLine();
+    if (ImGui::Button("恢复原速", ImVec2(-1, 0))) LogAct("恢复速度", ActSpeed(3));
+    if (speedApply) LogAct("移速", ActSpeedValue(s_speedSlider));
+
+    // —— 第 3 排：归属 / 摧毁 ——
     if (ImGui::Button("接管单位", ImVec2(84, 0))) LogAct("接管单位", ActSetOwner());
     ImGui::SameLine();
     if (ImGui::Button("摧毁单位", ImVec2(84, 0))) LogAct("摧毁单位", ActKillSelected());
+
+    // —— 第 4 排：单位状态（表驱动；效果 = 引擎 modifier + ObjectStatus，全部可撤）——
+    ImGui::Separator();
+    ImGui::TextDisabled("单位状态");
+    static int s_usKind = US_IRONCURTAIN;
+    static int s_usSec  = 60;
+    static char s_usItems[192] = { 0 };     // 从状态表构建，避免手抄顺序与表不同步
+    if (!s_usItems[0]) {
+        char* p = s_usItems;
+        for (int i = 0; i < US_COUNT; ++i) {
+            const char* nm = UnitStatusName(i);
+            const size_t len = strlen(nm) + 1;             // 含 ImGui 分隔用的 \0
+            if (p + len < s_usItems + sizeof(s_usItems)) { memcpy(p, nm, len); p += len; }
+        }
+        *p = 0;                                            // 末尾补 \0 → 双 \0 收尾
+    }
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::Combo("##us", &s_usKind, s_usItems);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", UnitStatusTip(s_usKind));
+    ImGui::SetNextItemWidth(84.f);
+    ImGui::InputInt("##ussec", &s_usSec, 1, 10);
+    if (s_usSec < 1) s_usSec = 1;
+    if (s_usSec > 600) s_usSec = 600;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("状态时长（秒）；到点由引擎自动撤");
+    ImGui::SameLine();
+    ImGui::TextDisabled("秒");
+    ImGui::SameLine();
+    if (ImGui::Button("施加", ImVec2(-1, 0))) LogAct("施加状态", ActUnitStatus(s_usKind, 1, s_usSec));
+    if (ImGui::Button("解除", ImVec2(84, 0))) LogAct("解除状态", ActUnitStatus(s_usKind, 0, 0));
+    ImGui::SameLine();
+    if (ImGui::Button("重置单位状态", ImVec2(-1, 0))) LogAct("重置单位状态", ActStatusReset());
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("撤掉全部已知状态（铁幕 / 无敌 / 易碎 / 加速减速…）\n"
+                          "同时恢复移动速度、血量回满\n"
+                          "重复施加过的状态需按同次数解除（引擎一次只撤一层）");
 }
 
-// ===== 新面板：杂项操作（从 TabBattle 拆出，2026-10-15 UI 改版）=====
+// ===== 面板：杂项操作（作用于全局的开关）=====
 void PanelMisc() {
     bool b;
     b = GetFeature(FID_GODMODE);
@@ -1081,6 +1269,21 @@ void PanelMisc() {
     if (ImGui::RadioButton("最高", dg == 1)) g_flags[FID_DANGER] = 1;
     ImGui::SameLine();
     if (ImGui::RadioButton("最低", dg == 2)) g_flags[FID_DANGER] = 2;
+    ImGui::Separator();
+    {
+        bool km = GetFeature(FID_KILLMODE);
+        if (ImGui::Checkbox("秒杀模式（敌方单位即死）", &km)) {
+            SetFeature(FID_KILLMODE, km);
+            AddLog(km ? LOG_OK : LOG_INFO, "[秒杀] %s", km ? "开" : "关");
+        }
+        // hook base+0x1EC7CD 的 movss [esi+44],xmm0：开启后对镜头距离做 fadd。
+        // （CE 侧同一功能只用这一个标志位；另一条 fsub 分支无对应 UI。）
+        bool zi = GetFeature(FID_ZOOM_IN);
+        if (ImGui::Checkbox("无限缩放", &zi)) {
+            SetFeature(FID_ZOOM_IN, zi);
+            AddLog(zi ? LOG_OK : LOG_INFO, "[缩放] 无限缩放 %s", zi ? "开" : "关");
+        }
+    }
 }
 
 // ===== 面板：脑机接口（MCP）=====
@@ -1334,9 +1537,9 @@ void TabSettings() {
     ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "安全护栏");
     {
         bool dr = GetDryRun();
-        if (ImGui::Checkbox("演练模式（只记录、不改内存）", &dr)) {
+        if (ImGui::Checkbox("dry-run（只记录、不改内存）", &dr)) {
             SetDryRun(dr);
-            AddLog(dr ? LOG_WARN : LOG_OK, "[护栏] 演练模式 %s", dr ? "已开启（不会真的改内存）" : "已关闭");
+            AddLog(dr ? LOG_WARN : LOG_OK, "[护栏] dry-run %s", dr ? "已开启（不会真的改内存）" : "已关闭");
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("怀疑某个功能导致闪退时打开它：只会往输出记录里写\n"
@@ -1359,7 +1562,7 @@ void TabSettings() {
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("开启后：每条输出记录 + 每个动作都带「时间 / 帧号 / 级别」写进日志文件，\n"
-                              "另有每 5 秒一条的心跳（帧号 / 选中数 / 资金 / 钩子数）。\n"
+                              "另有每 5 秒一条的心跳（帧号 / 选中数 / 资金 / hook 数）。\n"
                               "崩了直接看文件末尾 —— 最后一行就是死掉的那一步。");
         ImGui::SameLine();
         if (ImGui::SmallButton("清空日志")) {
@@ -1376,15 +1579,48 @@ void TabSettings() {
     ImGui::Checkbox("拦截游戏点击（鼠标在菜单上时不穿透到游戏）", &g_cfg.blockInput);
     ImGui::TextDisabled("开启后：点菜单不会同时点到游戏世界，选择/指向不会被清掉");
     ImGui::SetNextItemWidth(220);
-    ImGui::Combo("落点来源", &g_cfg.posMode, "视角中心(相机)\0选中单位\0游戏光标\0");
-    ImGui::TextDisabled("召唤 / 复制的落点。复制优先落在鼠标处；面板挡住位置时退化为视角中心");
+    ImGui::Combo("落点来源", &g_cfg.posMode, "视野中心\0选中单位\0游戏光标\0");
+    ImGui::TextDisabled("召唤 / 复制的落点。视野中心 = 屏幕正中看出去的地面点（含地形高度）");
 
-    // ===== 快捷键（两列并排，各带滚动）=====
+    // ===== 诊断 =====
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "诊断");
+    ImGui::Text("功能 hook: %d/%d 安装（AOB 通过 %d）", g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk);
+    if (g_hookSt.failed[0]) ImGui::TextWrapped("AOB 不符未装: %s", g_hookSt.failed);
+    ImGui::Text("渲染: EndScene=%u  Present=%u  帧=%u", g_telemEndScene, g_telemPresent, g_telemRenderOnce);
+    ImGui::Text("d3d9 函数已 hook: %u（尝试 %u）", g_telemVtablesHooked, g_telemScanRounds);
+    ImGui::Text("游戏窗口: 0x%08X  子类化:%s  ImGui:%s",
+                (unsigned)(uintptr_t)g_ov.wnd, g_telemWndHooked ? "OK" : "NO",
+                g_ov.imguiReady ? "OK" : "NO");
+    ImGui::Text("资金 hook: 进入 %u / 生效 %u", g_telemEnter, g_telemApplied);
+    if (ImGui::Button("诊断（写入输出记录）", ImVec2(200, 0))) DiagReport();
+    ImGui::SameLine();
+    ImGui::TextDisabled("点一下，把召唤链路每步的值打进日志");
+
+    // ===== 快捷键（可开关 / 可改键，两列并排，各带滚动）=====
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "快捷键");
-    ImGui::TextDisabled("INSERT 显示或隐藏本菜单");
+    ImGui::TextDisabled("INSERT 显示或隐藏本菜单（固定，不可改）");
     {
-        const int hkTotal = (int)(sizeof(kHK) / sizeof(kHK[0]));
+        bool en = g_hkEnabled != 0;
+        if (ImGui::Checkbox("启用功能快捷键", &en)) {
+            g_hkEnabled = en ? 1 : 0;
+            SaveKeyBinds();
+            AddLog(en ? LOG_OK : LOG_INFO, "[快捷键] 功能热键 %s", en ? "已启用" : "已停用");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("恢复默认")) {
+            HKResetDefaults();
+            InterlockedExchange(&g_hkRebind, -1);
+            SaveKeyBinds();
+            AddLog(LOG_OK, "[快捷键] 已恢复默认绑定");
+        }
+        if (g_hkRebind >= 0) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.30f, 1.f), "按下新键…（Esc 取消）");
+        }
+        ImGui::TextDisabled("点按键名即可改键（Esc 取消），改动立即存盘");
+        const int hkTotal = kHKCount;
         const int half = (hkTotal + 1) / 2;
         const float ch = ImGui::GetTextLineHeightWithSpacing() * (float)half + 10.0f;
         if (ImGui::BeginTable("##hktwo", 2, ImGuiTableFlags_SizingStretchSame)) {
@@ -1395,8 +1631,18 @@ void TabSettings() {
                 const int lo = col * half;
                 const int hi = (col == 0) ? half : hkTotal;
                 for (int i = lo; i < hi; ++i) {
-                    ImGui::Text("%-9s", kHK[i].label);
-                    ImGui::SameLine(84);
+                    ImGui::PushID(i);
+                    if (g_hkRebind == i) {
+                        ImGui::Button("按新键…", ImVec2(100, 0));
+                    } else {
+                        char lbl[32] = { 0 }; HKLabel(i, lbl, sizeof(lbl));
+                        if (ImGui::Button(lbl, ImVec2(100, 0))) {
+                            InterlockedExchange(&g_hkRebind, i);
+                            AddLog(LOG_INFO, "[快捷键] 请按下「%s」的新按键（Esc 取消）", kHK[i].desc);
+                        }
+                    }
+                    ImGui::PopID();
+                    ImGui::SameLine(108);
                     ImGui::TextDisabled("%s", kHK[i].desc);
                 }
                 ImGui::EndChild();
@@ -1413,24 +1659,6 @@ void TabSettings() {
     ImGui::TextDisabled("仓库：https://github.com/ProbiusOfficial/Ra3-Copilot");
 }
 
-void TabStatus() {
-    ImGui::Text("功能钩子: %d/%d 安装（AOB 通过 %d）",
-                g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk);
-    if (g_hookSt.failed[0]) ImGui::TextWrapped("AOB 不符未装: %s", g_hookSt.failed);
-    ImGui::Separator();
-    ImGui::Text("渲染: EndScene=%u  Present=%u  帧=%u",
-                g_telemEndScene, g_telemPresent, g_telemRenderOnce);
-    ImGui::Text("d3d9 函数已 hook: %u（尝试 %u）", g_telemVtablesHooked, g_telemScanRounds);
-    ImGui::Text("游戏窗口: 0x%08X  子类化:%s  ImGui:%s",
-                (unsigned)(uintptr_t)g_ov.wnd, g_telemWndHooked ? "OK" : "NO",
-                g_ov.imguiReady ? "OK" : "NO");
-    ImGui::Text("资金钩子: 进入 %u / 生效 %u", g_telemEnter, g_telemApplied);
-    ImGui::Separator();
-    if (ImGui::Button("诊断（写入输出记录）", ImVec2(200, 0))) DiagReport();
-    ImGui::SameLine();
-    ImGui::TextDisabled("点一下，把召唤链路每步的值打进日志");
-}
-
 // 每帧逻辑：与「菜单是否可见」无关。
 // Present 与 SwapChain::Present 可能对同一帧各触发一次 → 用毫秒戳去重。
 void OverlayTick() {
@@ -1442,6 +1670,7 @@ void OverlayTick() {
 
     HttpApiPump();                    // 执行调试接口投递过来的命令（本线程=游戏主线程）
     PostProcPump();                   // 到期补跑"创建后处理"（登记召唤物进玩家体系）
+    HKMsgTick();                      // 改键结果 → 输出记录（日志只在渲染线程写）
     ++g_tickNow;                      // 帧计数（选中单位新鲜度判断用）
     g_logClock += dt;
     // 详细日志：每 5 秒一条心跳（只落盘、不进 UI 日志环）。
@@ -1451,7 +1680,7 @@ void OverlayTick() {
         lastBeat = g_logClock;
         char hb[176];
         _snprintf_s(hb, sizeof(hb), _TRUNCATE,
-                    "[心跳] 帧=%u 选中=%d 资金=%d 钩子=%d/%d 护栏跳过=%d",
+                    "[心跳] 帧=%u 选中=%d 资金=%d hook=%d/%d 护栏跳过=%d",
                     (unsigned)g_tickNow, SelectedCount(), (int)LocalMoney(),
                     g_hookSt.installed, g_hookSt.total, GuardSkips());
         WriteDiskLog(LOG_INFO, hb);
@@ -1462,16 +1691,12 @@ void OverlayTick() {
     if (g_moneyLock && LocalPlayerReady()) MoneySet(g_moneyLockVal);
     // 血量锁定：每帧把选中单位血量回写到其上限
     if (g_hpLock) LockSelectedHealth();
-    // 自动空投
-    if (g_crateAuto) {
-        g_crateTimer += dt;
-        if (g_crateTimer >= g_cratePeriod) { g_crateTimer = 0.f; DropCrate(g_owner, 2, true); }
-    }
 }
 
 // ---- 各面板显隐（多浮动面板，2026-10-15 UI 改版）----
-static bool g_pMain = true, g_pRes = true, g_pUnit = true, g_pSummon = true,
-            g_pMisc = true, g_pSet = false, g_pLog = true, g_pAi = false;
+// 默认只展开主面板；子面板由主面板勾选或「全部展开」打开。避免开局一屏铺满 6 个窗口。
+static bool g_pMain = true, g_pRes = false, g_pUnit = false, g_pSummon = false,
+            g_pMisc = false, g_pSet = false, g_pLog = false, g_pAi = false;
 static int  g_rectFill = 0;
 
 // 记录当前窗口矩形（供 WndProc 判断"鼠标是否落在某个面板上"）
@@ -1594,6 +1819,7 @@ void RunHotkey(int id) {
     case HK_ENEMYBUILD:   ToggleFeature(FID_ENEMYBUILD, "敌人无法建造"); break;
     case HK_GODMODE:      ToggleFeature(FID_GODMODE, "玩家无敌"); break;
     case HK_AMMO:         ToggleFeature(FID_UNITAMMO, "选中单位弹药满"); break;
+    case HK_ZOOM:         ToggleFeature(FID_ZOOM_IN, "无限缩放"); break;
     case HK_CHANGEID:     LogAct("接管单位", ActSetOwner()); break;
     case HK_COPY: {
         int r = ActCopySelected();
@@ -1628,6 +1854,12 @@ void RunHotkey(int id) {
         AddLog(ok ? LOG_OK : LOG_WARN, "[召唤] 基地车 %s", ok ? "已生成" : "失败");
         break;
     }
+    case HK_WNB: {
+        int r = ActSummonSquad();
+        if (r > 0) Ding();
+        AddLog(r > 0 ? LOG_OK : LOG_WARN, "[召唤] 预设增援 %s", r > 0 ? "已生成 ×8" : "失败");
+        break;
+    }
     }
 }
 
@@ -1641,21 +1873,61 @@ bool GameFocused() {
 }
 
 DWORD WINAPI InputThread(LPVOID) {
-    const int N = (int)(sizeof(kHK) / sizeof(kHK[0]));
-    bool down[sizeof(kHK) / sizeof(kHK[0])] = { false };
+    bool down[kHKCount] = { false };
+    bool downAll[0x100] = { false };        // 改键捕获用（全键位边沿检测）
+    bool wasCapturing = false;
     bool lastIns = false;
-    for (;;) {
+    while (!g_stopInput) {
         const bool focused = GameFocused();
         const bool ins = focused && (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
         if (ins && !lastIns) g_cfg.visible = !g_cfg.visible;
         lastIns = ins;
 
+        // 改键捕获优先；捕获期间功能热键一律不响应
+        const LONG rb = g_hkRebind;
+        if (rb >= 0) {
+            // 进入捕获时把全键位标记成"已按下" —— 只有**新按下**的键才算数，
+            // 否则点按钮时手还按着别的键会被误捕获。
+            if (!wasCapturing) { for (int vk = 0; vk < 0x100; ++vk) downAll[vk] = true; wasCapturing = true; }
+            const bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool finished = false;
+            for (int vk = 0x08; vk < 0x100 && !finished; ++vk) {
+                if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) continue;   // 修饰键不当主键
+                const bool cur = (GetAsyncKeyState(vk) & 0x8000) != 0;
+                const bool edge = cur && !downAll[vk];
+                downAll[vk] = cur;
+                if (!edge) continue;
+                if (vk == VK_ESCAPE) {
+                    g_hkMsgIdx = -1; g_hkMsgDup = -1; InterlockedExchange(&g_hkMsgKind, 2);
+                    InterlockedExchange(&g_hkRebind, -1); finished = true; break;
+                }
+                const int dup = HKConflict((int)rb, vk, ctrl);
+                if (dup >= 0) {                    // 冲突：保持捕获态，让用户换一个键
+                    g_hkMsgIdx = (int)rb; g_hkMsgDup = dup; InterlockedExchange(&g_hkMsgKind, 3);
+                    break;
+                }
+                kHK[rb].vk = vk; kHK[rb].ctrl = ctrl;
+                SaveKeyBinds();
+                g_hkMsgIdx = (int)rb; g_hkMsgDup = -1; InterlockedExchange(&g_hkMsgKind, 1);
+                InterlockedExchange(&g_hkRebind, -1); finished = true; break;
+            }
+            if (finished) {
+                wasCapturing = false;
+                // 重同步按下状态：刚捕获的键此刻多半还按着，不能立刻被当成一次触发
+                for (int i = 0; i < kHKCount; ++i)
+                    down[i] = focused && (GetAsyncKeyState(kHK[i].vk) & 0x8000) != 0;
+            }
+            Sleep(25);
+            continue;
+        }
+        wasCapturing = false;
+
         const bool ctrl = focused && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < kHKCount; ++i) {
             const bool cur = focused && (GetAsyncKeyState(kHK[i].vk) & 0x8000) != 0;
             const bool edge = cur && !down[i];
             down[i] = cur;
-            if (!edge) continue;
+            if (!g_hkEnabled || !edge) continue;    // 总开关关掉时仍要维护 down[]，避免重开瞬间连发
             if (kHK[i].ctrl != ctrl) continue;      // Ctrl 状态要匹配
             PostHotkey(kHK[i].id);                  // ← 只投递，不在本线程执行
         }
@@ -1667,6 +1939,10 @@ DWORD WINAPI InputThread(LPVOID) {
 } // namespace
 
 // ===================== 对外：召唤 / 空投 =====================
+void RequestUnload() {
+    InterlockedExchange(&g_wantUnload, 1);   // 由渲染线程在下一个 Present 内执行
+}
+
 void OverlayLogLine(int kind, const char* text) { AddLog(kind, "%s", text); }
 
 const char* DiskLogPath() { EnsureLogInit(); return g_logPath; }
@@ -1752,20 +2028,27 @@ bool DropCrate(int ownerPlayer, int count, bool atMouse) {
     return ok;
 }
 
+// 游戏主窗口：优先用渲染侧捕获的句柄；未就绪时现场枚举一次（按进程 + 可见 + 无主窗口）
+HWND GameWindow() {
+    if (g_ov.wnd && IsWindow(g_ov.wnd)) return g_ov.wnd;
+    return FindGameWnd();
+}
+
 void OverlayInit() {
-    SetUnhandledExceptionFilter(Ra3CrashFilter);   // 先装崩溃捕获（崩溃现场落盘，无视日志开关）
+    // 先装崩溃捕获（崩溃现场落盘，无视日志开关）；旧过滤器保存，卸载时还原
+    g_oldFilter = SetUnhandledExceptionFilter(Ra3CrashFilter);
     g_hookSt = InstallHooks();
     SymInit();                          // 符号解析（特征码+结构推导，先于任何动作）
-    AddLog(LOG_OK, "功能钩子 %d/%d 已安装（AOB 通过 %d）",
+    LoadKeyBinds();                     // 快捷键绑定（读 <DLL 目录>\ra3copilot_keys.ini，缺失则用默认）
+    AddLog(LOG_OK, "功能 hook %d/%d 已安装（AOB 通过 %d）",
            g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk);
 
     HttpApiStart(17832);                // 调试接口先起来（/ping 立刻可用；变更类命令等渲染线程）
 
     for (int i = 0; i < 1800 && !GetModuleHandleA("d3d9.dll"); ++i) Sleep(100);
 
-    HANDLE t = CreateThread(nullptr, 0, InputThread, nullptr, 0, nullptr);
-    if (t) CloseHandle(t);
-    AddLog(LOG_INFO, "输入线程已启动（INSERT / F7）");
+    g_inputThread = CreateThread(nullptr, 0, InputThread, nullptr, 0, nullptr);   // 句柄留到卸载时 join
+    AddLog(LOG_INFO, "输入线程已启动（INSERT 显示 / 隐藏菜单）");
 
     InstallRenderHooks();
     g_running = true;

@@ -249,8 +249,9 @@ def t_command_unit(a):
 
 
 def t_build_structure(a):
-    """【建造】把一座建筑直接造在指定世界坐标（建筑有对象代码，用召唤实现）。
-       属『直接建造』——建筑立刻完整出现，不走游戏建造队列，也不检查科技前置/资源。"""
+    """【建造】把一座建筑直接造出来（建筑有对象代码，用召唤实现）。
+       属『直接建造』——建筑立刻完整出现，不走游戏建造队列，也不检查科技前置/资源。
+       落点用 place 指定（默认视野中心）；也可给 x/y/z 指定世界坐标。"""
     unit = a.get("unit") or a.get("structure") or a.get("name") or a.get("hash")
     if not unit:
         return "缺少 unit（建筑名 / 模板名 / 哈希；search_units 可加 cls='建筑' 检索）"
@@ -258,14 +259,15 @@ def t_build_structure(a):
     if not u:
         return "目录里找不到「%s」。用 search_units(cls='建筑') 查准确名字，或直接给 8 位哈希。" % unit
     x, y = a.get("x"), a.get("y")
-    if x is None or y is None:
-        return "建造需要 x 与 y（落点世界坐标）；z 可省（默认 0）"
-    z = 0 if a.get("z") is None else a.get("z")
+    pos = ""
+    if x is not None and y is not None:
+        z = 0 if a.get("z") is None else a.get("z")
+        pos = "&x=%s&y=%s&z=%s" % (x, y, z)
     owner = int(a.get("owner", 0) or 0)
     extra = "&owner=%d" % owner if owner > 0 else ""
-    r = api_post("/summon?hash=%s&count=1&x=%s&y=%s&z=%s%s" % (u["h"], x, y, z, extra))
+    r = api_post("/summon?hash=%s&count=1%s%s%s" % (u["h"], extra, _place_qs(a), pos))
     who = "己方" if owner <= 0 else "玩家#%d" % owner
-    return "建造 %s @(%s, %s, %s) → %s（归属：%s）" % (u["n"], x, y, z, r, who)
+    return "建造 %s → %s（归属：%s）" % (u["n"], r, who)
 
 
 def t_game_state(_):
@@ -297,6 +299,19 @@ def t_search_units(a):
     return "\n".join(lines)
 
 
+_PLACE_ALIAS = {
+    "view": "view", "vision": "view", "视野": "view", "视野中心": "view",
+    "selection": "selection", "selected": "selection", "选中": "selection", "选中单位": "selection",
+    "cursor": "cursor", "mouse": "cursor", "光标": "cursor", "鼠标": "cursor",
+}
+
+
+def _place_qs(a):
+    """落点来源 -> '&place=xxx'（不认识的名字忽略，交给修改器的落点设置兜底）"""
+    p = _PLACE_ALIAS.get(str(a.get("place") or "").strip().lower())
+    return ("&place=" + p) if p else ""
+
+
 def t_summon(a):
     unit = a.get("unit") or a.get("name") or a.get("hash")
     if not unit:
@@ -309,13 +324,12 @@ def t_summon(a):
     owner = int(a.get("owner", 0) or 0)          # 0/缺省 = 本地玩家；>0 = 该玩家索引（见 get_battle_state）
     extra = "&owner=%d" % owner if owner > 0 else ""
     who = "己方" if owner <= 0 else "玩家#%d" % owner
-    pos, where = "", ""
+    pos = ""
     if a.get("x") is not None and a.get("y") is not None:
         z = 0 if a.get("z") is None else a.get("z")
         pos = "&x=%s&y=%s&z=%s" % (a["x"], a["y"], z)
-        where = " @(%s, %s, %s)" % (a["x"], a["y"], z)
-    r = api_post("/summon?hash=%s&count=%d%s%s" % (u["h"], count, extra, pos))
-    return "召唤 %s ×%d%s → %s（归属：%s）" % (u["n"], count, where, r, who)
+    r = api_post("/summon?hash=%s&count=%d%s%s%s" % (u["h"], count, extra, _place_qs(a), pos))
+    return "召唤 %s ×%d → %s（归属：%s）" % (u["n"], count, r, who)
 
 
 def t_drop_crate(a):
@@ -324,8 +338,21 @@ def t_drop_crate(a):
     if not u:
         return "没有这个箱子「%s」。用 search_units(crates_only=true) 看可选箱子（治疗/现金/晋升/各类属性箱）。" % kind
     count = max(1, min(int(a.get("count", 1)), 30))
-    r = api_post("/summon?hash=%s&count=%d" % (u["h"], count))
+    r = api_post("/summon?hash=%s&count=%d%s" % (u["h"], count, _place_qs(a)))
     return "空投 %s ×%d → %s" % (u["n"], count, r)
+
+
+_SPAWN_KINDS = {"view": "/view", "vision": "/view", "视野": "/view", "视野中心": "/view",
+                "selection": "/selected_pos", "selected": "/selected_pos",
+                "选中": "/selected_pos", "选中单位": "/selected_pos",
+                "cursor": "/cursor", "mouse": "/cursor", "光标": "/cursor", "鼠标": "/cursor",
+                "auto": "/spot", "自动": "/spot"}
+
+
+def t_spawn_point(a):
+    """查一个可用落点。which: view 视野中心（默认）/ selection 选中单位 / cursor 光标 / auto 自动挑。"""
+    which = str(a.get("which") or a.get("place") or "view").strip().lower()
+    return api_get(_SPAWN_KINDS.get(which, "/view"))
 
 
 _SEL_ACTIONS = {
@@ -358,6 +385,25 @@ def t_set_units(a):
         else:
             outs.append("health=%s → %s" % (health, api_post("/health?mode=%d" % m)))
     return "\n".join(outs) if outs else "至少给 speed 或 health 一个参数"
+
+
+_STATUS_KINDS = ("ironcurtain", "invulnerable", "speedup", "slow", "brittle", "damageup")
+
+
+def t_unit_status(a):
+    """给选中单位施加/解除引擎状态，或一键重置（撤掉全部状态 + 速度/血量还原）。"""
+    kind = str(a.get("status", "")).strip().lower()
+    if kind == "reset" or a.get("reset"):
+        return "重置单位状态 → %s" % api_post("/status?kind=reset")
+    if kind not in _STATUS_KINDS:
+        return "status 必须是 %s 或 reset" % "/".join(_STATUS_KINDS)
+    on = a.get("on", True)
+    if isinstance(on, str):
+        on = on.strip().lower() not in ("0", "off", "false", "no", "解除")
+    on = 1 if on else 0
+    sec = max(1, min(int(a.get("sec", 60)), 600))
+    return "%s(%s) → %s" % (kind, "apply" if on else "remove",
+                            api_post("/status?kind=%s&on=%d&sec=%d" % (kind, on, sec)))
 
 
 # 功能开关：名字 -> (索引, 说明, 取值范围)
@@ -457,8 +503,11 @@ TOOLS = [
     {
         "name": "summon_unit",
         "description": "召唤单位到战场。unit 可给中文名、模板名或哈希。"
-                       "给 x/y/z 就落在指定世界坐标（不再依赖鼠标光标）；不给则按 光标/选中单位 自动选点。"
-                       "owner 可指定归属（0/缺省=你的阵营；>0 = get_battle_state 里的敌方 idx，用于给对手加兵/测试）。",
+                       "落点用 place 指定：view=视野中心（玩家此刻在看的位置，推荐）、"
+                       "selection=选中单位处、cursor=鼠标处；不给则按修改器的落点设置（默认视野中心）。"
+                       "★ 不要自己编 x/y/z —— 凭空写的世界坐标多半在水面上，单位会生成到海里。"
+                       "确实要指定点，先用 get_spawn_point 或 list_objects 拿真实坐标。"
+                       "owner 可指定归属（0/缺省=你的阵营；>0 = 玩家索引，用于给对手加兵/测试）。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -466,21 +515,40 @@ TOOLS = [
                 "count": {"type": "integer", "description": "数量（默认 1，上限 30）"},
                 "owner": {"type": "integer",
                           "description": "归属：0/缺省=本地玩家；>0 = 玩家索引（见 get_battle_state 的 enemies[].idx）"},
-                "x": {"type": "number", "description": "落点世界坐标 X（给了 x&y 即用指定坐标）"},
+                "place": {"type": "string", "enum": ["view", "selection", "cursor"],
+                          "description": "落点来源：view 视野中心 / selection 选中单位 / cursor 鼠标。缺省=按修改器设置"},
+                "x": {"type": "number", "description": "落点世界坐标 X（仅当你已从 get_spawn_point / list_objects 拿到真实坐标时才用）"},
                 "y": {"type": "number", "description": "落点世界坐标 Y"},
-                "z": {"type": "number", "description": "落点世界坐标 Z（可省，默认 0）"},
+                "z": {"type": "number", "description": "落点世界坐标 Z（可省）"},
             },
             "required": ["unit"],
         },
     },
     {
+        "name": "get_spawn_point",
+        "description": "查一个可用的投放落点（世界坐标）。which: view=视野中心（默认，屏幕正中看出去的地面点，"
+                       "就是玩家此刻在看的位置）、selection=当前选中单位处、cursor=鼠标处、auto=按设置自动挑。"
+                       "返回 water=1 表示该点在水面（别往那儿投陆军/建筑）。"
+                       "★ 想知道『该投哪里』就问这个工具；召唤/建造不给落点时也会自动用视野中心。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "which": {"type": "string", "enum": ["view", "selection", "cursor", "auto"],
+                          "description": "落点来源（默认 view）"},
+            },
+        },
+    },
+    {
         "name": "drop_crate",
-        "description": "空投奖励箱。kind 可为 '治疗'/'现金'/'晋升'/'随机' 等中文名或模板名或哈希。",
+        "description": "空投奖励箱。kind 可为 '治疗'/'现金'/'晋升'/'随机' 等中文名或模板名或哈希。"
+                       "落点用 place 指定（默认视野中心）。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "kind": {"type": "string", "description": "箱子种类（默认随机奖励箱）"},
                 "count": {"type": "integer", "description": "数量（默认 1，上限 30）"},
+                "place": {"type": "string", "enum": ["view", "selection", "cursor"],
+                          "description": "落点来源（缺省=按修改器设置）"},
             },
             "required": ["kind"],
         },
@@ -506,6 +574,24 @@ TOOLS = [
                 "speed": {"type": "string", "enum": ["fast", "slow", "freeze", "restore"]},
                 "health": {"type": "string", "enum": ["god", "hurt", "restore"]},
             },
+        },
+    },
+    {
+        "name": "unit_status",
+        "description": "给当前选中单位施加/解除引擎状态，或一键重置。status: ironcurtain 铁幕（无敌+外观）/ "
+                       "invulnerable 无敌 / speedup 加速 / slow 减速 / "
+                       "brittle 易碎（护甲削弱+血量上限压制）/ damageup 输出增强 / reset 重置全部（撤所有状态，"
+                       "移动速度与血量一并还原）。需要先有选中单位（见 get_battle_state 的 selected）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string",
+                           "enum": ["ironcurtain", "invulnerable", "speedup", "slow",
+                                    "brittle", "damageup", "reset"]},
+                "on": {"type": "boolean", "description": "true=施加（默认）/ false=解除（对 reset 无效）"},
+                "sec": {"type": "integer", "description": "时长（秒，默认 60，上限 600）"},
+            },
+            "required": ["status"],
         },
     },
     {
@@ -599,19 +685,22 @@ TOOLS = [
     },
     {
         "name": "build_structure",
-        "description": "【建造】把一座建筑直接造在指定世界坐标（建筑也有对象代码，等价于召唤）。"
+        "description": "【建造】把一座建筑直接造出来（建筑也有对象代码，等价于召唤）。"
                        "注意：属『直接建造』——建筑立刻完整出现，不走游戏建造队列、不检查科技前置与资源。"
-                       "建筑名用 search_units(cls='建筑') 查。",
+                       "建筑名用 search_units(cls='建筑') 查。落点用 place 指定（默认视野中心），"
+                       "★ 不要自己编 x/y。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "unit": {"type": "string", "description": "建筑名 / 模板名 / 哈希"},
-                "x": {"type": "number", "description": "落点世界坐标 X"},
-                "y": {"type": "number", "description": "落点世界坐标 Y"},
-                "z": {"type": "number", "description": "落点世界坐标 Z（可省，默认 0）"},
+                "place": {"type": "string", "enum": ["view", "selection", "cursor"],
+                          "description": "落点来源（缺省=按修改器设置）"},
+                "x": {"type": "number", "description": "落点世界坐标 X（可选；仅在已有真实坐标时用）"},
+                "y": {"type": "number", "description": "落点世界坐标 Y（可选）"},
+                "z": {"type": "number", "description": "落点世界坐标 Z（可选）"},
                 "owner": {"type": "integer", "description": "归属：0/缺省=本地玩家；>0=玩家索引"},
             },
-            "required": ["unit", "x", "y"],
+            "required": ["unit"],
         },
     },
 ]
@@ -626,8 +715,10 @@ HANDLERS = {
     "search_units": t_search_units,
     "summon_unit": t_summon,
     "drop_crate": t_drop_crate,
+    "get_spawn_point": t_spawn_point,
     "selected_action": t_selected_action,
     "set_units": t_set_units,
+    "unit_status": t_unit_status,
     "toggle_feature": t_toggle_feature,
     "set_freebuild": t_freebuild,
     "get_log": t_log,

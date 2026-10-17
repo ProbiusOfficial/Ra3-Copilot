@@ -2,7 +2,7 @@
 
 面向**红色警戒 3 日冕 Mod**（`ra3_1.12.game`，v1.12.3444.25830，32 位）的注入型进程内作战辅助系统：以局内覆盖层（overlay）形式接入游戏，按 `INSERT` 呼出菜单，提供资源 / 战斗 / 单位 / 召唤 / 空投 / 战场感知 / AI 指挥等能力，并通过 **MCP 脑机接口**把战局开放给 AI。
 
-> 仅用于单机学习与研究。**版本强绑定**：钩子 RVA 硬编码于 v1.12.3444.25830；注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
+> 仅用于单机学习与研究。**版本强绑定**：hook RVA 硬编码于 v1.12.3444.25830；注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
 
 ## 功能一览
 
@@ -24,16 +24,16 @@ injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► ra3copilot.dl
                        ┌────────────────────────────────────┼──────────────────────────┐
                        ▼                                    ▼                          ▼
               features.cpp (功能核)               overlay.cpp (渲染层)            输入线程
-              ├ PlayerId 钩子 0xFF95B              ① 造 dummy window + dummy D3D9 device
+              ├ PlayerId hook 0xFF95B              ① 造 dummy window + dummy D3D9 device
               │   push/ret detour                   ② 读 device vtable[16/17/42]
               │   -> g_localPlayerId                 = Reset/Present/EndScene 的**函数地址**
-              └ Money 钩子 0x6CFDFE                 ③ MinHook inline-hook 这些函数(+SwapChain::Present)
+              └ Money hook 0x6CFDFE                 ③ MinHook inline-hook 这些函数(+SwapChain::Present)
                   E9 detour -> cave -> stub         ④ 销毁 dummy
                   → [player+4] += g_moneyValue      ⑤ 在 Present detour 里用**游戏 device+窗口**
                                                        渲染 ImGui → 再调原 Present
 ```
 
-注入器（x86，与游戏同位数）用 `CreateRemoteThread(LoadLibraryW)` 把 DLL 载入游戏；DLL 随后安装**功能钩子**（AOB 校验 → 代码洞 → detour）与**渲染钩子**（MinHook inline hook）。
+注入器（x86，与游戏同位数）用 `CreateRemoteThread(LoadLibraryW)` 把 DLL 载入游戏；DLL 随后安装**功能 hook**（AOB 校验 → code cave → detour）与**渲染 hook**（MinHook inline hook）。
 
 渲染层 hook 的是 `d3d9` 的 `Present`/`EndScene` **函数本身**（不是改 vtable 数组项、也不是自建窗口），故不抢焦点、切窗口不静音。原理与实测见 [`../docs/局内渲染解决方案.md`](../docs/局内渲染解决方案.md)。
 
@@ -52,7 +52,7 @@ build.bat
 > ② `.bat` 必须 **CRLF 行尾 + 纯 ASCII**（错乱会啃掉行结构）。
 > ③ 64 位进程**无法**向 32 位进程 `CreateRemoteThread` → 注入只能用 `injector.exe`（x86）；Python（64 位）只做诊断（`ReadProcessMemory` 跨位数可用）。
 
-改钩子 / 改 AOB 后，交付前用真实游戏 exe 做字节级预检：
+改 hook / 改 AOB 后，交付前用真实游戏 exe 做字节级预检：
 
 ```
 python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
@@ -77,7 +77,7 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | 单位操作 | 作用于选中单位：无限弹药 / 复制 / 升级 / 锁定血量 / 无限血量 / 恢复血量 / 移速滑条 / 接管 / 摧毁 / 单位状态（铁幕 / 无敌 / 加速 / 减速 / 易碎 / 输出增强 / 重置） |
 | 支援召唤 | 阵营列表 + 单位·箱子列表 + 候选栏；支持中文名 / 拼音（首字母或全拼）/ 模板名 / 类型搜索 |
 | 杂项操作 | 玩家无敌 / 清除迷雾 / 超武就绪 / 禁用敌方超武 / 禁止电脑建造 / 危险等级 / 秒杀模式 / 无限缩放 |
-| 设置 | 背景透明度；安全护栏（演练模式、禁用游戏函数调用）；崩溃日志落盘；鼠标拦截与落点来源；快捷键（总开关、逐条改键、恢复默认） |
+| 设置 | 背景透明度；安全护栏（dry-run、禁用游戏函数调用）；崩溃日志落盘；鼠标拦截与落点来源；快捷键（总开关、逐条改键、恢复默认） |
 | 输出记录 | 带时间戳、按级别着色（信息 / 成功 / 警告 / 错误） |
 | 脑机接口 | MCP 战场态势 + 客户端配置 + AI 调用记录 |
 
@@ -92,14 +92,14 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 
 ## 功能清单
 
-| 分类 | 功能 | 钩子 RVA | 洞内动作 |
+| 分类 | 功能 | hook RVA | cave 内动作 |
 |---|---|---|---|
 | 资金 | 加钱 / 设为指定值 | `0x6CFDFE` | `[player+4]` 加/设（任意值） |
 | | 本地玩家追踪 | `0x0FF95B` | 记录对象指针 + ID |
 | 玩家属性 | 电力满 | `0x6CFD0D` | `[eax+4]=100000` |
 | | 科技点满 | `0x6CFE6C` | `[eax+0x34]=15` |
 | | 全科技 | `0x6CFEB5` | `[edi+0x2c]=400.0f` |
-| | 快速建造 | `0x30F42E` `0x30F38C` `0x2F6CFF` | `[esi+0x1c]=100.0f`（3 钩子） |
+| | 快速建造 | `0x30F42E` `0x30F38C` `0x2F6CFF` | `[esi+0x1c]=100.0f`（3 hook） |
 | 建造 | 敌方无法建造 | `0x30F530` | 敌方 `[eax+4]` 压到 5000 / 1 |
 | 战斗 | 玩家无敌 | `0x12EEDF` | 己方 `[esi+4]=[esi+0xc]=9999999.0f` |
 | | 选中单位弹药满 | `0x128735` | `[ecx+0x1c]=0x7FFFFFFF` |
@@ -111,31 +111,31 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | 地图 | 全图（去迷雾） | `0x3C226C` | `[ebp+0x260]=99999.0f` |
 | | 无限缩放 | `0x1EC7CD` | 镜头距离 `fadd`（`movss [esi+0x44],xmm0`） |
 
-**共 20 个钩子点 / 16 个功能**（`kHooks[]` 20 条），每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 20/20）。
+**共 20 个 hook 点 / 16 个功能**（`kHooks[]` 20 条），每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 20/20）。
 
-**架构：表驱动**（`features.cpp` 的 `kHooks[]`）—— 新增功能 = 表里加一行 + 写一个壳（`stubs.asm`）+ UI 加个勾选框。
+**架构：表驱动**（`features.cpp` 的 `kHooks[]`）—— 新增功能 = 表里加一行 + 写一个 stub（`stubs.asm`）+ UI 加个勾选框。
 
-**免费建造**（`0x0E7565`）是 1 字节补丁（`75 0C` jne → `EB 0C` jmp），不走代码洞；单位操作 / 召唤 / 空投（`actions.cpp`）与 AI 指挥（`aicmd.cpp`）则直调游戏函数。
+**免费建造**（`0x0E7565`）是 1 字节补丁（`75 0C` jne → `EB 0C` jmp），不走 code cave；单位操作 / 召唤 / 空投（`actions.cpp`）与 AI 指挥（`aicmd.cpp`）则直调游戏函数。
 
-**无限缩放**（`Zoom`，`0x1EC7CD`）：挂钩 `movss [esi+44],xmm0`，开启后洞内对该镜头距离做 `fadd`。CE 侧同一功能只用一个标志位（`Ctrl+F8`），本程序据此只暴露一个开关；代码洞里的 `fsub` 分支无对应 UI。
+**无限缩放**（`Zoom`，`0x1EC7CD`）：hook `movss [esi+44],xmm0`，开启后 cave 内对该镜头距离做 `fadd`。CE 侧同一功能只用一个标志位（`Ctrl+F8`），本程序据此只暴露一个开关；code cave 里的 `fsub` 分支无对应 UI。
 
-### 未接线的钩子点
+### 未接线的 hook 点
 
-以下钩子点在 `tools/scan_hooks.py` 已登记 RVA/AOB，但**未进 `kHooks[]`**（未接线）：
+以下 hook 点在 `tools/scan_hooks.py` 已登记 RVA/AOB，但**未进 `kHooks[]`**（未接线）：
 
-| 钩子 | RVA | 备注 |
+| hook | RVA | 备注 |
 |---|---|---|
-| SuperPower2 | `0x43EC19` | 洞内用 `[esp+0x28]` 比较（依赖 pushad 后的栈布局） |
-| DisableAllSP2 | `0x30A5F6` | 该挂钩点只有原指令重放、无改值逻辑 |
+| SuperPower2 | `0x43EC19` | cave 内用 `[esp+0x28]` 比较（依赖 pushad 后的栈布局） |
+| DisableAllSP2 | `0x30A5F6` | 该 hook 点只有原指令重放、无改值逻辑 |
 
 ## 模块清单（`src/`）
 
 | 文件 | 职责 |
 |---|---|
-| `sdk.h` | 钩子 RVA / AOB / 结构偏移常量表 |
-| `hook.h` / `hook.cpp` | 进程内补丁引擎：AOB 校验、代码洞、detour |
-| `stubs.asm` | 钩子壳代码（MASM） |
-| `features.h` / `features.cpp` | 功能核：双钩子（表驱动）+ 资金接口 + 遥测 |
+| `sdk.h` | hook RVA / AOB / 结构偏移常量表 |
+| `hook.h` / `hook.cpp` | 进程内补丁引擎：AOB 校验、code cave、detour |
+| `stubs.asm` | hook stub（MASM） |
+| `features.h` / `features.cpp` | 功能核：双 hook（表驱动）+ 资金接口 + 遥测 |
 | `overlay.h` / `overlay.cpp` | 渲染层：dummy device 取址 → MinHook → 局内绘制；菜单 / 日志 / 面板 |
 | `actions.h` / `actions.cpp` | 单位操作 / 召唤 / 空投：直调游戏函数 + 创建后状态字后处理 |
 | `aicmd.h` / `aicmd.cpp` | AI 指挥：AIUpdate 直调（移动 / 攻击 / 待机） |
@@ -170,12 +170,12 @@ ra3-copilot/
 
 ## 技术要点
 
-### 1. 双钩子
+### 1. 双 hook
 
-**PlayerId 钩子 `0xFF95B`**（6 字节 push/ret detour）：洞内重放原指令后把结果存 `g_localPlayerId`。
+**PlayerId hook `0xFF95B`**（6 字节 push/ret detour）：cave 内重放原指令后把结果存 `g_localPlayerId`。
 该值是**玩家 ID（整数）而非对象指针** —— 战役里 ID=4、遭遇战为 6，**槽位随关卡变**，不可硬编码。
 
-**Money 钩子 `0x6CFDFE`**（5 字节 E9 detour → cave → 68/C3 → stub）：
+**Money hook `0x6CFDFE`**（5 字节 E9 detour → cave → 68/C3 → stub）：
 
 ```
 pushad/pushfd                  全保现场
@@ -202,15 +202,15 @@ jmp  [g_retMoney]              间接跳回（无 ±2GB 限制）
 
 **双条件 OR 是关键设计**：该全局量到底存 ID 还是指针，静态分析无法 100% 确定，OR 两种都兼容。
 
-### 2. 壳代码编译进 DLL
+### 2. stub 编译进 DLL
 
-壳写成 MASM 过程编进 DLL `.text`：
+stub 写成 MASM 过程编进 DLL `.text`：
 - 全局变量引用 → `8B 0D <abs>` + **PE 重定位表**自动补址
 - 跳回游戏 → `FF 25 <abs>` 间接跳，**无距离限制**
 - detour 三段：游戏 `E9` → cave → `68/C3` 绝对跳 → stub
 
 > **MASM 陷阱**：整数**默认十进制**！`[eax+28]` 会被编成 `[eax+1Ch]`（0x1C=28），
-> 十六进制必须写 `28h`。壳代码**必须 `dumpbin /disasm` 逐字节核对**。
+> 十六进制必须写 `28h`。stub**必须 `dumpbin /disasm` 逐字节核对**。
 
 ### 3. 渲染层
 
@@ -218,7 +218,7 @@ jmp  [g_retMoney]              间接跳回（无 ±2GB 限制）
 - `RegisterClassExW`(`ra3copilot_overlay_dummy`) + `CreateWindowExW` 建 **dummy 窗口**（64×64，用完即毁）
 - `GetProcAddress(d3d9,"Direct3DCreate9")` → `IDirect3D9` → 对顶点处理 flag `{0x40,0x80,0x20}` 各 `CreateDevice`
   （另试 `Direct3DCreate9Ex`/`CreateDeviceEx`）→ 从 dummy device 读 `vtable[16/17/42]` = `Reset/Present/EndScene` 的**函数地址**
-- `HookFunction()` 用 `MH_CreateHook(函数地址, detour, &原函数)` 挂钩（去重：同一地址只挂一次）→ 再经 `GetSwapChain(0)` 挂 `SwapChain::Present`(`vtable[3]`)
+- `HookFunction()` 用 `MH_CreateHook(函数地址, detour, &原函数)` hook（去重：同一地址只挂一次）→ 再经 `GetSwapChain(0)` 挂 `SwapChain::Present`(`vtable[3]`)
 - 销毁 dummy，`MH_EnableHook(MH_ALL_HOOKS)`
 - `HookPresent` 内：首帧 `EnsureImGui(dev)`（窗口来自 `dev->GetCreationParameters().hFocusWindow`，
   兜底 `FindWindowW(L"Command & Conquer(tm) Red Alert(tm) 3")` → `EnumWindows` → `GetForegroundWindow`；
@@ -228,7 +228,7 @@ jmp  [g_retMoney]              间接跳回（无 ±2GB 限制）
 
 ### 4. fail-closed 安全阀
 
-两处钩子安装前都做 **AOB 字节级校验**（`03 78 04 8B 11` / `8B 50 28 8B 42 20`），不符**绝不 patch**。
+两处 hook 安装前都做 **AOB 字节级校验**（`03 78 04 8B 11` / `8B 50 28 8B 42 20`），不符**绝不 patch**。
 
 ### 5. 符号解析
 
@@ -236,8 +236,8 @@ jmp  [g_retMoney]              间接跳回（无 ±2GB 限制）
 
 ## 已知限制
 
-- **版本绑定**：钩子 RVA 硬编码于 v1.12.3444.25830（AOB fail-closed 优雅失败）
-- **观战模式**：资金钩子自动失效（设计如此）
+- **版本绑定**：hook RVA 硬编码于 v1.12.3444.25830（AOB fail-closed 优雅失败）
+- **观战模式**：资金 hook 自动失效（设计如此）
 - **窗口不记忆位置/尺寸**；字体不随缩放变化（仅控件缩放）
 - **未提供卸载**（进程退出自动清理）
-- 详细内存版图 / 钩子清单见 [`../docs/单位操作与召唤-已接入.md`](../docs/单位操作与召唤-已接入.md)、[`../docs/开发铁律.md`](../docs/开发铁律.md)
+- 详细内存版图 / hook 清单见 [`../docs/单位操作与召唤-已接入.md`](../docs/单位操作与召唤-已接入.md)、[`../docs/开发铁律.md`](../docs/开发铁律.md)

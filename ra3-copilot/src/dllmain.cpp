@@ -4,13 +4,14 @@
 #include "overlay.h"
 
 static DWORD WINAPI WorkerThread(LPVOID) {
-    // 一站式初始化：功能钩子 -> 等窗口 -> WndProc hook -> D3D9 vtable hook -> 输入线程
+    // 一站式初始化：功能 hook -> 等窗口 -> WndProc hook -> D3D9 vtable hook -> 输入线程
     ra3::OverlayInit();
     return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
+        ra3::g_hSelf = hModule;   // 热重载自卸载（FreeLibraryAndExitThread）用
         DisableThreadLibraryCalls(hModule);
         HANDLE t = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
         if (t) CloseHandle(t);

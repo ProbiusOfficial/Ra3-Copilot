@@ -1,0 +1,18 @@
+# 构建产物
+build_out/
+*.obj
+*.dll
+*.exe
+*.map
+
+# 运行时落盘
+ra3copilot_log.txt
+ra3copilot_last*.txt
+inj_out*.txt
+build_log.txt
+
+# 工具输出 / 实验残留
+tools/*_result.txt
+_scan/
+_shots/
+__pycache__/

@@ -6,9 +6,9 @@
 map 缺失时退回"机器码特征提取"（从 cave->stub 的指令里抠绝对地址）。
 
 诊断项：
-  1. 两处钩子补丁字节（0x6CFDFE E9 / 0xFF95B 68..C3）
+  1. 两处 hook 补丁字节（0x6CFDFE E9 / 0xFF95B 68..C3）
   2. 全部全局量：本地玩家 ID/对象、pending 操作、遥测计数
-  3. 结论提示（钩子是否生效、D3D 渲染路径是否活着）
+  3. 结论提示（hook 是否生效、D3D 渲染路径是否活着）
 结果打印并落盘 probe_state_result.txt（提权场景 stdout 会丢）
 """
 import ctypes, os, struct, sys
@@ -153,7 +153,7 @@ def main():
     base = exe[0][1]
     say(f'[*] pid={pid} main module base=0x{base:08x} size={exe[0][2]}')
 
-    # ---- 1. 钩子补丁字节 ----
+    # ---- 1. hook 补丁字节 ----
     sm = base + RVA_MONEY
     b = rd(sm, 5)
     say(f'[*] money site 0x{sm:08x}: {b.hex() if b else "READ-FAIL"}'

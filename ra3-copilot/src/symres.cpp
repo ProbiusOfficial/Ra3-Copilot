@@ -30,6 +30,12 @@ constexpr uint32_t R_MOUSEMAP   = 0x1ED4A0;
 constexpr uint32_t R_THINGFACT  = 0x8E6C58;
 constexpr uint32_t R_SELMGR     = 0x8DB73C;
 constexpr uint32_t R_FREEBUILD  = 0x0E7565;
+constexpr uint32_t R_DRAWSETMC  = 0x12F360;   // Drawable::setModelConditionState (VA 0x52F360)
+constexpr uint32_t R_DRAWSETTINT= 0x12E0F0;   // Drawable::setTintEnvelope       (VA 0x52E0F0)
+constexpr uint32_t R_SETSTATUS  = 0x3274C0;   // Object::SetStatus               (VA 0x7274C0)
+constexpr uint32_t R_APPLYMOD   = 0x3181F0;   // 施加 modifier                  (VA 0x7181F0)
+constexpr uint32_t R_REMOVEMOD  = 0x318300;   // 解除 modifier                  (VA 0x718300)
+constexpr uint32_t R_MODFIND    = 0x0A6BE0;   // modifier 库查表                    (VA 0x4A6BE0)
 
 // ---- 特征码（取自 1.12 实测字节；'x'=精确, '?'=通配）----
 const uint8_t SIG_CREATE[] = { 0x8B,0x4C,0x24,0x08,0x83,0xEC,0x3C,0x53,0x33,0xDB,0x33,0xC0,0x3B,0xCB,0x0F,0x84 };
@@ -44,6 +50,18 @@ const uint8_t SIG_MOUSE[] = { 0x81,0xEC,0xD0,0x00,0x00,0x00,0x83,0xBC,0x24,0xD4,
 const char    MSK_MOUSE[] = "xxxxxxxxxxxxxx";
 const uint8_t SIG_FREE[] = { 0x75,0x0C,0xB8,0x02,0x00,0x00,0x00,0x5B,0x83,0xC4,0x0C,0xC2,0x10,0x00,0x33,0xC0,0x38,0x44,0x24,0x07 };
 const char    MSK_FREE[] = "xxxxxxxxxxxxxxxxxxxx";
+// Drawable::setModelConditionState —— 入口即 `sub esp,3Ch` + `lea edx,[ebp+2DCh]` + `rep movsd`(15 dword)
+// 把 ModelConditionFlags 交回引擎并触发绘制模块通知（raw 写 Drawable+0x264 会被每帧重算覆盖）。
+const uint8_t SIG_DRAWSETMC[] = { 0x83,0xEC,0x3C,0x55,0x56,0x8B,0x74,0x24,0x48,0x8B,0xE9,0x57,0xB9,0x0F,0x00,0x00,0x00,0x8D,0x7C,0x24,0x0C,0x8D,0x95,0xDC,0x02,0x00,0x00 };
+const char    MSK_DRAWSETMC[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxx";
+// Drawable::setTintEnvelope —— 入参 (const float rgb[3])，改模型色调包络
+const uint8_t SIG_DRAWSETTINT[] = { 0x8B,0x44,0x24,0x04,0x53,0x33,0xDB,0x3B,0xC3,0x56,0x8B,0xF1,0x74,0x17,0x6A,0xFE,0x53,0x53,0x50,0xE8,0xE8,0xFE,0xFF,0xFF };
+const char    MSK_DRAWSETTINT[] = "xxxxxxxxxxxxxxxxxxxxxxxx";
+// modifier：施加分发器 + modifier 库查表（两者均为 exe 全文件唯一命中；2026-10-16 取证）
+const uint8_t SIG_APPLYMOD[] = { 0x56,0x57,0x8B,0x7C,0x24,0x0C,0x85,0xFF,0x8B,0xF1,0x75,0x07,0x5F,0x32,0xC0,0x5E,0xC2,0x08,0x00,0x8B,0x8E };
+const char    MSK_APPLYMOD[] = "xxxxxxxxxxxxxxxxxxxxx";
+const uint8_t SIG_MODFIND[]  = { 0x55,0x8B,0x6C,0x24,0x0C,0x85,0xED,0x75 };
+const char    MSK_MODFIND[]  = "xxxxxxxx";
 
 const int kMaxHits = 64;
 
@@ -166,6 +184,8 @@ uintptr_t DeriveSelMgr() {
 struct Slot { uintptr_t addr; const char* how; };
 Slot s_create = { 0, "" }, s_level = { 0, "" }, s_kill = { 0, "" }, s_find = { 0, "" };
 Slot s_mouse = { 0, "" }, s_fact = { 0, "" }, s_sel = { 0, "" }, s_free = { 0, "" };
+Slot s_dmc = { 0, "" }, s_tint = { 0, "" }, s_setst = { 0, "" };
+Slot s_amod = { 0, "" }, s_rmod = { 0, "" }, s_mfind = { 0, "" };
 bool g_inited = false;
 
 uintptr_t ResolveBySig(const uint8_t* sig, const char* mask, int len,
@@ -202,6 +222,25 @@ void SymInit() {
     ResolveBySig(SIG_KILL, MSK_KILL, sizeof(SIG_KILL), R_KILLUNIT, s_kill, "击杀单位解析失败");
     ResolveBySig(SIG_MOUSE, MSK_MOUSE, sizeof(SIG_MOUSE), R_MOUSEMAP, s_mouse, "鼠标地图坐标解析失败");
     ResolveBySig(SIG_FREE, MSK_FREE, sizeof(SIG_FREE), R_FREEBUILD, s_free, "免费建造站点解析失败");
+    ResolveBySig(SIG_DRAWSETMC, MSK_DRAWSETMC, sizeof(SIG_DRAWSETMC), R_DRAWSETMC, s_dmc, "模型条件设置器解析失败");
+    ResolveBySig(SIG_DRAWSETTINT, MSK_DRAWSETTINT, sizeof(SIG_DRAWSETTINT), R_DRAWSETTINT, s_tint, "色调包络设置器解析失败");
+
+    // Object::SetStatus：暂无特征码 —— 直接 RVA（VA 0x7274C0，手工验收与实机多次验证过）
+    s_setst.addr = reinterpret_cast<uintptr_t>(g_img) + R_SETSTATUS;
+    s_setst.how  = "RVA(实测)";
+
+    // modifier 通道：施加/查表有唯一 AOB；解除（0x718300）无签名 → RVA + 入口形态校验
+    ResolveBySig(SIG_APPLYMOD, MSK_APPLYMOD, sizeof(SIG_APPLYMOD), R_APPLYMOD, s_amod, "施加 modifier 解析失败");
+    ResolveBySig(SIG_MODFIND,  MSK_MODFIND,  sizeof(SIG_MODFIND),  R_MODFIND,  s_mfind, "modifier 查表解析失败");
+    {
+        const uintptr_t at = reinterpret_cast<uintptr_t>(g_img) + R_REMOVEMOD;
+        if (LooksLikeFuncEntry(at)) { s_rmod.addr = at; s_rmod.how = "RVA(已校验)"; }
+        else { s_rmod.addr = 0; s_rmod.how = "解析失败"; OverlayLogLine(OVLOG_ERR, "解除 modifier 解析失败"); }
+    }
+    snprintf(buf, sizeof(buf), "[符号] 施加 modifier=%08X(%s) 解除=%08X(%s) 查表=%08X(%s)",
+             (unsigned)s_amod.addr, s_amod.how, (unsigned)s_rmod.addr, s_rmod.how,
+             (unsigned)s_mfind.addr, s_mfind.how);
+    OverlayLogLine((s_amod.addr && s_rmod.addr && s_mfind.addr) ? OVLOG_OK : OVLOG_ERR, buf);
 
     // TmplFind 有两个同形函数 → 用"ThingFactory 推导命中数"来判别真身
     {
@@ -257,6 +296,12 @@ uintptr_t SymMouseMap()   { return s_mouse.addr; }
 uintptr_t SymThingFactory() { return s_fact.addr; }
 uintptr_t SymSelMgr()     { return s_sel.addr; }
 uintptr_t SymFreeBuildSite() { return s_free.addr; }
+uintptr_t SymDrawSetMC()   { return s_dmc.addr; }
+uintptr_t SymDrawSetTint() { return s_tint.addr; }
+uintptr_t SymSetStatus()   { return s_setst.addr; }
+uintptr_t SymApplyModifier()  { return s_amod.addr; }
+uintptr_t SymRemoveModifier() { return s_rmod.addr; }
+uintptr_t SymModifierFind()   { return s_mfind.addr; }
 
 const char* SymHow(const char* name) {
     if (!name) return "";
@@ -268,6 +313,11 @@ const char* SymHow(const char* name) {
     if (strcmp(name, "fact") == 0)   return s_fact.how;
     if (strcmp(name, "sel") == 0)    return s_sel.how;
     if (strcmp(name, "free") == 0)   return s_free.how;
+    if (strcmp(name, "dmc") == 0)    return s_dmc.how;
+    if (strcmp(name, "tint") == 0)   return s_tint.how;
+    if (strcmp(name, "amod") == 0)   return s_amod.how;
+    if (strcmp(name, "rmod") == 0)   return s_rmod.how;
+    if (strcmp(name, "mfind") == 0)  return s_mfind.how;
     return "";
 }
 

@@ -67,7 +67,7 @@ copy /Y build_out\ra3copilot.map ra3copilot.map >nul 2>&1
 
 echo [4/4] Building injector.exe
 cl /nologo /O2 /EHsc /W3 /utf-8 /Fe:injector.exe src\injector.cpp ^
-    /link shell32.lib user32.lib advapi32.lib
+    /link shell32.lib user32.lib advapi32.lib ws2_32.lib
 if errorlevel 1 (
     echo [x] injector build failed
     exit /b 1

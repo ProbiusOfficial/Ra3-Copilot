@@ -20,19 +20,32 @@
 
 ## 二、端点速查
 
-### 只读（立刻返回）
+### 只读
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/ping` | 存活探测，返回 `pong` |
-| GET | `/state`、`/diag` | 状态大体检：模块基址、符号解析结果、相机/落点三来源、选中单位结构、模板查找结果 |
+| GET | `/state`、`/diag` | 状态大体检：模块基址、符号解析结果、相机诊断、落点三来源、选中单位结构、模板查找结果 |
 | GET | `/log?n=40` | 界面「输出记录」的尾部 n 行 |
 | GET | `/read?addr=0x..&n=128` | 内存十六进制 + ASCII 转储（n 上限 256） |
 | GET | `/peek?addr=0x..&type=u32` | 读单值，`type` = `u32`(默认) / `f32` / `u8` / `u16` / `ptr`（ptr 会多解一层） |
 | GET | `/resolve?hash=0x..` | 对象类型哈希 → 模板指针 |
 | GET | `/help` | 全部端点列表 |
 
-### 变更（投递到游戏主线程）
+### 落点查询
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/view` | **视野中心**的世界坐标：屏幕正中看出去命中的地面点，含地形高度 |
+| GET | `/cursor` | 鼠标光标处的世界坐标（⚠️ 光标对象只在鼠标位于游戏窗口内时刷新 —— 玩家切出去时它停在旧值） |
+| GET | `/selected_pos` | 当前选中单位的世界坐标 |
+| GET | `/spot` | 按「落点来源」设置自动挑一个可用落点 |
+
+四个端点都回一行 JSON：`{"ok":1,"kind":"view","x":..,"y":..,"z":..,"water":0,"src":".."}`。
+`water=1` 表示该点在水面（z 贴 0，地图水面高度就是 0）——陆军/建筑投上去会漂在水面上。
+取不到时回 `{"ok":0,...,"why":"no-spawn-point [<逐来源诊断>]"}`。
+
+### 变更
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -41,15 +54,16 @@
 | POST | `/mcv` | 召唤三阵营基地车 |
 | POST | `/capture` | 收编（归属改成本地玩家） |
 | POST | `/kill` | 摧毁选中 |
+| POST | `/status?kind=&on=&sec=` | **单位状态（表驱动）**：`kind` = `ironcurtain`(缺省) / `invulnerable` / `speedup` / `slow` / `brittle` / `damageup`，也认 `0..5` 数字；`kind=reset` = 撤销全部状态 + 速度/血量还原。`on=1` 施加（默认）/ `0` 解除；`sec` = 时长秒（默认 60，上限 600）。全部经引擎 modifier / ObjectStatus 通道 |
 | POST | `/rank` | 满级 |
-| POST | `/speed?mode=0..3` | 0 超速 / 1 慢速 / 2 定住 / 3 恢复 |
+| POST | `/speed?mode=0..3` 或 `/speed?value=0..1000` | `mode`：0 超速 / 1 慢速 / 2 定住 / 3 恢复；`value`：按绝对速度值设置（0 = 定住） |
 | POST | `/health?mode=0..2` | 0 无敌 / 1 残血 / 2 恢复血量 |
-| POST | `/summon?hash=0x..&count=N` | 按哈希召唤单位 |
+| POST | `/summon?hash=0x..&count=N[&owner=idx][&place=view\|selection\|cursor][&x=&y=&z=]` | 按哈希召唤单位。落点：`place` 指定来源；或给 `x/y/z` 指定坐标；都不给则按「落点来源」设置。回执带**实际落点与来源**（`at=.. via=..`） |
 | POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`） |
 | POST | `/toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h` 的 `FeatureIdx`） |
 | POST | `/freebuild?on=0\|1` | 免费建造 |
 | POST | `/poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |
-| POST | `/call?rva=0x..&cc=cdecl\|fc&a0=..&a1=..&a2=..` | 按 RVA 调游戏函数（RE 用，SEH 包裹） |
+| POST | `/call?rva=0x..&cc=cdecl\|fc&a0=..&a1=..&a2=..` | 按 **RVA** 调游戏函数（绝对地址 = 模块基址 + `rva`；RE 用，SEH 包裹） |
 
 ---
 
@@ -59,7 +73,7 @@
 # 探活
 curl http://127.0.0.1:17832/ping
 
-# 状态大体检（推荐第一件事）
+# 状态大体检
 curl http://127.0.0.1:17832/state
 
 # 看日志尾部
@@ -79,7 +93,11 @@ curl -X POST http://127.0.0.1:17832/rank
 curl -X POST http://127.0.0.1:17832/capture
 curl -X POST "http://127.0.0.1:17832/summon?hash=0xC33C66E7&count=3"
 
-# 写内存 / 调函数（RE 现场试探）
+# 单位状态（作用于当前选中单位）
+curl -X POST "http://127.0.0.1:17832/status?kind=ironcurtain"          # 铁幕
+curl -X POST "http://127.0.0.1:17832/status?kind=reset"                # 重置全部状态
+
+# 写内存 / 调函数
 curl -X POST "http://127.0.0.1:17832/poke?addr=0x9E0A1000&type=u32&val=0x00000000"
 curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 ```
@@ -94,7 +112,7 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 
 ---
 
-## 五、构建要点（踩过的坑）
+## 五、构建要点
 
 - `build.bat` 编译列表要带 `src\httpapi.cpp`，`/link` 要加 **`ws2_32.lib`**。
 - `httpapi.cpp` **必须**先定义 `WIN32_LEAN_AND_MEAN`、并把 **`<winsock2.h>` 放在 `<windows.h>` 之前**
@@ -104,16 +122,9 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 
 ---
 
-## 六、当前状态
+## 六、AI 接入与感知端点
 
-- 端点已全部实现并**编译通过**，DLL 已同步到 `ra3-copilot\ra3copilot.dll`（md5 `2eae16fb…`, 745984 B）。
-- 游戏未启动；**下次进对局注入后即可直接用**。
-
----
-
-## 七、v25 增补（2026-10-16）
-
-### 1. 新增端点
+### 1. 端点清单
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -125,14 +136,13 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 | GET | `/ai/status` | AI 通道遥测计数 |
 | GET | `/scratch` | 临时草稿区 |
 | POST | `/order?unit=..&act=attack\|move\|idle` | 指挥单位（AI 控制层） |
-| POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 RVA 调 AI 类方法（RE 用） |
+| POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 **VA**（绝对地址，非 RVA）调任意方法：正统 `thiscall`，`fn=0xVA` / `this=0x..` / `a0..a2` 栈参 / `na` 栈参个数（RE 用） |
 | POST | `/postproc?on=0\|1` | 后处理开关 |
-| POST | `/ai/set?on=0\|1` | （保留）AI 通道标记 |
+| POST | `/ai/set?on=0\|1` | 无实际作用 |
 
-### 2. 常驻监听，无闸门
+### 2. 监听与安全边界
 
-- 监听在**注入即常驻**（`overlay.cpp` 的 `HttpApiStart(17832)`），与任何开关无关。
-- 曾经的"脑机接口开关"只拦带 `&ai=1` 的请求，容易被误当成能力总开关 → **已彻底移除**。
-  现在变更类请求一律放行；`ai=1` 仅作遥测（`g_aiCalls` 计数 + 日志），`g_aiOpen` 恒 1、`g_aiRejects` 恒 0。
-- **安全边界靠"只绑 `127.0.0.1`"**，不靠开关。接入说明见 `docs/AI接入指南.md`。
+- 监听**注入即常驻**（`overlay.cpp` 的 `HttpApiStart(17832)`）。
+- 变更类端点直接执行；`ai=1` 仅作遥测（`g_aiCalls` 计数 + 日志）。
+- **安全边界 = 只绑 `127.0.0.1`**。接入说明见 `docs/AI接入指南.md`。
 

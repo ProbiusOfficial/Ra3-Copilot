@@ -16,6 +16,13 @@ uintptr_t SymLevelUp();        // __fastcall(unit) + cdecl(3, 1, 0)
 uintptr_t SymKillUnit();       // __fastcall(unit) + cdecl(6, 19, 0)
 uintptr_t SymTmplFind();       // __fastcall(store, hash) -> template*
 uintptr_t SymMouseMap();       // 鼠标地图坐标函数
+uintptr_t SymDrawSetMC();      // __thiscall(Drawable*) + (const u32 mc[15], int notify, int) —— Drawable::setModelConditionState
+uintptr_t SymDrawSetTint();    // __thiscall(Drawable*) + (const float rgb[3]) —— Drawable::setTintEnvelope（改模型色调包络）
+uintptr_t SymSetStatus();      // __thiscall(Thing*) + (int status, int on) —— Object::SetStatus（带状态变更通知：音效/行为锁）
+// ---- modifier 通道（VA 0x7181F0 / 0x718300 / 0x4A6BE0；原版引擎自带，与日冕桥无关）----
+uintptr_t SymApplyModifier();  // __thiscall(Thing*) + (AttributeModifier*, int duration) —— 施加；ret 8
+uintptr_t SymRemoveModifier(); // __thiscall(Thing*) + (AttributeModifier*) —— 解除；ret 4
+uintptr_t SymModifierFind();   // __cdecl(容器哈希, 名字哈希, out=0) -> AttributeModifier* —— modifier 库查表
 
 // ---- 全局变量地址（其"值"才是对象指针）----
 uintptr_t SymThingFactory();   // 对象模板库（TheThingFactory）

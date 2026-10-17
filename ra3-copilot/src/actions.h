@@ -11,12 +11,33 @@ uintptr_t GameBase();
 int SelectedCount();
 
 // 单位操作（作用于"当前选中单位"），返回受影响单位数
-int ActSpeed(int mode);    // 0=加速 1=减速 2=定住 3=恢复速度
+int ActSpeed(int mode);         // 0=加速 1=减速 2=定住 3=恢复速度
+int ActSpeedValue(float v);     // 按绝对速度值设置（0=定住，越大越快）；滑条用
+float SelectedFirstSpeed();     // 首个选中单位当前的速度值（读不到返回 -1）；供 UI 显示
 int ActHealth(int mode);   // 0=无限血量(写极大值) 1=残血 2=恢复血量
 int LockSelectedHealth();  // 锁定血量：每帧把选中单位血量回写到上限（由 UI 的开关驱动）
 int ActSetOwner();         // 收编敌方 / 复制到己方（归属改成本地玩家）
 int ActKillSelected();     // 摧毁选中
 int ActRank();             // 满级（调游戏 +0x35C200 单位升级）
+
+// ---- 单位状态（表驱动；作用于选中单位）----
+// 每个状态 =「若干 modifier」+「若干引擎 ObjectStatus」+ 可选的定身 / 易碎联动，
+//   全部经引擎函数施加与解除；**不写 Thing+0x0CC/0x26C/0x274**（引擎槽位内部字段，每帧自查自写）。
+enum {
+    US_IRONCURTAIN = 0,   // 铁幕：无敌 + 铁幕外观
+    US_INVULNERABLE,      // 无敌
+    US_SPEEDUP,           // 加速
+    US_SLOW,              // 减速
+    US_BRITTLE,           // 易碎：护甲削弱 + 血量上限压制
+    US_DAMAGEUP,          // 输出增强
+    US_COUNT
+};
+// seconds <= 0 时取该状态的默认时长。返回受影响单位数。
+int  ActUnitStatus(int kind, int on, int seconds);
+// 重置：解除全部已知 modifier + 清全部 ObjectStatus + 行为解锁 + 速度还原 + 血量回满
+int  ActStatusReset();
+const char* UnitStatusName(int kind);   // UI 下拉用显示名
+const char* UnitStatusTip(int kind);    // UI 悬浮说明
 
 // 召唤：按对象类型哈希在落点生成单位（落点=首个选中单位处，否则鼠标光标处）
 // owner：0=己方（本地玩家）
@@ -27,6 +48,16 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
 int LastCreatedObjs(uintptr_t* out, int max);
 // 指定召唤落点：下一次召唤生效一次后自动清除（跨线程安全；供 /summon?x=&y=&z= 用）
 void SetSummonPosOverride(bool on, float x, float y, float z);
+
+// ---- 落点来源（2026-10-16）----
+// 一次性指定落点来源，下一单召唤生效后自动清除：0=视野中心 1=选中单位 2=光标
+//   （供 /summon?place=view|selection|cursor；不给则按 UI 的「落点来源」设置）
+void SetSummonPlace(int mode);
+// 最近一次召唤**实际用到的**落点与来源（供 /summon 回执，调用方知道"投到哪了"）
+void LastSpawnPos(float out[4], const char** src);
+// 落点查询，写一行 JSON：kind 0=视野中心 1=选中单位 2=光标 3=按设置自动挑。
+//   ⚠️ 会调用游戏换算函数 → 必须投递到渲染线程执行。返回写入长度。
+int  SpawnPointJson(char* buf, int n, int kind);
 bool SummonMCV();          // 召唤三阵营基地车各一辆
 int  ActCopySelected();    // 复制选中单位（按"当前对象哈希"创建 1 个）
 int  ActSummonSquad();     // 召唤预设单位 ×8（基于 CE 的 We Need Back）
@@ -47,6 +78,7 @@ bool PostProcessCall(uintptr_t team, uintptr_t obj, bool runA, bool runB);
 //   SummonByHash 只入队；渲染线程每帧调 PostProcPump() 到期补跑。
 void QueuePostProcess(uintptr_t team, uintptr_t thing);
 void PostProcPump();
+
 bool GetPostProcOn();                 // 是否让 SummonByHash 也走这条链（默认开）
 void SetPostProcOn(bool on);
 const char* PostProcLastError();
@@ -81,7 +113,7 @@ uintptr_t ResolveTemplate(uint32_t hash);
 const char* SummonLastError();
 
 // ---- 安全护栏 ----
-bool SetDryRun(bool on);   // 演练模式：只记录、不改内存（排查闪退用）
+bool SetDryRun(bool on);   // dry-run：只记录、不改内存（排查闪退用）
 bool GetDryRun();
 bool SetNoGameCall(bool on);  // 禁用"调用游戏函数"（召唤/满级）——最保险的一档
 bool GetNoGameCall();

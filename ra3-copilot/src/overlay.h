@@ -9,16 +9,16 @@ struct OverlayConfig {
     bool  visible   = false;   // UI 显隐（INSERT 切换）
     float scale     = 1.0f;    // 界面缩放
     float alpha     = 0.95f;   // 窗口不透明度
-    int   addAmount = 10000;   // F7 每次加钱金额
+    int   addAmount = 10000;   // 「加钱」每次金额
     bool  blockInput = true;   // 鼠标在菜单上时，吞掉点击（不让游戏也收到）
-    int   posMode    = 0;      // 落点来源：0=选中单位 1=视角中心(缓存) 2=游戏光标
+    int   posMode    = 0;      // 落点来源：0=视野中心 1=选中单位 2=游戏光标
     bool  diskLog    = false;  // 详细日志落盘（崩溃定位）：写 <DLL 目录>\ra3copilot_log.txt
     bool  showSelDiag = false; // 输出面板里显示「选中单位调试详情」
 };
 
 extern OverlayConfig g_cfg;
 
-// 工作线程入口：装功能钩子 -> 建自己的窗口与设备 -> 渲染循环
+// 工作线程入口：装功能 hook -> 建自己的窗口与设备 -> 渲染循环
 void OverlayInit();
 
 struct OverlayStatus {
@@ -29,12 +29,21 @@ struct OverlayStatus {
     bool  imguiReady = false;
 };
 extern OverlayStatus g_ov;
+extern HMODULE g_hSelf;   // DLL 自身句柄（dllmain 保存；热重载自卸载用）
+
+// 热重载：受理卸载请求（/unload 调用）—— 渲染线程在下一个 Present 内拆卸并自卸载
+void RequestUnload();
 
 // ---- 日志桥（供 actions.cpp 写进界面「输出记录」）----
 enum { OVLOG_INFO = 0, OVLOG_OK, OVLOG_WARN, OVLOG_ERR };
 void OverlayLogLine(int kind, const char* text);
 
-// 取最近捕获的 d3d9 视图矩阵（相机），供"视角中心"落点用；返回是否有效
+// 游戏主窗口句柄（渲染初始化时捕获；未就绪时现场枚举一次）。
+// 「视野中心」落点要拿它的客户区尺寸算中心像素。
+HWND GameWindow();
+
+// 取最近捕获的 d3d9 视图矩阵（相机）—— 仅诊断用：游戏不走 SetTransform 传 3D 相机
+// （实测 34530 次调用全是单位矩阵），所以落点不能用它做反投影；返回是否有效
 bool GetViewMatrix(float out[16]);
 // 取 view+projection+viewport（供"光标处生成"反投影用）
 bool GetCamData(float view[16], float proj[16], int vp[4]);

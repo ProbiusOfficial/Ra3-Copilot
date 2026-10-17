@@ -14,14 +14,14 @@ size_t    MainModuleSize();
 // AOB fail-closed：先读后比对，不符绝不碰
 bool VerifyBytes(uintptr_t at, const uint8_t* expect, size_t n);
 
-// RWX 代码洞：靠近主模块分配（E9 rel32 覆盖范围 +-2GB）
-// 返回洞基址；失败返回 nullptr
+// RWX code cave：靠近主模块分配（E9 rel32 覆盖范围 +-2GB）
+// 返回 cave 基址；失败返回 nullptr
 void* AllocCave(size_t size);
 
-// 5 字节 E9 detour（替换 5 字节原始指令，原指令须在洞内重放）
+// 5 字节 E9 detour（替换 5 字节原始指令，原指令须在 cave 内重放）
 bool PatchJmp(uintptr_t at, void* target);
 
-// 6 字节 push/ret detour（替换 6 字节原始指令，原指令须在洞内重放）
+// 6 字节 push/ret detour（替换 6 字节原始指令，原指令须在 cave 内重放）
 bool PatchPushRet(uintptr_t at, void* target);
 
 // 原始字节写回（还原源 = SDK 的 AOB 常量，即原始指令字节）

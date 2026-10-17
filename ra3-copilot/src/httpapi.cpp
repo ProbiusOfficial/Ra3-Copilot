@@ -23,6 +23,7 @@ namespace {
 
 SOCKET g_listen = INVALID_SOCKET;
 volatile LONG g_stop = 0;
+HANDLE g_httpThread = nullptr;   // 留句柄给 HttpApiJoin（热重载卸载时等线程真退出）
 
 // ---- 脑机接口（MCP）遥测（2026-10-16 起取消「总闸」）----
 // 监听只绑 127.0.0.1；把接口交给 AI 即视为授权，故不再拦截任何变更请求。
@@ -212,15 +213,16 @@ void ExecCmd(CmdSlot& c) {
     case 9:     // 满级
         CmdReply("rank=%d %s", ActRank(), SummonLastError());
         break;
-    case 10:    // 速度 mode
-        CmdReply("speed=%d", ActSpeed(c.a1));
+    case 10:    // 速度：a1 >= 0 = 档位 mode；a1 < 0 = 按 a2 的绝对速度值（滑条）
+        if (c.a1 < 0) CmdReply("speed=%.0f units=%d", (float)c.a2, ActSpeedValue((float)c.a2));
+        else          CmdReply("speed=%d", ActSpeed(c.a1));
         break;
     case 11:    // 血量 mode
         CmdReply("health=%d", ActHealth(c.a1));
         break;
     case 12: {   // 召唤：a1=hash a2=count a3=teamOverride(0=本地玩家)
         const bool ok = SummonByHashFor((uint32_t)c.a1, c.a2 > 0 ? c.a2 : 1,
-                                        (uintptr_t)(uint32_t)c.a3, true, "api");
+                                        (uintptr_t)(uint32_t)c.a3, false, "api");
         uintptr_t objs[20];
         const int nobj = LastCreatedObjs(objs, 20);
         char list[192] = { 0 };
@@ -228,7 +230,10 @@ void ExecCmd(CmdSlot& c) {
         for (int i = 0; i < nobj && w < (int)sizeof(list) - 12; ++i)
             w += _snprintf_s(list + w, sizeof(list) - w, _TRUNCATE,
                              "%s%08X", i ? "," : "", (unsigned)objs[i]);
-        CmdReply("summon=%d objs=[%s] %s", ok ? 1 : 0, list, SummonLastError());
+        float lp[4] = { 0, 0, 0, 1 }; const char* lsrc = "?";
+        LastSpawnPos(lp, &lsrc);
+        CmdReply("summon=%d objs=[%s] at=%.0f,%.0f,%.0f via=%s %s",
+                 ok ? 1 : 0, list, lp[0], lp[1], lp[2], lsrc, SummonLastError());
         break;
     }
     case 13: {   // 空投 idx count
@@ -296,6 +301,21 @@ void ExecCmd(CmdSlot& c) {
                  (unsigned)(uint32_t)c.a2, ok ? "ok" : PostProcLastError());
         break;
     }
+    case 23: {  // 落点查询：a1=kind(0 视野中心 / 1 选中单位 / 2 光标 / 3 自动)
+        char j[320] = { 0 };
+        SpawnPointJson(j, sizeof(j), c.a1);
+        CmdReply("%s", j);
+        break;
+    }
+    case 24: {  // 单位状态：a1=kind(-1=重置全部) a2=on(1 施加 / 0 解除) a3=时长(秒)
+        if (c.a1 == -1)
+            CmdReply("status reset -> %d %s", ActStatusReset(), SummonLastError());
+        else
+            CmdReply("status %s(%d) %s -> %d %s",
+                     UnitStatusName(c.a1), c.a1, c.a2 ? "apply" : "remove",
+                     ActUnitStatus(c.a1, c.a2, c.a3), SummonLastError());
+        break;
+    }
     default:
         CmdReply("unknown fn=%d", c.fn);
         break;
@@ -322,6 +342,18 @@ int GetParamInt(const char* q, const char* key, int def) {
     char b[32];
     if (!GetParam(q, key, b, sizeof(b))) return def;
     return (int)strtoul(b, nullptr, 0);   // atoi 不认 0x 前缀（左下角惨案真根因）；base=0 同时支持十/十六进制
+}
+
+// /status?kind= 名字 → US_* 枚举；不认识返回 -1（调用方回退按数字解析）
+int StatusKindFromName(const char* s) {
+    if (!s || !s[0]) return -1;
+    if (!_stricmp(s, "ironcurtain") || !_stricmp(s, "iron")) return US_IRONCURTAIN;
+    if (!_stricmp(s, "invulnerable") || !_stricmp(s, "invul")) return US_INVULNERABLE;
+    if (!_stricmp(s, "speedup"))  return US_SPEEDUP;
+    if (!_stricmp(s, "slow"))     return US_SLOW;
+    if (!_stricmp(s, "brittle"))  return US_BRITTLE;
+    if (!_stricmp(s, "damageup")) return US_DAMAGEUP;
+    return -1;
 }
 
 // 把命令投递给渲染线程并等结果
@@ -374,11 +406,30 @@ void Handle(SOCKET c, char* req) {
         HttpSend(c, "pong", 4);
         return;
     }
+    // ---- 热重载：卸载自身（下一帧拆卸并自卸载；随后可重新编译 + 重新注入）----
+    if (strcmp(path, "/unload") == 0) {
+        const char* msg = "accepted: unload runs inside the next frame; this instance will disappear\n";
+        HttpSend(c, msg, (int)strlen(msg));
+        RequestUnload();
+        return;
+    }
     if (strcmp(path, "/state") == 0 || strcmp(path, "/diag") == 0) {
         // 诊断里会调用游戏函数（模板查找）→ 必须投到渲染线程执行
         int a[1] = { 0 };
         char r[4096] = { 0 };
         PostAndWaitN(1, a, 0, r, sizeof(r));
+        HttpSend(c, r, (int)strlen(r));
+        return;
+    }
+    // ---- 落点查询（只读；但要调游戏换算函数 0x1ED4A0 → 投渲染线程）----
+    if (strcmp(path, "/view") == 0 || strcmp(path, "/cursor") == 0 ||
+        strcmp(path, "/selected_pos") == 0 || strcmp(path, "/spot") == 0) {
+        const int kind = (strcmp(path, "/view") == 0) ? 0
+                       : (strcmp(path, "/selected_pos") == 0) ? 1
+                       : (strcmp(path, "/cursor") == 0) ? 2 : 3;
+        int a[1] = { kind };
+        char r[320] = { 0 };
+        PostAndWaitN(23, a, 1, r, sizeof(r));
         HttpSend(c, r, (int)strlen(r));
         return;
     }
@@ -405,12 +456,22 @@ void Handle(SOCKET c, char* req) {
             "GET  /units?q=&side=&cls=&limit=  单位目录检索（名字/模板名/哈希）\n"
             "GET  /ai/status                脑机接口状态 JSON\n"
             "POST /ai/set?on=0|1            兼容保留（已无闸门：开关不再拦截任何请求）\n"
+            "== 落点查询（只读；要调游戏换算函数，投渲染线程）==\n"
+            "GET  /view                     视野中心世界坐标（屏幕正中看出去的地面点，含地形高度）\n"
+            "GET  /cursor                   鼠标光标处世界坐标（窗口失焦时停在旧值，远程操作别用）\n"
+            "GET  /selected_pos             当前选中单位的世界坐标\n"
+            "GET  /spot                     按「落点来源」设置自动挑一个可用落点（带 water 标记）\n"
             "== 变更（投递到渲染线程=游戏主线程）==\n"
             "POST /copy | /wnb | /mcv       复制选中 / 预设增援×8 / 基地车\n"
             "POST /capture | /kill | /rank  收编 / 摧毁选中 / 满级\n"
-            "POST /speed?mode=0..3          超速/慢速/定住/恢复\n"
+            "POST /speed?mode=0..3          超速/慢速/定住/恢复（或 value=0..1000 按值设置速度）\n"
             "POST /health?mode=0..2         无敌/残血/恢复\n"
-            "POST /summon?hash=0x..&count=N[&owner=索引][&x=&y=&z=]  按哈希召唤（owner 见 /snapshot；给 x/y/z 则落在指定坐标）\n"
+            "POST /status?kind=&on=&sec=    单位状态：kind=ironcurtain(缺省)|invulnerable|speedup|slow|brittle|damageup\n"
+            "                               （也认 0..5 数字；kind=reset 撤销全部状态+速度/血量还原）\n"
+            "                               on=1 施加(默认) / 0 解除；sec=时长秒（默认 60）\n"
+            "POST /summon?hash=0x..&count=N[&owner=索引][&place=view|selection|cursor][&x=&y=&z=]\n"
+            "                                按哈希召唤（owner 见 /snapshot）。落点：place 指定来源，\n"
+            "                                或给 x/y/z 指定坐标；都不给则按「落点来源」设置。回执带实际落点\n"
             "POST /crate?idx=N&count=N      空投箱\n"
             "POST /toggle?f=N&on=0|1        功能开关（索引见 features.h）\n"
             "POST /freebuild?on=0|1         免费建造\n"
@@ -422,7 +483,10 @@ void Handle(SOCKET c, char* req) {
             "GET  /scratch?x=&y=&z=[&idx=0|1]  Coord3D 传参缓冲，回地址\n"
             "GET  /postproc?on=0|1          创建后处理链开关（让召唤物登记进玩家体系）\n"
             "POST /postproc?obj=0x..[&team=0x..&a=1&b=1]  对单个对象手动跑后处理（验证用）\n"
-            "  ↳ 变更类请求可加 &ai=1：仅作遥测计数；接口恒开放（无闸门）\n";
+            "  ↳ 变更类请求可加 &ai=1：仅作遥测计数；接口恒开放（无闸门）\n"
+            "== 热重载 ==\n"
+            "POST /unload                   卸载自身（下一帧拆卸并 FreeLibrary，端口随之释放）\n"
+            "                               随后 injector.exe --unload 验证 + 重编译 + 重新注入\n";
         HttpSend(c, h, (int)strlen(h));
         return;
     }
@@ -651,8 +715,46 @@ void Handle(SOCKET c, char* req) {
     else if (strcmp(path, "/capture") == 0) { fn = 7; }
     else if (strcmp(path, "/kill") == 0)  { fn = 8; }
     else if (strcmp(path, "/rank") == 0)  { fn = 9; }
-    else if (strcmp(path, "/speed") == 0) { fn = 10; args[0] = GetParamInt(query, "mode", 0); na = 1; }
+    else if (strcmp(path, "/speed") == 0) {
+        // value=NN 按绝对速度值设置（滑条值，0=定住）；只给 mode 时走原有档位
+        char svb[24] = { 0 };
+        if (GetParam(query, "value", svb, sizeof(svb))) {
+            fn = 10; args[0] = -1; args[1] = (int)strtof(svb, nullptr); na = 2;
+        } else {
+            fn = 10; args[0] = GetParamInt(query, "mode", 0); na = 1;
+        }
+    }
     else if (strcmp(path, "/health") == 0){ fn = 11; args[0] = GetParamInt(query, "mode", 0); na = 1; }
+    else if (strcmp(path, "/status") == 0) {
+        // kind=名字或数字（见 StatusKindFromName，缺省 ironcurtain）；on=1 施加（默认）/ 0 解除；
+        //   kind=reset 重置全部；sec=时长秒
+        char kb[32] = { 0 };
+        GetParam(query, "kind", kb, sizeof(kb));
+        if (_stricmp(kb, "reset") == 0) { fn = 24; args[0] = -1; na = 3; }
+        else {
+            int kind = StatusKindFromName(kb);
+            if (kind < 0) {
+                const bool numeric = kb[0] >= '0' && kb[0] <= '9';
+                if (kb[0] && !numeric) {   // 名字打错 → 明确拒绝（静默默认成铁幕会误操作）
+                    const char* msg = "err: kind 不认识（ironcurtain|invulnerable|speedup|slow|"
+                                      "brittle|damageup|reset，或 0..5 数字）";
+                    HttpSend(c, msg, (int)strlen(msg));
+                    return;
+                }
+                kind = kb[0] ? GetParamInt(query, "kind", 0) : US_IRONCURTAIN;
+            }
+            if (kind < 0 || kind >= US_COUNT) {
+                const char* msg = "err: kind 越界（0..5）";
+                HttpSend(c, msg, (int)strlen(msg));
+                return;
+            }
+            fn = 24;
+            args[0] = kind;
+            args[1] = GetParamInt(query, "on", 1) ? 1 : 0;
+            args[2] = GetParamInt(query, "sec", 60);
+            na = 3;
+        }
+    }
     else if (strcmp(path, "/summon") == 0){
         fn = 12;
         char hb[24] = { 0 }, ob[16] = { 0 };
@@ -674,7 +776,16 @@ void Handle(SOCKET c, char* req) {
         }
         args[2] = teamOv;
         na = 3;
-        // 指定落点：?x=&y=&z=（给了 x 与 y 即生效；否则退回 光标/选中/视角）
+        // 落点来源：?place=view|selection|cursor（一次性，下一单生效后清除）。
+        //   不给则按 UI 的「落点来源」设置（默认视野中心）。
+        char plb[16] = { 0 };
+        if (GetParam(query, "place", plb, sizeof(plb))) {
+            const int m = (strcmp(plb, "view") == 0) ? 0
+                        : (strcmp(plb, "selection") == 0 || strcmp(plb, "selected") == 0) ? 1
+                        : (strcmp(plb, "cursor") == 0 || strcmp(plb, "mouse") == 0) ? 2 : -1;
+            if (m >= 0) SetSummonPlace(m);
+        }
+        // 指定落点：?x=&y=&z=（给了 x 与 y 即以坐标为准）
         char xb[32] = { 0 }, yb[32] = { 0 }, zb[32] = { 0 };
         if (GetParam(query, "x", xb, sizeof(xb)) && GetParam(query, "y", yb, sizeof(yb))) {
             float px = strtof(xb, nullptr), py = strtof(yb, nullptr), pz = 0.0f;
@@ -828,11 +939,19 @@ void HttpApiStart(int port) {
     (void)port;
     AiCsInit();
     InterlockedExchange(&g_stop, 0);
-    HANDLE t = CreateThread(nullptr, 0, HttpThread, nullptr, 0, nullptr);
-    if (t) CloseHandle(t);
+    g_httpThread = CreateThread(nullptr, 0, HttpThread, nullptr, 0, nullptr);
 }
 
 void HttpApiStop() { InterlockedExchange(&g_stop, 1); }
+
+bool HttpApiJoin() {
+    if (!g_httpThread) return true;   // 未启动
+    // 最坏情况：线程正卡在一次变更命令的回执等待（kCmdWaitMs=2500）→ 4s 上限足够
+    if (WaitForSingleObject(g_httpThread, 4000) != WAIT_OBJECT_0) return false;
+    CloseHandle(g_httpThread);
+    g_httpThread = nullptr;
+    return true;
+}
 
 void HttpApiPump() {
     if (g_cmd.state != 1) return;

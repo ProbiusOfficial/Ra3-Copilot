@@ -1,4 +1,4 @@
-// features.cpp - 功能核实现（表驱动多钩子）
+// features.cpp - 功能核实现（表驱动多 hook）
 #include "features.h"
 #include "hook.h"
 #include "symres.h"
@@ -7,7 +7,7 @@
 
 namespace ra3 {
 
-// ---- 壳代码引用的全局量定义 ----
+// ---- stub 引用的全局量定义 ----
 extern "C" {
 uint32_t g_localPlayerId  = 0;
 uint32_t g_localPlayerObj = 0;
@@ -56,7 +56,7 @@ const uint8_t AOB_GODMODE[5]    = { 0x8B, 0x50, 0x3C, 0x8B, 0xCE };
 const uint8_t AOB_ENEMYBUILD[5] = { 0x03, 0x50, 0x04, 0x3B, 0xD7 };
 const uint8_t AOB_SUPERPOWER[6] = { 0x8B, 0x98, 0x18, 0x04, 0x00, 0x00 };
 const uint8_t AOB_DISABLEALLSP[6] = { 0x8B, 0x51, 0x50, 0x3B, 0x50, 0x0C };
-// Zoom / 秒杀 3 钩子（基于 CE）—— 唯一长签名
+// Zoom / 秒杀 3 hook（基于 CE）—— 唯一长签名
 const uint8_t AOB_ZOOM[7]     = { 0xF3,0x0F,0x11,0x46,0x44,0x74,0x39 };
 const uint8_t AOB_ONEKILL[7]  = { 0xF3,0x0F,0x11,0x46,0x04,0x74,0x20 };
 const uint8_t AOB_OKDATA1[8]  = { 0x8B,0x8E,0x3C,0x03,0x00,0x00,0x8B,0x95 };
@@ -95,6 +95,10 @@ const HookDef kHooks[] = {
     { "OKData2",    0x2E24E3, AOB_OKDATA2, 10,(void*)&OKData2CaveStub,    &g_retOKData2, 6 },
 };
 
+// 已装站表（卸载回写用）：InstallHooks 记录，RemoveHooks 逆操作
+int g_installedIdx[32] = { 0 };
+int g_installedCount = 0;
+
 } // namespace
 
 HookStatus InstallHooks() {
@@ -108,28 +112,47 @@ HookStatus InstallHooks() {
     char* fp = st.failed;
     size_t remain = sizeof(st.failed);
 
+    int idx = 0;
     for (const auto& h : kHooks) {
         const uintptr_t site = st.moduleBase + h.rva;
         if (!VerifyBytes(site, h.aob, h.aobLen)) {
             int n = _snprintf_s(fp, remain, _TRUNCATE, "%s ", h.name);
             if (n > 0) { fp += n; remain -= static_cast<size_t>(n); }
+            ++idx;
             continue;
         }
         st.aobOk++;
 
         void* cave = AllocCave(64);
-        if (!cave) continue;
+        if (!cave) { ++idx; continue; }
 
         uint8_t tramp[6] = { 0x68, 0, 0, 0, 0, 0xC3 };   // push <stub>; ret
         std::memcpy(tramp + 1, &h.stub, 4);
-        if (!WriteRaw(reinterpret_cast<uintptr_t>(cave), tramp, sizeof(tramp)))
-            continue;
+        if (!WriteRaw(reinterpret_cast<uintptr_t>(cave), tramp, sizeof(tramp))) { ++idx; continue; }
 
         *h.retVar = static_cast<uint32_t>(site + h.replayLen);
-        if (PatchJmp(site, cave))
+        if (PatchJmp(site, cave)) {
             st.installed++;
+            if (g_installedCount < 32) g_installedIdx[g_installedCount++] = idx;
+        }
+        ++idx;
     }
     return st;
+}
+
+// 卸载：把「已装」的功能 hook 站回写原字节（只回写被 patch 的 5 字节 —— Zoom/OneKill 的
+//   aobLen 为 7/10 长于 patch 长度，多出的部分是 stub 重放的指令，未被动过）。
+// 逐站回读校验；返回成功回写数。code cave（AllocCave 的 64B/站）不回收：site 还原后
+//   无人再跳入，泄漏量 ≈1.3KB/轮，可忽略。
+int RemoveHooks() {
+    int ok = 0;
+    for (int k = 0; k < g_installedCount; ++k) {
+        const HookDef& h = kHooks[g_installedIdx[k]];
+        const uintptr_t site = MainModuleBase() + h.rva;
+        if (WriteRaw(site, h.aob, 5) && VerifyBytes(site, h.aob, 5))
+            ++ok;
+    }
+    return ok;
 }
 
 void SetFeature(int idx, bool on) {

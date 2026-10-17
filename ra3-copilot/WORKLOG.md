@@ -13,7 +13,7 @@
 | 模块 | 状态 |
 |---|---|
 | 注入通道（x86 injector + 自动提权） | ✅ 稳定可用 |
-| 功能钩子（进程内内存 patch） | ✅ **16 个钩子 / 13 个功能**，AOB 全部通过校验 |
+| 功能 hook（进程内内存 patch） | ✅ **20 个 hook / 16 个功能**，AOB 全部通过校验 |
 | 独立窗口菜单 | ✅ 可用（v0.6，无边框 + 贴游戏窗口） |
 | **游戏内渲染菜单** | ❌ **未打通**（详见第二节） |
 | 箱子空投 | ⚠️ Lua 侧已验证可行（隔壁会话 v24），C++ 侧未接 |
@@ -84,11 +84,11 @@ EnhancerCorona.dll  base=0x795D0000
 - 改 dummy device 的 vtable 数组对游戏无效 —— dummy device 的 vtable 是运行时堆上构造的，与游戏真实 device 不是同一张表。
 - 游戏真实 device 的 vtable 在 `d3d9.dll` 镜像内（本机 `0x66412c88`，= +0x2C88）。正解 = inline-hook `d3d9.dll` 里 `Present`/`EndScene` 的**函数本身**。
 
-**验证通过**：挂钩后 `EndScene/Present` 计数持续增长，且**不影响游戏运行、不抢焦点**（切窗口才静音）。
+**验证通过**：hook 后 `EndScene/Present` 计数持续增长，且**不影响游戏运行、不抢焦点**（切窗口才静音）。
 
 **目标 UI 形态**：左侧分类导航（资源 / 战斗 / 单位 / 设置 / 状态）+ 顶部工具栏 + 「单位属性」折叠栏 + 底部「输出记录」日志区。
 
-**版本无关性**：渲染逻辑与游戏版本无关；功能钩子地址需按版本重新定位（见 `src/symres.*`）。
+**版本无关性**：渲染逻辑与游戏版本无关；功能 hook 地址需按版本重新定位（见 `src/symres.*`）。
 
 ---
 
@@ -104,9 +104,9 @@ EnhancerCorona.dll  base=0x795D0000
 
 ---
 
-## 五、已实现的功能（16 钩子 / 13 功能）
+## 五、已实现的功能（16 hook / 13 功能）
 
-| 分类 | 功能 | 钩子 RVA | 洞内动作 |
+| 分类 | 功能 | hook RVA | cave 内动作 |
 |---|---|---|---|
 | 资金 | 加钱 / 设值 | `0x6CFDFE` | `[player+4]` 加/设任意值 |
 | | 本地玩家追踪 | `0x0FF95B` | 记录对象指针 + ID |
@@ -123,11 +123,11 @@ EnhancerCorona.dll  base=0x795D0000
 | | 禁用敌方超武 | `0x43ECA6` | `[eax+0xc]+=1` |
 | 地图 | 全图（去迷雾） | `0x3C226C` | `[ebp+0x260]=99999.0f` |
 
-**架构**：`features.cpp` 的表驱动 `kHooks[]`（名/RVA/AOB/壳/返回地址/重放长度）→ 新增功能 = 表加一行 + 写一个壳 + UI 加个勾选框。
+**架构**：`features.cpp` 的表驱动 `kHooks[]`（名/RVA/AOB/stub/返回地址/重放长度）→ 新增功能 = 表加一行 + 写一个 stub + UI 加个勾选框。
 
 **未移植**（原因）：
-- `SuperPower2` `0x43EC19`：洞内 `[esp+0x28]` 依赖 pushad 栈布局，需实测
-- `DisableAllSP2` `0x30A5F6`：该挂钩点只有原指令重放、无改值逻辑
+- `SuperPower2` `0x43EC19`：cave 内 `[esp+0x28]` 依赖 pushad 栈布局，需实测
+- `DisableAllSP2` `0x30A5F6`：该 hook 点只有原指令重放、无改值逻辑
 - `Zoom` `0x1EC7CD`：`fadd`/`fsub` 两档分支关系绕
 - **选择单位动作分发**（升级/击杀/克隆/召唤部队/基地车）：需遍历玩家-单位链表 + 调用游戏内部函数，参数语义未确定
 
@@ -144,10 +144,10 @@ EnhancerCorona.dll  base=0x795D0000
 |---|---|
 | `check_loaded.py` | 验证 DLL 是否已注入（模块枚举） |
 | `inject_and_probe.py` | 注入 + 全遥测读取（读 map 符号表） |
-| `probe_state.py` | 钩子/遥测状态 |
+| `probe_state.py` | hook/遥测状态 |
 | `probe_render.py` | 渲染层专项诊断（vtable / inline hook 检测） |
 | `d3d9_probe.cpp` | D3D9 vtable / 函数字节探针（x86 独立程序） |
-| `scan_hooks.py` | 全部钩子 AOB 与真实 exe 逐字节校验（20/20 通过） |
+| `scan_hooks.py` | 全部 hook AOB 与真实 exe 逐字节校验（20/20 通过） |
 | **`scan_windows.py`** | 窗口结构扫描（含子窗口 + style/exstyle 标志解析） |
 | **`find_device.py`** | 提权扫内存定位 device 对象（vtable∈d3d9 且 [16]/[17]/[42] 均在 d3d9） |
 | `ida_mcp.py` | IDA Pro MCP 直连客户端（支持多端口，解析 SSE） |

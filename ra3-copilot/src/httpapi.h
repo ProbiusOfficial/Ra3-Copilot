@@ -14,6 +14,8 @@ namespace ra3 {
 // 启动/停止（默认端口 17832，仅 127.0.0.1）
 void HttpApiStart(int port = 17832);
 void HttpApiStop();
+// 等待 HTTP 线程退出（热重载卸载用，内部超时 4s）。返回 true=已退出（含未启动）
+bool HttpApiJoin();
 
 // 由渲染线程每帧调用：执行挂起的命令（没有就立刻返回）
 void HttpApiPump();

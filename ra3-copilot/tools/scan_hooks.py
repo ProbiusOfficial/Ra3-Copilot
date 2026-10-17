@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""scan_hooks.py - 用真实游戏 exe 校验全部钩子 AOB（移植前的前提检查）
+"""scan_hooks.py - 用真实游戏 exe 校验全部 hook AOB（移植前的前提检查）
 用法: python scan_hooks.py [exe_path]
-输出: 每个钩子在文件中的位置（RVA）、是否与预期 RVA 吻合、匹配次数
+输出: 每个 hook 在文件中的位置（RVA）、是否与预期 RVA 吻合、匹配次数
 """
 import os, sys
 

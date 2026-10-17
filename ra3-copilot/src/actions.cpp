@@ -18,6 +18,7 @@
 #include "overlay.h"
 #include "symres.h"
 #include "units_corona.h"
+#include "aicmd.h"        // OrderAttack / OrderMoveTo / OrderIdle（/order 指挥单位）
 #include <windows.h>
 #include <cstdio>
 #include <cmath>
@@ -42,6 +43,17 @@ uintptr_t GameBase() { return reinterpret_cast<uintptr_t>(::GetModuleHandleA(nul
 void CrashLogAppend(const char* line);
 char* CrashLogPath();
 
+// ---- 落点来源（GetSpawnPos 与 /summon?place= 共用）----
+enum { PLACE_VIEW = 0, PLACE_SELECTED = 1, PLACE_CURSOR = 2, PLACE_NONE = -1 };
+
+// 一次性落点来源覆盖：HTTP 线程写、渲染线程取用即清。
+//   给 /summon?place=view|selection|cursor 用 —— 让调用方"点名要哪种落点"，
+//   而不是自己编世界坐标（编出来的点落在水面，单位就生成在水面）。
+static volatile LONG g_placeOv = PLACE_NONE;
+void SetSummonPlace(int mode) {
+    InterlockedExchange(&g_placeOv, (mode >= PLACE_VIEW && mode <= PLACE_CURSOR) ? mode : PLACE_NONE);
+}
+
 namespace {
 
 constexpr uint32_t R_CURSORPOS   = 0x8DAEFC;
@@ -56,6 +68,9 @@ constexpr uint32_t OFF_LOCO_NODE = 0x200;   // locoMgr -> node array
 typedef void* (__fastcall* TemplateFind_t)(void* store, void* edx, uint32_t hash);
 typedef void* (__cdecl*    CreateUnit_t)(int a0, void* tmpl, float* pos, void* team, void* teamMember);
 typedef void  (__cdecl*    TerrainSnap_t)(float* src, float* dst, int a, int b);
+// 屏幕像素 -> 世界坐标：src = 客户区像素 (x, y, 上下文) 三个 dword，dst = 命中地形的世界坐标
+// （含高度）。实测第 3 个 dword 不参与运算，传 0 即可。
+typedef void  (__cdecl*    ScreenToWorld_t)(void* src, void* dst, int a, int b);
 typedef void  (__fastcall* LevelUp_t)(void* unit, void* edx, int a, int b, int c);
 typedef void  (__fastcall* KillUnit_t)(void* body, void* edx, int a, int b, int c);   // 0x39EA50 thiscall(body,6,19,0)
 
@@ -78,7 +93,7 @@ void SetErr(const char* s) { strncpy_s(g_lastErr, s, _TRUNCATE); }
 //   ① VirtualQuery：已提交、可写、非 GUARD/NOACCESS，且整段在同一区域
 //   ② 对象指针：[obj] 的 vtable 必须落在主模块内（说明是游戏对象，不是野指针/数值）
 //   ③ 数值合理性：改 HP/速度前先看现值是否在合理范围（不合理 = 认错对象，跳过）
-//   ④ 演练模式：只记录不改内存
+//   ④ dry-run：只记录不改内存
 bool g_dryRun = false;
 bool g_noGameCall = false;      // 禁止调用游戏函数（召唤/满级走游戏内部，护栏管不到内部状态）
 int  g_guardSkip = 0;
@@ -187,7 +202,7 @@ bool LooksLikeFuncEntry(uintptr_t a) {
 
 // 选中链表迭代
 // 主来源：选中管理器（symres 解析，+0x50 链表头 / +0x5c 数量）
-// 兜底：弹药钩子遍历选中单位时抓到的 g_selUnit（解析失败时用它）
+// 兜底：弹药 hook 遍历选中单位时抓到的 g_selUnit（解析失败时用它）
 struct SelIter { int count; uintptr_t node; uintptr_t single; };
 
 bool SelFresh() { return g_selUnit != 0 && (g_tickNow - g_selTick) < 600; }
@@ -243,31 +258,53 @@ constexpr float kSpeedFast   = 500.0f;
 constexpr float kSpeedSlow   = 10.0f;
 constexpr float kSpeedFreeze = 0.0f;
 
-// 速度子节点处理（跳过已是目标档位的，备份后写入）
+// 原速备份表：键 = 速度节点地址，值 = 我们动手前的速度。
+// 为什么自己存、不用节点的 +0x40 槽：+0x40 那套备份靠"当前值是不是我们写的档位"反推
+//   "这个节点有没有被改过"。滑条是连续值，第二次拖动时这个判据就没了 →
+//   会把上一次设的值当成原速备份进去，此后"恢复原速"只会还原成上个滑条值。
+// 条目在恢复时删除；表满覆盖最旧一条（节点地址可能被回收复用，但写回的是个合理速度值，无害）。
+struct SpeedBak { uintptr_t node; float orig; };
+constexpr int kSpeedBakMax = 256;
+SpeedBak g_speedBak[kSpeedBakMax] = {};
+int      g_speedBakNext = 0;
+
+float* SpeedBakFind(uintptr_t n) {
+    if (!n) return nullptr;
+    for (int i = 0; i < kSpeedBakMax; ++i)
+        if (g_speedBak[i].node == n) return &g_speedBak[i].orig;
+    return nullptr;
+}
+void SpeedBakPut(uintptr_t n, float orig) {
+    if (float* e = SpeedBakFind(n)) { *e = orig; return; }
+    g_speedBak[g_speedBakNext].node = n;
+    g_speedBak[g_speedBakNext].orig = orig;
+    g_speedBakNext = (g_speedBakNext + 1) % kSpeedBakMax;
+}
+void SpeedBakDel(uintptr_t n) {
+    for (int i = 0; i < kSpeedBakMax; ++i)
+        if (g_speedBak[i].node == n) { g_speedBak[i].node = 0; g_speedBak[i].orig = 0.f; }
+}
+
+// 速度子节点处理：写入目标速度；首次改这个节点时把原值记进备份表
 void SetSpeedNode(uintptr_t n, float v) {
     if (!n) return;
     float cur = 0;
     if (!IsMemOk(n, 0x44, true)) return;
     __try { cur = *reinterpret_cast<float*>(n + 8); } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
-    // 已是目标档位就不再动（0 属定住档，必须先于下限护栏判断）
-    if (cur == kSpeedFast || cur == kSpeedSlow || cur == kSpeedFreeze) return;
+    if (cur == v) return;                                  // 已是目标值，不必写
     // 护栏：现值必须是合理的速度（0..1e5），否则认错对象 → 不写
     if (!PlausibleFloat(cur, 0.0f, 1.0e5f)) { ++g_guardSkip; return; }
-    SafeWriteFloat(n + 0x40, cur);      // 备份原速
+    if (!SpeedBakFind(n)) SpeedBakPut(n, cur);             // 首次改动才记原值
     SafeWriteFloat(n + 8, v);
 }
 
+// 恢复我们改过的节点；没改过的不动
 void RestoreSpeedNode(uintptr_t n) {
     if (!n) return;
-    float cur = 0, bk = 0;
-    if (!IsMemOk(n, 0x44, true)) return;
-    __try { cur = *reinterpret_cast<float*>(n + 8); bk = *reinterpret_cast<float*>(n + 0x40); }
-    __except (EXCEPTION_EXECUTE_HANDLER) { return; }
-    // 只还原"被我们改过的那三档"（旧代码只认 500/10 → 定住后的 0 永远还原不了）
-    if (cur != kSpeedFast && cur != kSpeedSlow && cur != kSpeedFreeze) return;
-    if (!PlausibleFloat(bk, 0.0f, 1.0e5f)) return;
-    if (bk == kSpeedFast || bk == kSpeedSlow || bk == kSpeedFreeze) return;
-    SafeWriteFloat(n + 8, bk);
+    float* orig = SpeedBakFind(n);
+    if (!orig) return;
+    if (IsMemOk(n, 0x44, true)) SafeWriteFloat(n + 8, *orig);
+    SpeedBakDel(n);
 }
 
 void SpeedNodes(uintptr_t body, uintptr_t& n1, uintptr_t& n2) {
@@ -382,10 +419,10 @@ bool Unproject(const float invM[16], float nx, float ny, float nz, float out[4])
 }
 
 // 落点候选 0：**鼠标光标处**
-// 基于 CE 的做法：读 [0x8DAEFC] 对象的 +0x3c/+0x40/+0x44（原样 3 个 dword），
-//   调用游戏自己的换算函数 0x1ED4A0(src, dst, 0, 0)，结果即"鼠标位置的地图世界坐标"。
-//   —— 不再自己抓 D3D 相机矩阵做反投影：实测游戏 SetTransform(D3DTS_VIEW) 传的全是单位矩阵，
-//      3D 相机根本不走那条通道（49716 次调用全为单位矩阵），自算反投影此路不通。
+// 读 [0x8DAEFC] 对象的 +0x3c/+0x40/+0x44（原样 3 个 dword），调用游戏自己的换算函数
+//   0x1ED4A0(src, dst, 0, 0)，结果即"鼠标位置的地图世界坐标"。
+// ⚠️ 该对象只在鼠标位于游戏窗口内时才刷新 —— 玩家在别的窗口（例如与 AI 对话）时它停在旧值，
+//   走这条路会投到"上次鼠标停留处"。远程操作场景请优先用视野中心或选中单位。
 bool TryMouseWorldPos(float out[4]) {
     const uintptr_t base = GameBase();
     const uintptr_t fn = SymMouseMap();          // = 0x1ED4A0
@@ -397,31 +434,33 @@ bool TryMouseWorldPos(float out[4]) {
     { uint32_t v = 0; if (SafeRead32(cur + 0x3c, v)) std::memcpy(&src[0], &v, 4); }
     { uint32_t v = 0; if (SafeRead32(cur + 0x40, v)) std::memcpy(&src[1], &v, 4); }
     { uint32_t v = 0; if (SafeRead32(cur + 0x44, v)) std::memcpy(&src[2], &v, 4); }
-    typedef void(__cdecl * MouseMap_t)(void*, void*, int, int);
     __try {
-        reinterpret_cast<MouseMap_t>(fn)(src, dst, 0, 0);
+        reinterpret_cast<ScreenToWorld_t>(fn)(src, dst, 0, 0);
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     out[0] = dst[0]; out[1] = dst[1]; out[2] = dst[2]; out[3] = 1.f;
     return PosLooksValid(out);
 }
 
-// 落点候选 3：用 d3d9 视图矩阵算"视角中心"（不依赖任何游戏全局，天然版本无关）
+// 视野中心：把游戏客户区**正中**的像素喂给同一个换算函数 0x1ED4A0。
+//   不用抓 d3d9 视图矩阵做反投影 —— 实测游戏 SetTransform(D3DTS_VIEW) 传的全是单位矩阵
+//   （34530 次调用、_33 恒为 1.0），3D 相机不走那条通道，反投影永远失败；
+//   换算函数这条路实测可用，且输出天然带地形高度（水面就是水面高度）。
+//   与光标无关：不依赖 [0x8DAEFC]，游戏窗口失焦也照样算得对。
 bool TryViewCenterPos(float out[4]) {
-    float m[16];
-    if (!GetViewMatrix(m)) return false;
-    // D3D 行向量约定：行 0/1/2 = 相机 右/上/前(世界系)，行 3 = 平移
-    const float fx = m[8], fy = m[9], fz = m[10];
-    const float px = -(m[12] * m[0] + m[13] * m[4] + m[14] * m[8]);
-    const float py = -(m[12] * m[1] + m[13] * m[5] + m[14] * m[9]);
-    const float pz = -(m[12] * m[2] + m[13] * m[6] + m[14] * m[10]);
-    if (!(fz == fz) || !(pz == pz) || !(px == px)) return false;
-    if (fz > -1.0e-4f) return false;                  // 相机应朝下看
-    float gz = 0.f;                                    // 地面高度：优先用选中单位的高度
-    { float t[4]; if (TrySelectedPos(t)) gz = t[2]; }
-    const float k = (gz - pz) / fz;
-    if (!(k == k) || k < 0.f || k > 20000.f) return false;
-    out[0] = px + fx * k; out[1] = py + fy * k; out[2] = pz + fz * k; out[3] = 1.f;
-    return true;
+    const uintptr_t fn = SymMouseMap();
+    if (!fn) return false;
+    HWND h = GameWindow();
+    RECT r = { 0, 0, 0, 0 };
+    if (!h || !IsWindow(h) || !GetClientRect(h, &r)) return false;
+    const int cw = r.right - r.left, ch = r.bottom - r.top;
+    if (cw < 64 || ch < 64) return false;            // 窗口未就绪/最小化
+    uint32_t src[3] = { (uint32_t)(cw / 2), (uint32_t)(ch / 2), 0 };
+    float dst[4] = { 0, 0, 0, 0 };
+    __try {
+        reinterpret_cast<ScreenToWorld_t>(fn)(src, dst, 0, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    out[0] = dst[0]; out[1] = dst[1]; out[2] = dst[2]; out[3] = 1.f;
+    return PosLooksValid(out);
 }
 
 // 落点：按设置选来源；都取不到时用"上次成功的位置"
@@ -430,7 +469,9 @@ bool  g_hasLastPos = false;
 
 // 落点来源（诊断用）
 const char* g_posSource = "?";
-char g_posDiag[160] = { 0 };      // 逐来源尝试结果，如 "光标× 视角× 选中×"
+char g_posDiag[160] = { 0 };      // 逐来源尝试结果，如 "光标× 视野× 选中×"
+
+// 落点来源编号见文件上方（PLACE_VIEW / PLACE_SELECTED / PLACE_CURSOR）
 
 static void Note(const char* nm, bool ok) {
     char b[32];
@@ -453,21 +494,22 @@ bool GetSpawnPos(float out[4], bool atMouse) {
         if (got && !r) NoteBad(nm); else Note(nm, r);
         return r;
     };
-    if (atMouse) {
-        if (trySrc(TryMouseWorldPos, "光标"))      { ok = true; src = "光标"; }
-        else if (trySrc(TryViewCenterPos, "视角"))  { ok = true; src = "视角中心"; }
-        else if (trySrc(TrySelectedPos, "选中"))   { ok = true; src = "选中单位"; }
-    } else if (g_cfg.posMode == 1) {
-        if (trySrc(TrySelectedPos, "选中"))        { ok = true; src = "选中单位"; }
-        else if (trySrc(TryMouseWorldPos, "光标")) { ok = true; src = "光标"; }
-        else if (trySrc(TryViewCenterPos, "视角")) { ok = true; src = "视角中心"; }
-    } else if (g_cfg.posMode == 2) {
-        if (trySrc(TryMouseWorldPos, "光标"))      { ok = true; src = "光标"; }
-        else if (trySrc(TryViewCenterPos, "视角")) { ok = true; src = "视角中心"; }
-    } else {
-        if (trySrc(TryViewCenterPos, "视角"))      { ok = true; src = "视角中心"; }
-        else if (trySrc(TryMouseWorldPos, "光标")) { ok = true; src = "光标"; }
-        else if (trySrc(TrySelectedPos, "选中"))   { ok = true; src = "选中单位"; }
+    auto tryOne = [&](int m) -> bool {
+        if (m == PLACE_VIEW) {
+            if (trySrc(TryViewCenterPos, "视野")) { ok = true; src = "视野中心"; return true; }
+        } else if (m == PLACE_SELECTED) {
+            if (trySrc(TrySelectedPos, "选中"))   { ok = true; src = "选中单位"; return true; }
+        } else if (trySrc(TryMouseWorldPos, "光标")) { ok = true; src = "光标"; return true; }
+        return false;
+    };
+    // 显式指定（place=）优先；失败则回退到按设置的全序列
+    const int ov = (int)InterlockedExchange(&g_placeOv, PLACE_NONE);
+    if (ov != PLACE_NONE) tryOne(ov);
+    if (!ok) {
+        if (atMouse)                     { tryOne(PLACE_CURSOR) || tryOne(PLACE_VIEW) || tryOne(PLACE_SELECTED); }
+        else if (g_cfg.posMode == 1)     { tryOne(PLACE_SELECTED) || tryOne(PLACE_VIEW) || tryOne(PLACE_CURSOR); }
+        else if (g_cfg.posMode == 2)     { tryOne(PLACE_CURSOR) || tryOne(PLACE_VIEW) || tryOne(PLACE_SELECTED); }
+        else                             { tryOne(PLACE_VIEW) || tryOne(PLACE_SELECTED) || tryOne(PLACE_CURSOR); }
     }
     if (ok && PosLooksValid(tmp)) {
         std::memcpy(out, tmp, sizeof(tmp));
@@ -561,6 +603,40 @@ int ActSpeed(int mode) {
         ++n;
     }
     return n;
+}
+
+// 按绝对速度值设置（滑条用）。0 = 定住，越大越快。
+int ActSpeedValue(float v) {
+    SelIter it;
+    if (!SelBegin(it)) { SetErr("没有选中单位（先在游戏里选中）"); return 0; }
+    int n = 0;
+    uintptr_t obj;
+    while ((obj = SelNext(it)) != 0) {
+        uintptr_t body = BodyOf(obj);
+        if (!body) continue;
+        uintptr_t n1 = 0, n2 = 0;
+        SpeedNodes(body, n1, n2);
+        SetSpeedNode(n1, v);
+        if (n2) SetSpeedNode(n2, v);
+        ++n;
+    }
+    return n;
+}
+
+// 首个选中单位当前的速度值（供 UI 显示滑条锚点）
+float SelectedFirstSpeed() {
+    SelIter it;
+    if (!SelBegin(it)) return -1.f;
+    uintptr_t obj = SelNext(it);
+    if (!obj) return -1.f;
+    uintptr_t body = BodyOf(obj);
+    if (!body) return -1.f;
+    uintptr_t n1 = 0, n2 = 0;
+    SpeedNodes(body, n1, n2);
+    if (!n1) return -1.f;
+    float cur = 0;
+    if (!SafeReadFloat(n1 + 8, cur)) return -1.f;
+    return cur;
 }
 
 int ActHealth(int mode) {
@@ -676,6 +752,214 @@ int ActKillSelected() {
     return n;
 }
 
+typedef int (__thiscall* SetStatus_t)(void* thing, int status, int on);   // Object::SetStatus，ret 8
+
+// ===================== modifier 通道（引擎 0x7181F0 施加 / 0x718300 解除 / 0x4A6BE0 查表）=====================
+// 一切经引擎函数完成，**不读也不写引擎字段** —— 避免历史"手抄配方 / poke 越护栏 → 崩"的坑。
+// ⚠️ 时长必须给帧数（15 帧/秒）：用 -1 约 12 秒就过期（2026-10-16 实测）。
+constexpr uint32_t MOD_STORE         = 0xC5E07887u;  // 全局 modifier 库容器哈希
+constexpr uint32_t MOD_ARMOR_UP      = 0x505EBD44u;  // MAP_ARMOR_Up：减弱护甲（实测 ×10.9 触底）
+constexpr uint32_t MOD_HEALTH_DOWN   = 0xAC47C5FFu;  // MAP_HEALTH_MULT_Down：血量上限 ×0.9/层
+constexpr uint32_t MOD_IRONCURTAIN   = 0x6516AA2Du;  // AttributeModifier_IronCurtain：无敌 + 铁幕外观
+constexpr uint32_t MOD_INVULNERABLE  = 0x508D8641u;  // MAP_INVULNERABLE_Up：无敌
+constexpr uint32_t MOD_SPEED_UP      = 0x5949C29Cu;  // MAP_SPEED_Up：加速
+constexpr uint32_t MOD_SPEED_DOWN    = 0x46C6A82Bu;  // MAP_SPEED_Down：减速
+constexpr uint32_t MOD_DAMAGE_UP     = 0x61E3FB6Eu;  // MAP_DAMAGE_MULT_Up：输出增强
+constexpr int      kModFrames        = 1800;         // 120 秒（不要用 -1）
+// 重置路径诊断计数（收尾打印并清零）
+static int g_rmCalls = 0, g_rmNonZero = 0, g_rmExc = 0, g_rmSkipGuard = 0, g_rmSkipLookup = 0;
+
+// 名字哈希 → modifier 对象
+static uintptr_t ModifierLookup(uint32_t nameHash) {
+    const uintptr_t fn = SymModifierFind();
+    if (!fn) return 0;
+    typedef uintptr_t(__cdecl* Find_t)(uint32_t, uint32_t, uintptr_t);
+    uintptr_t obj = 0;
+    __try { obj = reinterpret_cast<Find_t>(fn)(MOD_STORE, nameHash, 0); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+    return obj;
+}
+
+// 施加 / 解除（thing = Thing，未归一化的原始 Thing）
+static bool ModifierApply(uintptr_t thing, uint32_t nameHash, int dur) {
+    const uintptr_t fn = SymApplyModifier();
+    if (!fn || !thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; return false; }
+    const uintptr_t mod = ModifierLookup(nameHash);
+    if (!mod) return false;
+    typedef int(__thiscall* Apply_t)(void*, uintptr_t, int);
+    int ret = 0;
+    __try { ret = reinterpret_cast<Apply_t>(fn)(reinterpret_cast<void*>(thing), mod, dur); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    return ret != 0;
+}
+static bool ModifierRemove(uintptr_t thing, uint32_t nameHash) {
+    const uintptr_t fn = SymRemoveModifier();
+    if (!fn || !thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; ++g_rmSkipGuard; return false; }
+    const uintptr_t mod = ModifierLookup(nameHash);
+    if (!mod) { ++g_guardSkip; ++g_rmSkipLookup; return false; }
+    typedef int(__thiscall* Remove_t)(void*, uintptr_t);
+    int ret = 0;
+    ++g_rmCalls;
+    __try { ret = reinterpret_cast<Remove_t>(fn)(reinterpret_cast<void*>(thing), mod); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { ++g_rmExc; return false; }
+    if (ret) ++g_rmNonZero;
+    return ret != 0;
+}
+
+// ===================== 单位状态（表驱动）=====================
+// 依据（wiki/engine/crate-system.md §七 + research/crates/04）：
+//   日冕箱子留给单位的只有两样 —— modifier + ObjectStatus（属性箱 = applyModifier(名, 时长)）。
+// ⇒ 一个"状态" = 若干 modifier + 若干 ObjectStatus + 可选的定身 / 易碎联动。
+// ⚠️ 一律走引擎函数（0x7181F0 施加 / 0x718300 解除 / Object::SetStatus）——
+//   引擎拥有的内部槽位字段（如 Thing+0x0CC / +0x26C / +0x274）每帧自查自写，手写会被重置。
+struct UnitStatusDef {
+    const char* name;
+    const char* tip;
+    uint32_t    mods[3];     // modifier 名字哈希（0 结尾）
+    int         stats[4];    // ObjectStatus 号（0 结尾）
+    int         frames;      // 默认时长（帧；15 帧/秒）
+    bool        haltMove;    // 定身：速度节点写 0
+    bool        brittle;     // 易碎：当前血量压成 1
+};
+
+static const UnitStatusDef kUnitStatus[] = {
+    { "铁幕状态", "无敌 + 铁幕外观（引擎自带 AttributeModifier_IronCurtain）",
+      { MOD_IRONCURTAIN, 0 }, { 0 }, 1800, false, false },
+    { "无敌状态", "不受伤害（MAP_INVULNERABLE_Up）",
+      { MOD_INVULNERABLE, 0 }, { 0 }, 1800, false, false },
+    { "加速状态", "移动速度提升（MAP_SPEED_Up）",
+      { MOD_SPEED_UP, 0 }, { 0 }, 1800, false, false },
+    { "减速状态", "移动速度降低（MAP_SPEED_Down）",
+      { MOD_SPEED_DOWN, 0 }, { 0 }, 1800, false, false },
+    { "易碎状态", "护甲削弱 + 血量上限压制（重复施加可叠得更脆）",
+      { MOD_ARMOR_UP, MOD_HEALTH_DOWN, 0 }, { 0 }, 1800, false, false },
+    { "输出增强", "自身输出伤害提升（MAP_DAMAGE_MULT_Up）",
+      { MOD_DAMAGE_UP, 0 }, { 0 }, 1800, false, false },
+};
+static_assert(sizeof(kUnitStatus) / sizeof(kUnitStatus[0]) == US_COUNT,
+              "kUnitStatus 与 US_* 枚举不同步");
+
+const char* UnitStatusName(int kind) {
+    if (kind < 0 || kind >= US_COUNT) return "?";
+    return kUnitStatus[kind].name;
+}
+const char* UnitStatusTip(int kind) {
+    if (kind < 0 || kind >= US_COUNT) return "";
+    return kUnitStatus[kind].tip;
+}
+
+// Object::SetStatus —— 带"状态变更通知"（行为锁 / 音效 / UI 靠它）
+static bool SetStatusOn(uintptr_t thing, int status, int on) {
+    const uintptr_t fn = SymSetStatus();
+    if (!fn || !status || !thing) return false;
+    __try {
+        CrashMark("UnitStatus", thing, static_cast<uintptr_t>(status), static_cast<uintptr_t>(on));
+        reinterpret_cast<SetStatus_t>(fn)(reinterpret_cast<void*>(thing), status, on ? 1 : 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    return true;
+}
+
+// 血量回满：上限从未被改过（易碎只压当前值 +4），读 +0x10 备份值写回
+static bool RestoreHpFull(uintptr_t thing) {
+    uint32_t hpObj = 0;
+    if (!SafeRead32(thing + OFF_HPBODY, hpObj) || !hpObj || !IsMemOk(hpObj, 0x14, true)) return false;
+    float bk = 0;
+    if (!SafeReadFloat(hpObj + 0x10, bk) || !PlausibleFloat(bk, 1.f, 1.0e7f)) return false;
+    SafeWriteFloat(hpObj + 4, bk);
+    SafeWriteFloat(hpObj + 0xC, bk);
+    return true;
+}
+
+// 易碎 = 把当前血量压成 1（一击必死）。与 ActHealth(1) 同理：
+//   不叠 ARMOR_Up / HEALTH_MULT_Down 的原因 —— 那是逐层改倍率，撤回复杂；"一碰就碎"本质就是"只有 1 点血"。
+static bool SquashHpTo1(uintptr_t thing) {
+    uint32_t hpObj = 0;
+    if (!SafeRead32(thing + OFF_HPBODY, hpObj) || !hpObj || !IsMemOk(hpObj, 0x14, true)) return false;
+    SafeWriteFloat(hpObj + 4, 1.0f);
+    return true;
+}
+
+static void DrainRmDiag(const char* tag) {
+    if (!g_rmCalls) return;
+    R3_LOG(0, "[状态] %s诊断: 解除调用=%d 非0=%d 异常=%d 护栏跳过=%d 查表空=%d",
+           tag, g_rmCalls, g_rmNonZero, g_rmExc, g_rmSkipGuard, g_rmSkipLookup);
+    g_rmCalls = g_rmNonZero = g_rmExc = g_rmSkipGuard = g_rmSkipLookup = 0;
+}
+
+// 施加 / 解除一个状态（作用于选中单位）—— 返回成功处理的单位数。
+//   时限只是"到期自动撤"的保险，不是效果持续时间的承诺；提前撤用 on=0 或 ActStatusReset()。
+//   注意：同一状态重复施加会叠层，0x718300 一次只撤一层 —— 叠了几层就要解除几次。
+int ActUnitStatus(int kind, int on, int seconds) {
+    if (kind < 0 || kind >= US_COUNT) { SetErr("未知单位状态"); return 0; }
+    const UnitStatusDef& d = kUnitStatus[kind];
+    SelIter it;
+    if (!SelBegin(it)) { SetErr("没有选中单位（先在游戏里选中）"); return 0; }
+    if (g_noGameCall) { SetErr("已开启「禁用游戏函数调用」，状态操作被跳过"); return -1; }
+    if (!SymSetStatus() || !SymApplyModifier() || !SymRemoveModifier() || !SymModifierFind()) {
+        SetErr("单位状态：符号未解析出（状态器 / 施加 / 解除 / 查表）");
+        return 0;
+    }
+    if (seconds > 600) seconds = 600;                   // 上限 10 分钟（先 clamp 再乘，避免溢出）
+    int frames = (seconds > 0) ? seconds * 15 : d.frames;
+    if (frames <= 0) frames = d.frames;
+    int n = 0;
+    uintptr_t obj;
+    while ((obj = SelNext(it)) != 0) {
+        uintptr_t thing = BodyOf(obj);
+        if (!thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; continue; }
+        for (int i = 0; i < 4 && d.stats[i]; ++i) SetStatusOn(thing, d.stats[i], on);
+        for (int i = 0; i < 3 && d.mods[i]; ++i) {
+            if (on) ModifierApply(thing, d.mods[i], frames);
+            else    ModifierRemove(thing, d.mods[i]);
+        }
+        if (d.haltMove) {
+            uintptr_t n1 = 0, n2 = 0;
+            SpeedNodes(thing, n1, n2);
+            if (on) { SetSpeedNode(n1, kSpeedFreeze); if (n2) SetSpeedNode(n2, kSpeedFreeze); }
+            else    { RestoreSpeedNode(n1);           if (n2) RestoreSpeedNode(n2); }
+        }
+        if (d.brittle) { if (on) SquashHpTo1(thing); else RestoreHpFull(thing); }
+        ++n;
+    }
+    if (!n) SetErr(on ? "没有可操作的目标" : "没有可解除的目标");
+    else SetErr("");
+    R3_LOG(n ? 0 : 1, "[状态] %s%s %d 个目标", on ? "施加" : "解除", d.name, n);
+    if (!on) DrainRmDiag("解除");
+    return n;
+}
+
+// 重置：把状态表上的全部已知效果撤干净 —— modifier 逐名解除 + 行为解锁（速度还原）+ 血量回满。
+// 为什么不必先判断"挂了哪几只"：0x718300 的返回值不代表存在性（研究已证），
+//   对未挂过的名字解除 = 一次空查询，与既有的逐名解除行为一致。
+int ActStatusReset() {
+    SelIter it;
+    if (!SelBegin(it)) { SetErr("没有选中单位（先在游戏里选中）"); return 0; }
+    if (g_noGameCall) { SetErr("已开启「禁用游戏函数调用」，重置被跳过"); return -1; }
+    if (!SymRemoveModifier() || !SymModifierFind()) {
+        SetErr("重置：符号未解析出（解除 / 查表）");
+        return 0;
+    }
+    int n = 0;
+    uintptr_t obj;
+    while ((obj = SelNext(it)) != 0) {
+        uintptr_t thing = BodyOf(obj);
+        if (!thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; continue; }
+        for (int k = 0; k < US_COUNT; ++k)
+            for (int i = 0; i < 3 && kUnitStatus[k].mods[i]; ++i)
+                ModifierRemove(thing, kUnitStatus[k].mods[i]);
+        uintptr_t n1 = 0, n2 = 0;
+        SpeedNodes(thing, n1, n2);
+        RestoreSpeedNode(n1); if (n2) RestoreSpeedNode(n2);
+        RestoreHpFull(thing);
+        ++n;
+    }
+    if (!n) SetErr("没有可重置的目标");
+    else SetErr("");
+    R3_LOG(n ? 0 : 1, "[状态] 重置 %d 个目标", n);
+    DrainRmDiag("重置");
+    return n;
+}
+
 int ActRank() {
     SelIter it;
     if (!SelBegin(it)) { SetErr("没有选中单位（先在游戏里选中）"); return 0; }
@@ -787,7 +1071,7 @@ bool PostProcessCall(uintptr_t team, uintptr_t obj, bool runA, bool runB) {
     if (!IsMemOk(team, 0x1280, false)) { _snprintf_s(g_postErr, sizeof(g_postErr), _TRUNCATE, "team 不像 Team 对象"); return false; }
 
     const uintptr_t a = base + R_POSTA, b = base + R_POSTB;
-    // 入口字节校验（地址漂移/被打桩时拒绝，绝不盲调）
+    // 入口字节校验（地址漂移/被 stub 时拒绝，绝不盲调）
     uint8_t ea[2] = { 0 }, eb[3] = { 0 };
     if (runA && (!SafeReadBytes(a, ea, 2) || ea[0] != 0x56 || ea[1] != 0x57)) {
         _snprintf_s(g_postErr, sizeof(g_postErr), _TRUNCATE, "PostA 入口字节不符(%02X %02X)", ea[0], ea[1]);
@@ -834,6 +1118,38 @@ static volatile LONG g_summonOvSet = 0;
 void SetSummonPosOverride(bool on, float x, float y, float z) {
     g_summonOv[0] = x; g_summonOv[1] = y; g_summonOv[2] = z;
     InterlockedExchange(&g_summonOvSet, on ? 1 : 0);
+}
+
+// 最近一次召唤/复制**实际用到的**落点与来源。供 /summon 回执 ——
+// 调用方（尤其 AI）能立刻看出"这一单投到哪了"，而不是拿到一个 ok 却不知道落点。
+void LastSpawnPos(float out[4], const char** src) {
+    std::memcpy(out, g_lastPos, sizeof(float) * 4);
+    if (src) *src = g_posSource;
+}
+
+// 落点查询（只读）。kind: 0=视野中心 1=选中单位 2=光标 3=按设置自动挑。
+// ⚠️ 视野中心/光标都会调用游戏换算函数 0x1ED4A0 —— 只能在渲染线程跑（见 httpapi 的投递）。
+int SpawnPointJson(char* buf, int n, int kind) {
+    if (!buf || n <= 0) return 0;
+    float p[4] = { 0, 0, 0, 1 };
+    const char* sk = "auto";
+    bool ok = false;
+    switch (kind) {
+    case 0:  sk = "view";      ok = TryViewCenterPos(p); break;
+    case 1:  sk = "selection"; ok = TrySelectedPos(p);   break;
+    case 2:  sk = "cursor";    ok = TryMouseWorldPos(p);  break;
+    default: sk = "auto";      ok = GetSpawnPos(p, false); break;
+    }
+    if (ok && !PosLooksValid(p)) ok = false;
+    // 格式串一律 ASCII：MSVC 按代码页解析源码，中文紧邻 % 会把占位符吃掉
+    if (!ok)
+        return _snprintf_s(buf, n, _TRUNCATE,
+                           "{\"ok\":0,\"kind\":\"%s\",\"why\":\"no-spawn-point [%s]\"}",
+                           sk, g_posDiag);
+    // z 贴 0 即该点在水面（地图水面高度为 0）；陆军/建筑落上去会漂在水面上
+    return _snprintf_s(buf, n, _TRUNCATE,
+        "{\"ok\":1,\"kind\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"water\":%d,\"src\":\"%s\"}",
+        sk, p[0], p[1], p[2], (p[2] < 1.0f) ? 1 : 0, (kind == 3) ? g_posSource : sk);
 }
 
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name) {
@@ -1102,7 +1418,7 @@ static void DiagCore() {
         {
             uint32_t vti[8] = { 0 }; GetVtInfo(vti);
             DiagPrintf("[诊断] 相机 抓到=%s(来源:%s) vp=%d,%d,%d,%d 被拒视图矩阵=%d",
-                   cam ? "是" : "否", vti[7] ? "SetTransform钩子" : "GetTransform兜底(可疑)",
+                   cam ? "是" : "否", vti[7] ? "SetTransform hook" : "GetTransform兜底(可疑)",
                    vp[0], vp[1], vp[2], vp[3], ViewRejects());
             DiagPrintf("[诊断] vtable: 16=%08X 17=%08X 42=%08X 44=%08X 45=%08X d3d9base=%08X",
                    vti[0], vti[1], vti[2], vti[3], vti[4], vti[6]);
@@ -1123,8 +1439,8 @@ static void DiagCore() {
         float t[4];
         if (TryMouseWorldPos(t)) DiagPrintf("[诊断] 光标世界坐标 = %.1f %.1f %.1f", t[0], t[1], t[2]);
         else                     DiagPrintf("[诊断] 光标世界坐标: 失败");
-        if (TryViewCenterPos(t)) DiagPrintf("[诊断] 视角中心 = %.1f %.1f %.1f", t[0], t[1], t[2]);
-        else                     DiagPrintf("[诊断] 视角中心: 失败");
+        if (TryViewCenterPos(t)) DiagPrintf("[诊断] 视野中心 = %.1f %.1f %.1f", t[0], t[1], t[2]);
+        else                     DiagPrintf("[诊断] 视野中心: 失败");
         if (TrySelectedPos(t))   DiagPrintf("[诊断] 选中单位坐标 = %.1f %.1f %.1f", t[0], t[1], t[2]);
         else                     DiagPrintf("[诊断] 选中单位坐标: 失败");
     }
@@ -1160,7 +1476,7 @@ static void DiagCore() {
                cnt, (unsigned)o0, vt, f138, f3cc, f390, hp);
         DiagPrintf("[诊断] 该单位 owner=%08X owner+0x10=%08X", owner, ownerM);
     }
-    DiagPrintf("[诊断] 选中数 = %d   钩子抓到单位 = %08X (tick %u, now %u)",
+    DiagPrintf("[诊断] 选中数 = %d   hook 抓到单位 = %08X (tick %u, now %u)",
            SelectedCount(), g_selUnit, g_selTick, g_tickNow);
     uint8_t pb[8] = { 0 };
     uintptr_t cu = SymCreateUnit();

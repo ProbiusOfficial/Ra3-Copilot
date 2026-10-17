@@ -87,6 +87,10 @@ int EnemyUnitCount();
 // 用缓存的全图枚举结果 —— 只读且不进渲染线程，供"给任意一方召唤"用。找不到返回 0。
 uintptr_t FindTeamByIdx(int idx);
 
+// 找一个**非本地、非中立**的归属（敌方 Team）—— 以敌方身份操作时用（如给敌方阵营召唤）。
+// 找不到返回 0。
+uintptr_t FindEnemyTeam();
+
 // 清缓存（换局/切换玩家时用）
 void BattlefieldInvalidate();
 

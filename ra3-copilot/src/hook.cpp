@@ -24,7 +24,7 @@ bool VerifyBytes(uintptr_t at, const uint8_t* expect, size_t n) {
 }
 
 void* AllocCave(size_t size) {
-    // 主模块附近分配优先（游戏 exe 9MB，洞放邻近地址 rel32 无压力）
+    // 主模块附近分配优先（游戏 exe 9MB，cave 放邻近地址 rel32 无压力）
     const uintptr_t base = MainModuleBase();
     for (uintptr_t hint : { base + 0x8000000, base + 0x10000000, uintptr_t(0) }) {
         void* p = ::VirtualAlloc(reinterpret_cast<void*>(hint), size,

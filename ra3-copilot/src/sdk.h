@@ -10,7 +10,7 @@ namespace ra3 {
 constexpr const char* GAME_PROC_NAME = "ra3_1.12.game";
 constexpr const char* GAME_VER_STR   = "1.12.3444.25830";
 
-// ---- 钩子点（基于 CE，字节级验证 MATCH）----
+// ---- hook 点（基于 CE，字节级验证 MATCH）----
 // 资金：add edi,[eax+4]; mov edx,[ecx]   -> eax = player 对象, [eax+4] = 现金
 constexpr uint32_t RVA_MONEY    = 0x6CFDFE;
 constexpr uint8_t  AOB_MONEY[5] = { 0x03, 0x78, 0x04, 0x8B, 0x11 };

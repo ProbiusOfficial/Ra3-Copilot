@@ -1,0 +1,40 @@
+# 入库统一 LF；检出按类型固定行尾
+* text=auto
+
+# Windows 批处理 / 脚本必须 CRLF（LF 会啃掉 .bat 行结构）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.rc text eol=crlf
+
+# 源码与文档保持 LF
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.asm text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.tsv text eol=lf
+*.csv text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# 工程 / 配置文件
+.gitignore text eol=lf
+.gitattributes text eol=lf
+*.editorconfig text eol=lf
+*.vcxproj text eol=lf
+*.vcxproj.filters text eol=lf
+*.vcproj text eol=lf
+*.sln text eol=lf
+*.def text eol=lf
+Makefile text eol=lf
+
+# 二进制资源不做文本转换
+*.png binary
+*.ico binary
+*.ttf binary
+*.ttc binary
