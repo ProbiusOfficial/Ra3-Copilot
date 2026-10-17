@@ -26,7 +26,7 @@ unit_catalog.json     1008 单位 + 54 箱子（由 tools/gen_mcp_catalog.py 生
 ## 前置条件
 
 1. 游戏在跑，且修改器 DLL 已注入（`deploy.bat`）；
-2. 游戏内面板点开 **「开放脑机接口」**（否则 AI 只能看、不能改）。
+2. 修改器接口随 DLL 注入即**常驻监听** `127.0.0.1:17832`（无开关；安全边界靠只绑本机回环）。
 
 ## 工具
 
@@ -35,7 +35,8 @@ unit_catalog.json     1008 单位 + 54 箱子（由 tools/gen_mcp_catalog.py 生
 | `get_battle_state` | 我方/敌方部队建筑数、敌方阵营与构成、资金、选中单位 |
 | `get_enemy_report` | 只返回敌方明细 |
 | `search_units` | 单位检索（中文名 / 拼音首字母 / 英文模板名 / 哈希） |
-| `summon_unit` | 召唤单位（名字/模板名/哈希，count ≤ 30） |
+| `summon_unit` | 召唤单位（名字/模板名/哈希，count ≤ 30）；落点用 `place=view\|selection\|cursor` |
+| `get_spawn_point` | 查可用落点：`view` 视野中心（玩家在看的位置）/ `selection` 选中单位 / `cursor` 鼠标 / `auto` |
 | `drop_crate` | 空投箱子（治疗 / 现金 / 晋升 / 属性箱…） |
 | `selected_action` | 复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级 |
 | `set_units` | 调速（fast/slow/freeze/restore）/ 改血（god/hurt/restore） |

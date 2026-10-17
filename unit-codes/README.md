@@ -4,7 +4,7 @@
 > 一句话结论：**单位代码 = SAGE 对象类型哈希 = `StringHasher.Hash(对象模板名.lower())`**，
 > 已用 408 条运行时实测 + 社区《增援代码》表 + 官方单位图鉴三方交叉核对通过，**可以离线算，不再需要查表**。
 
-当前状态（2026-10-15）：**可召唤且能用 = 408 条单位 + 54 个箱子**，已刷新进 `ra3-copilot/src/units_corona.h`。
+**可召唤且能用 = 408 条单位 + 54 个箱子**，见 `ra3-copilot/src/units_corona.h`。
 
 > 🌐 **查询器**：站点在仓库根 `site/` —— 浏览器打开 **`site/units.html`**（主体是「按名字离线算代码 + 全量检索」，下方附研究过程披露）。
 
@@ -49,18 +49,18 @@ unit-codes/
 ```bash
 cd unit-codes/tools
 
-# 名字算代码（大小写随便写，算法内部先小写）
+# 名字算代码
 python unitcode.py CelestialDF41                 # -> 0x25241CE6
 python unitcode.py AlliedAntiNavyShipTech3       # -> 0x9356389F  （波塞冬巡洋舰，可用）
 
 # 代码反查
 python unitcode.py --hex 0xDB5A5941              # -> AlliedChronoBeacon_Poseidon（不可用，见下）
 
-# 模糊搜索（模板名 / 中文名 / 家族名）
+# 模糊搜索：模板名 / 中文名 / 家族名
 python unitcode.py --find 波塞冬                  # 三条都列出来，标了 usable=yes/no
 python unitcode.py --find 天启 --usable           # 只看"可召唤且能用"的
 
-# 自检（必须全中）
+# 自检
 python sage_hash.py                              # SAGE hash 复算通过 : 408/408
 ```
 
@@ -81,7 +81,7 @@ code = StringHasher.Hash( 对象模板名.lower() )     // 32 位无符号
 * **必须先小写**。哈希不区分大小写，所以 `AlliedBarracks` 与 `ALLIEDBARRACKS` 结果相同。
 * 出处：[WrathEd2012](https://github.com/Qibbi/WrathEd2012) 的 `SAGE/StringHasher.cs`。
 
-### 3.2 验证（408/408）
+### 3.2 验证
 
 | 证据 | 结果 |
 |---|---|
@@ -91,7 +91,7 @@ code = StringHasher.Hash( 对象模板名.lower() )     // 32 位无符号
 
 ### 3.3 "能召唤" ≠ "召唤出来能用"
 
-**这是最容易踩的坑，也是 2026-10-15 用户实测发现的**：
+**这是最容易踩的坑**：
 
 ```
 波塞冬巡洋舰  0x9356389F  AlliedAntiNavyShipTech3       ✅ 能正常召唤出来用
@@ -112,7 +112,7 @@ code = StringHasher.Hash( 对象模板名.lower() )     // 32 位无符号
 | `SUMMONED` + `UNATTACKABLE` | 技能/超武召唤的临时装置、建筑子物件 | `AlliedPowerPlantTurbine` |
 | （无标志） | 自杀 / 俯冲类特攻机 | `JapanYumiAircraft`（飞燕特攻机） |
 
-本次据此从 441 条实测清单里**剔除 31 条**，剩 **410 条**。
+据此从 441 条实测清单里**剔除 31 条**，剩 **410 条**。
 
 ### 3.4 同一个单位为什么有好几个代码
 
@@ -157,13 +157,13 @@ ra3-copilot/src/units_corona.h             （408 单位 + 54 箱子）
 ### 4.2 单独重跑某一步
 
 ```bash
-# 只用官方数据重建全量表 + 网站（不需要游戏）
+# 只用官方数据重建全量表 + 网站
 cd unit-codes/tools
 python fetch_official.py --proxy http://127.0.0.1:7890   # 可选：拉最新图鉴
 python gen_unit_codes.py
 python gen_site.py                                      # 生成 仓库根 site/units.html + site/data.js
 
-# 给现有召唤清单再做一次可用性过滤（不需要游戏）
+# 给现有召唤清单再做一次可用性过滤
 python filter_usable.py            # 就地过滤 callable_final.tsv，原文件自动备份
 
 # 需要游戏运行 + 修改器已注入
@@ -184,11 +184,6 @@ for (int i = 0; i < ra3::kTrainerUnitCount; ++i) { ... }
 `units_corona.h` 里的 `SupportUnit` 多带一列拼音（`py`，UI 拼音搜索用），
 两者都是 `gen_units_corona.py` 的产物，**优先用 `units_corona.h`**。
 
-### 4.4 建议的后续改造
-
-* 给 HTTP 调试接口（`127.0.0.1:17832`）加 `GET /unitcode?name=xxx`，把哈希函数暴露出来。
-* 面板加"输入单位名 → 召唤"，立刻支持全量 5461 个对象。
-
 ---
 
 ## 5. 注意事项
@@ -197,7 +192,6 @@ for (int i = 0; i < ra3::kTrainerUnitCount; ++i) { ... }
 * `data/source/data_mod.str` 来自 **英文**资源包，个别条目中文名会是英文（生成器已优先取中文）。
 * **不要为了"去重"去删游戏里的对象定义。** SAGE 的引用是哈希，删了定义后引用它的
   CommandSet / OCL / 升级 / 战役脚本**不报错、直接崩**。去重只做展示层。
-* `../work/hash_pairs.json`（72 条）是早期**名字↔代码错位**的废数据，已作废。
 * `callable_dropped.tsv` 是被判定"召唤出来不能用"而剔除的条目，**留档用，不要当垃圾删掉** ——
   里面每一条都写了原因，将来若发现误判可以回捞。
 
@@ -224,8 +218,8 @@ for (int i = 0; i < ra3::kTrainerUnitCount; ++i) { ... }
   只能从官方图鉴 + manifest 符号表 + 字符串表 `NAME:`/`TYPE:` 键反推。
   极少数从不被引用、也没有字符串条目的组件级对象拿不到名字 —— 但它们没有任何 UI 入口，
   不影响修改器。
-* 原版对象名在字符串表里是全大写；已尽量还原驼峰，还原不完整的保持大写（不臆造拼写）。
+* 原版对象名在字符串表里是全大写；名册尽量还原驼峰，未还原的保持大写（不臆造拼写）。
 * 可用性判据依赖官方图鉴数据；**没被官方图鉴收录的对象无法核验**，
   目前这类（4 条）按"保守保留"处理并标注。
 * 仍有少量真单位在运行时 `ThingFactory::Find` 找不到（拼写修正版也不行），
-  判定为 mod 未启用定义，待查。
+  判定为 mod 未启用定义。
