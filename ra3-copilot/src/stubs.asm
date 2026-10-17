@@ -31,14 +31,11 @@ EXTERNDEF g_flags        : BYTE     ; 功能开关数组（索引对齐 CE 的 F
 EXTERNDEF g_telemEnter   : DWORD    ; 遥测：money cave 执行次数
 EXTERNDEF g_telemApplied : DWORD    ; 遥测：加钱生效次数
 EXTERNDEF g_zoomHits     : DWORD    ; 遥测：Zoom cave 进入次数
-EXTERNDEF g_zoomMax      : DWORD    ; 已废用：ZF 机制不写任何上限字段（保留占位，待清理）
-EXTERNDEF g_zoomMaxOff   : DWORD    ; 已废用：同上
 EXTERNDEF g_zoomCam34    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x34] 相机系数
 EXTERNDEF g_zoomPitch    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x74] 俯仰角
 EXTERNDEF g_zoomObj      : DWORD    ; 遥测：最近一次 this 指针
 EXTERNDEF g_zoomVal      : DWORD    ; 遥测：进入时 [esi+0x44]
 EXTERNDEF g_zoomPost     : DWORD    ; 遥测：运算后 [esi+0x44]
-EXTERNDEF g_zoomState    : BYTE     ; 已废用：旧护栏语义，现无写入方（保留占位，待清理）
 EXTERNDEF g_zoomEntry    : DWORD    ; 遥测：缩放函数入口命中次数（含被早退的）
 
 ; ---- 各 hook 返回地址（运行时由 C++ 填充 = site + 重放长度）----

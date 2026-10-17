@@ -19,14 +19,11 @@ extern int32_t  g_moneyOp;         // 0=无 1=加钱 2=设置（一次性）
 extern int32_t  g_moneyValue;      // 金额
 extern uint8_t  g_flags[32];       // 功能开关数组（索引对齐 CE 的 FLAGS 偏移）
 extern uint32_t g_zoomHits;        // 遥测：ZoomCaveStub 进入次数
-extern float    g_zoomMax;         // 已废用：ZF 机制不写任何上限字段（保留占位，待清理）
-extern float    g_zoomMaxOff;      // 已废用：同上
 extern uint32_t g_zoomCam34;       // 遥测：ZoomPostStub 采样的 [+0x34] 相机系数
 extern uint32_t g_zoomPitch;       // 遥测：ZoomPostStub 采样的 [+0x74] 俯仰
 extern uint32_t g_zoomObj;         // 遥测：最近一次 this 指针（esi）
 extern uint32_t g_zoomVal;         // 遥测：ZoomCaveStub 进入时 [esi+0x44] 的位模式
 extern uint32_t g_zoomPost;        // 遥测：clamp 之后 [esi+0x44] 的位模式
-extern uint8_t  g_zoomState;       // 已废用：旧护栏语义，现无写入方（保留占位，待清理）
 extern uint32_t g_zoomEntry;       // 遥测：缩放函数入口命中次数
 extern uint32_t g_telemEnter;      // money cave 执行次数
 extern uint32_t g_telemApplied;    // 加钱生效次数
