@@ -86,7 +86,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 本项目把日冕全量 **5461 条**对象代码整理成表并可离线复算，其中「可召唤且能用」**410 条**。
 
 - 在线查询 → <https://probiusofficial.github.io/Ra3-Copilot/units.html>
-- 本地查询 → `site/units.html`（纯静态、离线可用，支持按名字离线算代码）
+- 离线查询 → `gh-pages` 分支的 `units.html`（纯静态，支持按名字离线算代码）
 
 ## 第三方组件
 
