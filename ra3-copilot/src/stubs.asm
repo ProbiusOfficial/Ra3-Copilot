@@ -31,14 +31,14 @@ EXTERNDEF g_flags        : BYTE     ; 功能开关数组（索引对齐 CE 的 F
 EXTERNDEF g_telemEnter   : DWORD    ; 遥测：money cave 执行次数
 EXTERNDEF g_telemApplied : DWORD    ; 遥测：加钱生效次数
 EXTERNDEF g_zoomHits     : DWORD    ; 遥测：Zoom cave 进入次数
-EXTERNDEF g_zoomMax      : DWORD    ; 无限缩放：开关打开时写入的滚轮上限（float）
-EXTERNDEF g_zoomMaxOff   : DWORD    ; 无限缩放：开关关闭时写回的原上限 600.0（float）
-EXTERNDEF g_zoomCam34    : DWORD    ; 遥测：clamp 之后 [+0x34] 相机系数
-EXTERNDEF g_zoomPitch    : DWORD    ; 遥测：clamp 之后 [+0x74] 俯仰角
+EXTERNDEF g_zoomMax      : DWORD    ; 已废用：ZF 机制不写任何上限字段（保留占位，待清理）
+EXTERNDEF g_zoomMaxOff   : DWORD    ; 已废用：同上
+EXTERNDEF g_zoomCam34    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x34] 相机系数
+EXTERNDEF g_zoomPitch    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x74] 俯仰角
 EXTERNDEF g_zoomObj      : DWORD    ; 遥测：最近一次 this 指针
 EXTERNDEF g_zoomVal      : DWORD    ; 遥测：进入时 [esi+0x44]
 EXTERNDEF g_zoomPost     : DWORD    ; 遥测：运算后 [esi+0x44]
-EXTERNDEF g_zoomState    : BYTE     ; 遥测：0=NaN护栏 1=放大 2=缩小 3=开关关
+EXTERNDEF g_zoomState    : BYTE     ; 已废用：旧护栏语义，现无写入方（保留占位，待清理）
 EXTERNDEF g_zoomEntry    : DWORD    ; 遥测：缩放函数入口命中次数（含被早退的）
 
 ; ---- 各 hook 返回地址（运行时由 C++ 填充 = site + 重放长度）----
@@ -275,7 +275,8 @@ ZoomEntryStub ENDP
 ;     0x1EC7D2: je 0x5EC80D                    ← ZF=1 即跳过 0x1EC7D4..0x1EC80C 的 clamp
 ;     0x1EC7D4..0x1EC806: vt[1]/vt[0] 取上下限 + call 0x4fdbd0 夹 [esi+0x44]
 ;   开关开 -> 本 stub 末尾 cmp [g_flags+0Fh],1 留下 ZF=1 -> je 跳过 clamp ->
-;     距离原样透传，无上限（实测 600→631→663→…→810，每档 ×1.05 复利增长）。
+;     距离原样透传，无上限（参考实现实测 600→631→663→…→810；本方 POC 600→1827，
+;     每档 ×1.05 复利增长）。
 ;   开关关 -> popfd 还原自然 ZF（0x1EC7C4 的 cmp 结果）-> 与无 hook 原版逐字节一致
 ;     （原生基线实测：拉远封顶 600.00，拉近正常 600→575→551→528）。
 ;   ⚠ 绝不能写 fadd m32：上游 x87 栈已弹空，空栈 fadd 写 indefinite QNaN 污染 [+0x2730]。
@@ -307,8 +308,7 @@ ZoomCaveStub ENDP
 ;   上一版在这里把 [esi+0x34] 强行写成 [esi+0x44] × 0.0028333，结果画面坏掉：
 ;   [esi+0x34] 是游戏自己从距离推出来的量（600 -> 1.7，实测反比/正比都试过，
 ;   写 0.17 直接黑屏、写 17 变贴脸），外部硬写一定和引擎的其它约束打架。
-;   现在只采样，用来回答一个关键问题：距离被放开到 600 以上之后，
-;   游戏自己有没有把 [esi+0x34] 跟着改。有 -> 只需要放开上限；没有 -> 得另找约束。
+;   现在只采样 [+0x44]/[+0x34]/[+0x74]，供 actions.cpp 的 [诊断] 输出显示。
 ;   重放 `mov [esi+0x2654], bl`（6B）后跳回 0x1EC833 的 call，栈天然平衡。
 ; ===========================================================================
 ZoomPostStub PROC

@@ -109,27 +109,36 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | | 禁用敌方超武 | `0x43ECA6` | `[eax+0xc]+=1` |
 | | 秒杀模式 | `0x3651AE` | 命中时把敌方 `[esi+4]` 写 0（辅以 `0x3FE714` / `0x2E24E3` 记录当前血量体） |
 | 地图 | 全图（去迷雾） | `0x3C226C` | `[ebp+0x260]=99999.0f` |
-| | 无限缩放 | `0x1EC730` `0x1EC82D` `0x1EC7CD` | 放开滚轮上限 `[this+0x2704]`；`0x1EC7CD` / `0x1EC82D` 只做采样 |
+| | 无限缩放 | `0x1EC7CD` `0x1EC730` `0x1EC82D` | 开关开 → 出口置 ZF=1，`0x1EC7D2` 的 `je` 跳过 clamp；另两站只采样 |
 
-**共 20 个 hook 点 / 16 个功能**（`kHooks[]` 20 条），每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 20/20）。
+**共 22 个 hook 点 / 16 个功能**（`kHooks[]` 22 条），每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 22/22）。
 
 **架构：表驱动**（`features.cpp` 的 `kHooks[]`）—— 新增功能 = 表里加一行 + 写一个 stub（`stubs.asm`）+ UI 加个勾选框。
 
 **免费建造**（`0x0E7565`）是 1 字节补丁（`75 0C` jne → `EB 0C` jmp），不走 code cave；单位操作 / 召唤 / 空投（`actions.cpp`）与 AI 指挥（`aicmd.cpp`）则直调游戏函数。
 
-**无限缩放**（`ZoomEntry` `0x1EC730` + `Zoom` `0x1EC7CD` + `ZoomPost` `0x1EC82D`）：**只做一件事——放开滚轮上限 `[W3DView+0x2704]`**。
+**无限缩放**（`Zoom` `0x1EC7CD` + `ZoomEntry` `0x1EC730` + `ZoomPost` `0x1EC82D`）：**核心是出口处的 ZF 位**，不是哪个字段。
 
-`[+0x26fc]` 是 `W3DView` 里的内嵌对象，vtable 在 `0x00C0A1F8`：`vt[0]`（`0x6D5B90`，`fld [ecx+4]`）返回下限 `[+0x2700]`，`vt[1]`（`0xA2DD40`，`fld [ecx+8]`）返回上限 `[+0x2704]`。`0x1EC7D4` 段把这两个返回值传给 `clamp(0xfdbd0)` 再写回 `[+0x44]`。原版上限 600，滚轮每格 ×1.0525，撞上就停。
+距离每轮在 `0x1EC7CD` 写入，紧随其后：
 
-`ZoomEntryStub` 在开关打开时把 `[this+0x2704]` 写成 `g_zoomMax`（默认 20000），关闭时不写任何值，让游戏自己把上限算回去。
+```asm
+0x5EC7C4  cmp  byte [esi+0x48], bl      ; ZF 由此 cmp 定；原生态走 clamp 分支
+0x5EC7CD  movss [esi+0x44], xmm0        ; ← hook 点，5 字节
+0x5EC7D2  je   0x5EC80D                 ; ZF=1 → 跳过整段 clamp
+0x5EC7D4  .. 取 vt[0]/vt[1] 上下限 → call 0x4FDBD0 → fstp [esi+0x44]
+```
 
-**不要写 `[+0x34]`**：它是游戏从距离派生出来的相机系数（600 ↔ 1.7），外部硬写会立刻毁画面——实测写 3.4 更近、写 17 贴脸特写、写 0.17 直接黑屏。之前一版每帧把它同步成 `[+0x44] × 0.0028333`，就是画面坏掉的原因。`0x1EC82D` 现在只采样 `[+0x44]` / `[+0x34]` / `[+0x74]`，不写。
+`ZoomCaveStub` 先 `pushfd` 存下自然 flags，重放原指令，再用 `cmp byte [g_flags+0x0F],1` 自己造 ZF：开关开 → ZF=1，用 `pop eax` 把保存的自然 flags **丢掉**（`pop` 不改 EFLAGS），于是 `0x1EC7D2` 的 `je` 成立、整段 clamp（含写回）被跳过，`[esi+0x44]` 保留透传值，滚轮每档 ×1.0525 复利、无上限；开关关 → `popfd` 还原自然 flags，与无 hook 的原版逐字节一致。
 
-**不要照抄 CE 的 `fadd`**：上游 `0x1EC7A0~0x1EC7BC` 的 `fld` / `fst` / `fstp` 已经把 x87 栈弹空，`call 0x51D170` 也不留浮点值，进入 `0x1EC7CD` 时栈深度为 0。空栈 `fadd m32` 会触发栈下溢，`ST(0)` 变成 indefinite QNaN（`0xFFC00000`），随后的 `fstp` 把它写进 `[+0x44]`，函数入口的 `fsub [+0x44]` 再把 NaN 累进 `[+0x2730]`——`NaN + x` 恒为 NaN，关掉开关也不自愈，只能重开对局。这就是最初「不能缩放且无法恢复」的原因。
+⚠ 开态丢弃 flags 必须用 `pop eax`，**不能写 `add esp,4`**——`add` 会重算 EFLAGS，把 ZF 打回 0，静默失效。
 
-**`[+0x48]` 是「是否走 clamp」的开关**：`0x1EC7D2` 的 `je 0x1EC80d` 在 `[+0x48] == 0` 时跳过 clamp，非 0 时才走到 `0x1EC7D4` 那段。它在运行时会在 0/1 之间变化，所以在 `0x1EC7CD` 处放大有时会被覆盖、有时不会——排查时看到结论反复，根源就在这里。
+⚠ 不要写 `[+0x34]`：它是游戏按距离派生的相机系数（600 ↔ 1.7），外部硬写必和引擎约束打架——实测写 3.4 更近、写 17 贴脸特写、写 0.17 直接黑屏。`0x1EC82D` 只采样 `[+0x44]` / `[+0x34]` / `[+0x74]`。
 
-**CE 原表那份脚本本身是死的**：`research/tools/ce_scripts_dump.txt`（从 trainer 运行内存直接导出）显示 22 个 hook 里只有 `1EC7CD` 是缩放，而该条 `cmp [iEnable+F],1` 后接 `db 75 0b`（`JNE`），紧跟着一条无条件 `jmp _BackPlayerZoom`——开关为 1 时 `jne` 不跳，正好撞上那条 `jmp` 返回。同表的「Player Map」写法正相反（`jne` 跳过动作，开关=1 时执行），可见这条的条件写反了。
+⚠ 不要写 `[this+0x2704]`（clamp 上限）：clamp 跑不跑由 ZF 决定，写上限治标不治本；而且关闭态没有任何代码把它算回 600，会污染原生行为。`ZoomEntryStub` 现在纯遥测。
+
+⚠ 不要照抄 CE 的 `fadd`：上游 `0x1EC7A0~0x1EC7BC` 的 `fld` / `fst` / `fstp` 已经把 x87 栈弹空，`call 0x51D170` 也不留浮点值，进入 `0x1EC7CD` 时深度为 0。空栈 `fadd m32` 触发栈下溢，`ST(0)` 变 indefinite QNaN（`0xFFC00000`），随后 `fstp` 写进 `[+0x44]`，函数入口的 `fsub [+0x44]` 再把 NaN 累进 `[+0x2730]`；`NaN + x` 恒为 NaN，关开关也不自愈，只能重开对局。这就是最初「不能缩放且无法恢复」的原因。
+
+CE 原表 Ctrl+F8 只翻 `iEnable+0xF` / `+0x10` 两个标志字节，是**纯透传**；它自己那段 `fadd` / `fsub` 因 `jne` 后挡着无条件 `jmp` 而不可达（同表「Player Map」写法正相反），所以那份脚本的弹簧扰动从未生效——真正起作用的是「跳过 clamp」这条路。
 
 ### 未接线的 hook 点
 
