@@ -1276,8 +1276,10 @@ void PanelMisc() {
             SetFeature(FID_KILLMODE, km);
             AddLog(km ? LOG_OK : LOG_INFO, "[秒杀] %s", km ? "开" : "关");
         }
-        // hook base+0x1EC7CD 的 movss [esi+44],xmm0：开启后对镜头距离做 fadd。
-        // （CE 侧同一功能只用这一个标志位；另一条 fsub 分支无对应 UI。）
+        // hook base+0x1EC7CD 的 movss [esi+44],xmm0：开启后 stub 用 cmp [g_flags+0Fh],1
+        // 给 0x1EC7D2 的 je 留 ZF=1，跳过 0x1EC7D4..0x1EC80C 整段 clamp ——
+        // 距离原样透传，滚轮拉远无上限（600→631→663→… 每档 ×1.05 复利）。
+        // 关闭态 popfd 还原自然 ZF，与无 hook 原版逐字节一致。
         bool zi = GetFeature(FID_ZOOM_IN);
         if (ImGui::Checkbox("无限缩放", &zi)) {
             SetFeature(FID_ZOOM_IN, zi);

@@ -21,6 +21,16 @@ uint32_t g_okBody         = 0;
 int32_t  g_moneyOp        = 0;
 int32_t  g_moneyValue     = 0;
 uint8_t  g_flags[32]      = { 0 };
+uint32_t g_zoomHits       = 0;      // 遥测：Zoom cave 进入次数
+float    g_zoomMax        = 20000.0f; // 无限缩放：滚轮上限（原版 600）
+float    g_zoomMaxOff     = 600.0f;  // 无限缩放：开关关闭时写回的原上限
+uint32_t g_zoomCam34      = 0;      // 遥测：clamp 之后 [+0x34]
+uint32_t g_zoomPitch      = 0;      // 遥测：clamp 之后 [+0x74]
+uint32_t g_zoomObj        = 0;      // 遥测：最近一次 this 指针
+uint32_t g_zoomVal        = 0;      // 遥测：进入时 [esi+0x44]
+uint32_t g_zoomPost       = 0;      // 遥测：运算后 [esi+0x44]
+uint8_t  g_zoomState      = 0;      // 遥测：0=NaN护栏 1=放大 2=缩小 3=开关关
+uint32_t g_zoomEntry      = 0;      // 遥测：缩放函数入口命中次数
 uint32_t g_telemEnter     = 0;
 uint32_t g_telemApplied   = 0;
 
@@ -30,6 +40,8 @@ uint32_t g_retFastBuild3 = 0, g_retMap = 0, g_retUnitAmmo = 0;
 uint32_t g_retDangerLevel = 0, g_retOreMine = 0, g_retGodMode = 0;
 uint32_t g_retEnemyCantBuild = 0, g_retSuperPower = 0, g_retDisableAllSP = 0;
 uint32_t g_retZoom = 0, g_retOneKill = 0, g_retOKData1 = 0, g_retOKData2 = 0;
+uint32_t g_retZoomPost = 0;
+uint32_t g_retZoomEntry = 0;
 }
 
 // ---- overlay 侧遥测 ----
@@ -58,6 +70,8 @@ const uint8_t AOB_SUPERPOWER[6] = { 0x8B, 0x98, 0x18, 0x04, 0x00, 0x00 };
 const uint8_t AOB_DISABLEALLSP[6] = { 0x8B, 0x51, 0x50, 0x3B, 0x50, 0x0C };
 // Zoom / 秒杀 3 hook（基于 CE）—— 唯一长签名
 const uint8_t AOB_ZOOM[7]     = { 0xF3,0x0F,0x11,0x46,0x44,0x74,0x39 };
+const uint8_t AOB_ZOOMPOST[11] = { 0x88,0x9E,0x54,0x26,0x00,0x00,0xE8,0xB8,0xEA,0xFF,0xFF };
+const uint8_t AOB_ZOOMENTRY[14] = { 0xA1,0x50,0xB7,0xCD,0x00,0x53,0x33,0xDB,0x38,0x98,0xBC,0x00,0x00,0x00 };
 const uint8_t AOB_ONEKILL[7]  = { 0xF3,0x0F,0x11,0x46,0x04,0x74,0x20 };
 const uint8_t AOB_OKDATA1[8]  = { 0x8B,0x8E,0x3C,0x03,0x00,0x00,0x8B,0x95 };
 const uint8_t AOB_OKDATA2[10] = { 0x8B,0x89,0x3C,0x03,0x00,0x00,0x85,0xC9,0x74,0x0C };
@@ -90,6 +104,8 @@ const HookDef kHooks[] = {
     { "SuperPower", 0x2EBB69, AOB_SUPERPOWER,6, (void*)&SuperPowerCaveStub,  &g_retSuperPower,  6 },
     { "DisableAllSP",0x43ECA6,AOB_DISABLEALLSP,6,(void*)&DisableAllSPCaveStub,&g_retDisableAllSP,6 },
     { "Zoom",       0x1EC7CD, AOB_ZOOM,    7, (void*)&ZoomCaveStub,       &g_retZoom,    5 },
+    { "ZoomPost",   0x1EC82D, AOB_ZOOMPOST,11,(void*)&ZoomPostStub,       &g_retZoomPost,6 },
+    { "ZoomEntry",  0x1EC730, AOB_ZOOMENTRY,14,(void*)&ZoomEntryStub,     &g_retZoomEntry,5 },
     { "OneKill",    0x3651AE, AOB_ONEKILL, 7, (void*)&OneKillCaveStub,    &g_retOneKill, 5 },
     { "OKData1",    0x3FE714, AOB_OKDATA1, 8, (void*)&OKData1CaveStub,    &g_retOKData1, 6 },
     { "OKData2",    0x2E24E3, AOB_OKDATA2, 10,(void*)&OKData2CaveStub,    &g_retOKData2, 6 },

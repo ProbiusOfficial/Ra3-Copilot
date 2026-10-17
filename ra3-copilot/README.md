@@ -109,7 +109,7 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | | 禁用敌方超武 | `0x43ECA6` | `[eax+0xc]+=1` |
 | | 秒杀模式 | `0x3651AE` | 命中时把敌方 `[esi+4]` 写 0（辅以 `0x3FE714` / `0x2E24E3` 记录当前血量体） |
 | 地图 | 全图（去迷雾） | `0x3C226C` | `[ebp+0x260]=99999.0f` |
-| | 无限缩放 | `0x1EC7CD` | 镜头距离 `fadd`（`movss [esi+0x44],xmm0`） |
+| | 无限缩放 | `0x1EC730` `0x1EC82D` `0x1EC7CD` | 放开滚轮上限 `[this+0x2704]`；`0x1EC7CD` / `0x1EC82D` 只做采样 |
 
 **共 20 个 hook 点 / 16 个功能**（`kHooks[]` 20 条），每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 20/20）。
 
@@ -117,7 +117,19 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 
 **免费建造**（`0x0E7565`）是 1 字节补丁（`75 0C` jne → `EB 0C` jmp），不走 code cave；单位操作 / 召唤 / 空投（`actions.cpp`）与 AI 指挥（`aicmd.cpp`）则直调游戏函数。
 
-**无限缩放**（`Zoom`，`0x1EC7CD`）：hook `movss [esi+44],xmm0`，开启后 cave 内对该镜头距离做 `fadd`。CE 侧同一功能只用一个标志位（`Ctrl+F8`），本程序据此只暴露一个开关；code cave 里的 `fsub` 分支无对应 UI。
+**无限缩放**（`ZoomEntry` `0x1EC730` + `Zoom` `0x1EC7CD` + `ZoomPost` `0x1EC82D`）：**只做一件事——放开滚轮上限 `[W3DView+0x2704]`**。
+
+`[+0x26fc]` 是 `W3DView` 里的内嵌对象，vtable 在 `0x00C0A1F8`：`vt[0]`（`0x6D5B90`，`fld [ecx+4]`）返回下限 `[+0x2700]`，`vt[1]`（`0xA2DD40`，`fld [ecx+8]`）返回上限 `[+0x2704]`。`0x1EC7D4` 段把这两个返回值传给 `clamp(0xfdbd0)` 再写回 `[+0x44]`。原版上限 600，滚轮每格 ×1.0525，撞上就停。
+
+`ZoomEntryStub` 在开关打开时把 `[this+0x2704]` 写成 `g_zoomMax`（默认 20000），关闭时不写任何值，让游戏自己把上限算回去。
+
+**不要写 `[+0x34]`**：它是游戏从距离派生出来的相机系数（600 ↔ 1.7），外部硬写会立刻毁画面——实测写 3.4 更近、写 17 贴脸特写、写 0.17 直接黑屏。之前一版每帧把它同步成 `[+0x44] × 0.0028333`，就是画面坏掉的原因。`0x1EC82D` 现在只采样 `[+0x44]` / `[+0x34]` / `[+0x74]`，不写。
+
+**不要照抄 CE 的 `fadd`**：上游 `0x1EC7A0~0x1EC7BC` 的 `fld` / `fst` / `fstp` 已经把 x87 栈弹空，`call 0x51D170` 也不留浮点值，进入 `0x1EC7CD` 时栈深度为 0。空栈 `fadd m32` 会触发栈下溢，`ST(0)` 变成 indefinite QNaN（`0xFFC00000`），随后的 `fstp` 把它写进 `[+0x44]`，函数入口的 `fsub [+0x44]` 再把 NaN 累进 `[+0x2730]`——`NaN + x` 恒为 NaN，关掉开关也不自愈，只能重开对局。这就是最初「不能缩放且无法恢复」的原因。
+
+**`[+0x48]` 是「是否走 clamp」的开关**：`0x1EC7D2` 的 `je 0x1EC80d` 在 `[+0x48] == 0` 时跳过 clamp，非 0 时才走到 `0x1EC7D4` 那段。它在运行时会在 0/1 之间变化，所以在 `0x1EC7CD` 处放大有时会被覆盖、有时不会——排查时看到结论反复，根源就在这里。
+
+**CE 原表那份脚本本身是死的**：`research/tools/ce_scripts_dump.txt`（从 trainer 运行内存直接导出）显示 22 个 hook 里只有 `1EC7CD` 是缩放，而该条 `cmp [iEnable+F],1` 后接 `db 75 0b`（`JNE`），紧跟着一条无条件 `jmp _BackPlayerZoom`——开关为 1 时 `jne` 不跳，正好撞上那条 `jmp` 返回。同表的「Player Map」写法正相反（`jne` 跳过动作，开关=1 时执行），可见这条的条件写反了。
 
 ### 未接线的 hook 点
 

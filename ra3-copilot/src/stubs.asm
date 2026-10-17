@@ -21,6 +21,7 @@ EXTERNDEF g_tickNow      : DWORD    ; C++ 每帧更新的帧计数
 EXTERNDEF g_okUnit       : DWORD    ; 秒杀用：当前处理的单位
 EXTERNDEF g_okBody       : DWORD    ; 秒杀用：当前单位血量体（与 hook 点 esi 比较）
 EXTERNDEF g_retZoom      : DWORD
+EXTERNDEF g_retZoomPost  : DWORD
 EXTERNDEF g_retOneKill   : DWORD
 EXTERNDEF g_retOKData1   : DWORD
 EXTERNDEF g_retOKData2   : DWORD
@@ -29,6 +30,16 @@ EXTERNDEF g_moneyValue   : DWORD    ; 金额
 EXTERNDEF g_flags        : BYTE     ; 功能开关数组（索引对齐 CE 的 FLAGS 偏移）
 EXTERNDEF g_telemEnter   : DWORD    ; 遥测：money cave 执行次数
 EXTERNDEF g_telemApplied : DWORD    ; 遥测：加钱生效次数
+EXTERNDEF g_zoomHits     : DWORD    ; 遥测：Zoom cave 进入次数
+EXTERNDEF g_zoomMax      : DWORD    ; 无限缩放：开关打开时写入的滚轮上限（float）
+EXTERNDEF g_zoomMaxOff   : DWORD    ; 无限缩放：开关关闭时写回的原上限 600.0（float）
+EXTERNDEF g_zoomCam34    : DWORD    ; 遥测：clamp 之后 [+0x34] 相机系数
+EXTERNDEF g_zoomPitch    : DWORD    ; 遥测：clamp 之后 [+0x74] 俯仰角
+EXTERNDEF g_zoomObj      : DWORD    ; 遥测：最近一次 this 指针
+EXTERNDEF g_zoomVal      : DWORD    ; 遥测：进入时 [esi+0x44]
+EXTERNDEF g_zoomPost     : DWORD    ; 遥测：运算后 [esi+0x44]
+EXTERNDEF g_zoomState    : BYTE     ; 遥测：0=NaN护栏 1=放大 2=缩小 3=开关关
+EXTERNDEF g_zoomEntry    : DWORD    ; 遥测：缩放函数入口命中次数（含被早退的）
 
 ; ---- 各 hook 返回地址（运行时由 C++ 填充 = site + 重放长度）----
 EXTERNDEF g_retMoney        : DWORD
@@ -47,6 +58,7 @@ EXTERNDEF g_retGodMode      : DWORD
 EXTERNDEF g_retEnemyCantBuild : DWORD
 EXTERNDEF g_retSuperPower     : DWORD
 EXTERNDEF g_retDisableAllSP   : DWORD
+EXTERNDEF g_retZoomEntry      : DWORD
 
 .code
 
@@ -238,28 +250,79 @@ mp_skip:
 MapCaveStub ENDP
 
 ; ===========================================================================
+; ZoomEntryStub <- base+0x1EC730  AOB A150B7CD00 5333DB 3898BC000000 (14B, 只重放前 5B)
+;   只遥测，不写任何游戏字段。
+;   历史：旧版开关开时把 [ecx+0x2704]（clamp 上限）写成 g_zoomMax 想放开滚轮上限，
+;     实测时灵时不灵 —— clamp 跑不跑由 0x1EC7D2 的 je 决定（ZF 来自 0x1EC7C4 的
+;     cmp [esi+0x48],bl），与写给 +0x2704 的值没关系；且关掉后 +0x2704 残留 20000
+;     会让关闭态也能拉到 20000，反而破坏原生行为。放开上限已由 ZoomCaveStub 的
+;     ZF 机制接管，本 stub 不再碰游戏内存。
+; ===========================================================================
+ZoomEntryStub PROC
+    pushad
+    inc   dword ptr [g_zoomEntry]
+    mov   dword ptr [g_zoomObj], ecx
+    popad
+    mov   eax, dword ptr [0CDB750h]     ; A1 50 B7 CD 00  原指令重放
+    jmp   dword ptr g_retZoomEntry
+ZoomEntryStub ENDP
+
+; ===========================================================================
 ; ZoomCaveStub <- base+0x1EC7CD  AOB F30F1146447439 (7B, 原指令 5B: movss [esi+0x44],xmm0)
-;   基于 CE：FLAGS+0F=1 → fadd [esi+0x44]（放大）；FLAGS+10=1 → fsub（缩小）
+;   机制（2026-10-17 破译，字节级复刻 2009 CE trainer 的 Ctrl+F8）：
+;     0x1EC7C4: cmp byte [esi+0x48],bl        ← je 的 ZF 来源（bl=1 时常量走 clamp）
+;     0x1EC7CD: movss [esi+0x44],xmm0         ← 本 hook（patch 5B）
+;     0x1EC7D2: je 0x5EC80D                    ← ZF=1 即跳过 0x1EC7D4..0x1EC80C 的 clamp
+;     0x1EC7D4..0x1EC806: vt[1]/vt[0] 取上下限 + call 0x4fdbd0 夹 [esi+0x44]
+;   开关开 -> 本 stub 末尾 cmp [g_flags+0Fh],1 留下 ZF=1 -> je 跳过 clamp ->
+;     距离原样透传，无上限（实测 600→631→663→…→810，每档 ×1.05 复利增长）。
+;   开关关 -> popfd 还原自然 ZF（0x1EC7C4 的 cmp 结果）-> 与无 hook 原版逐字节一致
+;     （原生基线实测：拉远封顶 600.00，拉近正常 600→575→551→528）。
+;   ⚠ 绝不能写 fadd m32：上游 x87 栈已弹空，空栈 fadd 写 indefinite QNaN 污染 [+0x2730]。
+;   ⚠ 开态丢弃 flags 用 pop eax 而非 add esp,4：add 会重建 EFLAGS 把 ZF 打回 0。
 ; ===========================================================================
 ZoomCaveStub PROC
-    pushad
-    pushfd
+    pushad                       ; 通用寄存器（PUSH/POP 不动 EFLAGS）
+    pushfd                       ; 保存自然 flags = 0x1EC7C4 cmp 的 ZF
     movss dword ptr [esi+44h], xmm0     ; F3 0F 11 46 44  原指令重放
-    cmp   byte ptr [g_flags+0Fh], 1
-    jne   zm_out
-    fadd  dword ptr [esi+44h]
-    fstp  dword ptr [esi+44h]
-    jmp   zm_done
-zm_out:
-    cmp   byte ptr [g_flags+10h], 1
-    jne   zm_done
-    fsub  dword ptr [esi+44h]
-    fstp  dword ptr [esi+44h]
-zm_done:
-    popfd
+    inc   dword ptr [g_zoomHits]
+    mov   dword ptr [g_zoomObj], esi
+    mov   eax, dword ptr [esi+44h]
+    mov   dword ptr [g_zoomVal], eax
+    mov   dword ptr [g_zoomPost], eax
+    cmp   byte ptr [g_flags+0Fh], 1     ; 开 -> ZF=1（je 跳过 clamp）
+    jne   zc_native
+    pop   eax                           ; 开 -> 丢弃自然 flags，保留 ZF=1
+    jmp   zc_out
+zc_native:
+    popfd                               ; 关 -> 还原自然 flags
+zc_out:
     popad
     jmp   dword ptr g_retZoom
 ZoomCaveStub ENDP
+
+; ===========================================================================
+; ZoomPostStub <- base+0x1EC82D  AOB 889E54260000 E8B8EAFFFF (11B, 重放前 6B)
+;   只重放 + 遥测，**不写任何游戏字段**。
+;   上一版在这里把 [esi+0x34] 强行写成 [esi+0x44] × 0.0028333，结果画面坏掉：
+;   [esi+0x34] 是游戏自己从距离推出来的量（600 -> 1.7，实测反比/正比都试过，
+;   写 0.17 直接黑屏、写 17 变贴脸），外部硬写一定和引擎的其它约束打架。
+;   现在只采样，用来回答一个关键问题：距离被放开到 600 以上之后，
+;   游戏自己有没有把 [esi+0x34] 跟着改。有 -> 只需要放开上限；没有 -> 得另找约束。
+;   重放 `mov [esi+0x2654], bl`（6B）后跳回 0x1EC833 的 call，栈天然平衡。
+; ===========================================================================
+ZoomPostStub PROC
+    mov   byte ptr [esi+2654h], bl      ; 88 9E 54 26 00 00  原指令重放
+    pushad
+    mov   eax, dword ptr [esi+44h]
+    mov   dword ptr [g_zoomPost], eax   ; 采样：[+0x44] 逻辑距离
+    mov   eax, dword ptr [esi+34h]
+    mov   dword ptr [g_zoomCam34], eax  ; 采样：[+0x34] 相机系数
+    mov   eax, dword ptr [esi+74h]
+    mov   dword ptr [g_zoomPitch], eax  ; 采样：[+0x74] 俯仰
+    popad
+    jmp   dword ptr g_retZoomPost
+ZoomPostStub ENDP
 
 ; ===========================================================================
 ; OneKillCaveStub <- base+0x3651AE  AOB F30F1146047420 (7B, 原指令 5B: movss [esi+4],xmm0)

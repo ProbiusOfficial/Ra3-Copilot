@@ -1426,6 +1426,14 @@ static void DiagCore() {
         DiagPrintf("[诊断] 相机 pos=%.1f,%.1f,%.1f 前向=%.2f,%.2f,%.2f",
                camPos[0], camPos[1], camPos[2], fwd[0], fwd[1], fwd[2]);
         {
+            // 缩放 hook 遥测：入口/到点 + 距离 + 相机系数 + 俯仰（判断游戏是否自己跟上了 +0x34）
+            union { uint32_t u; float f; } zv, zc, zp;
+            zv.u = g_zoomVal; zc.u = g_zoomCam34; zp.u = g_zoomPitch;
+            DiagPrintf("[诊断] 缩放 hook: 入口=%u 到点=%u obj=%08X 距离=%.1f 相机系数=%.4f 俯仰=%.4f 无限缩放=%s",
+                       g_zoomEntry, g_zoomHits, g_zoomObj, zv.f, zc.f, zp.f,
+                       GetFeature(FID_ZOOM_IN) ? "开" : "关");
+        }
+        {
             float lm[16], mm[16], lfz = 0, mfz = 0; int vc = 0;
             GetRawView(lm, &lfz, mm, &mfz, &vc);
             DiagPrintf("[诊断] 原始VIEW 次数=%d 末次_33=%.3f 最小_33=%.3f", vc, lfz, mfz);
