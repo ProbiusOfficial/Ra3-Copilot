@@ -43,14 +43,14 @@ injector.exe (x86) ──CreateRemoteThread(LoadLibraryW)──► ra3copilot.dl
 build.bat
 ```
 
-要求：VS2019 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.19041。
+要求：VS2022 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.22621。
 依赖：`third_party/minhook-1.3.3`（BSD-2，静态编入；单独编译到 `obj_mh\`，避免 `hook.c` 与 `src/hook.cpp` 的 `hook.obj` 同名冲突）。
-产物：`ra3copilot.dll`、`injector.exe`，均为 **x86**（游戏是 32 位进程 → 注入器必须同位数）。
+产物：`build_out\Ra3Copilot.exe`（单文件发布版）、`ra3copilot.dll`、`injector.exe`，均为 **x86**（游戏是 32 位进程 → 注入器必须同位数）。
 
 > **工具链三坑**：
 > ① `vcvars32.bat` 内部调 `reg.exe` 探测 SDK，而本机安全策略**黑名单硬拦 reg.exe** → INCLUDE 缺 SDK 路径。故不调 vcvars，而**显式设 PATH/INCLUDE/LIB**。
 > ② `.bat` 必须 **CRLF 行尾 + 纯 ASCII**（错乱会啃掉行结构）。
-> ③ 64 位进程**无法**向 32 位进程 `CreateRemoteThread` → 注入只能用 `injector.exe`（x86）；Python（64 位）只做诊断（`ReadProcessMemory` 跨位数可用）。
+> ③ 64 位进程**无法**向 32 位进程 `CreateRemoteThread` → 注入只能用 x86 的 `Ra3Copilot.exe` / `injector.exe`；Python（64 位）只做诊断（`ReadProcessMemory` 跨位数可用）。
 
 改 hook / 改 AOB 后，交付前用真实游戏 exe 做字节级预检：
 
@@ -61,10 +61,14 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 ## 使用
 
 1. **先启动游戏并进入对局**（遭遇战 / 战役均可）
-2. **运行 `deploy.bat`**（自动 UAC 提权 → `injector.exe` 注入 → 打印诊断）
+2. **双击 `Ra3Copilot.exe`**：自动识别游戏；点「注入修改器」
+   - 游戏以管理员权限运行时，启动器会请求一次 UAC 提权
+   - 已注入时主按钮变为「卸载修改器」；「重载修改器」= 卸载后重新注入
 3. 游戏内 **`INSERT`** 显示/隐藏菜单；**`Ctrl+F1`** 加钱（默认热键，可在「设置 → 快捷键」改键）
 
 菜单**画在游戏画面内**（非独立窗口）。显示菜单时会抢焦点（RTS 失焦会暂停），这是**有意的** —— 鼠标键盘才能操作 UI。
+
+单文件版会把运行文件释放到 `%LOCALAPPDATA%\Ra3Copilot\`；日志、按键配置、面板布局都在该目录。
 
 ### 界面
 
@@ -166,7 +170,10 @@ CE 原表 Ctrl+F8 只翻 `iEnable+0xF` / `+0x10` 两个标志字节，是**纯�
 | `httpapi.h` / `httpapi.cpp` | 进程内 HTTP 调试接口 + MCP 端点 |
 | `units_corona.h` | 可召唤单位 / 箱子代码表（自动生成） |
 | `dllmain.cpp` | DLL 入口 |
-| `injector.cpp` | 注入器 |
+| `launcher.cpp` | 单文件启动器（ImGui / D3D9；注入 / 卸载 / 重载 / 状态与日志） |
+| `injectcore.h` / `injectcore.cpp` | 注入、卸载、模块表 / HTTP 判活（启动器与命令行共用） |
+| `ui_theme.h` | 局内 overlay 与启动器共用的 ImGui 主题 / 中文字体 |
+| `injector.cpp` | 命令行注入器 |
 
 ## 目录
 
@@ -179,13 +186,15 @@ ra3-copilot/
 ├── imgui/              Dear ImGui v1.91.4（核心 + dx9/win32 backend）
 ├── third_party/
 │   └── minhook-1.3.3/  MinHook（inline hook，BSD-2）
+├── res/                启动器资源（图标 / manifest / 内嵌 DLL 与 MCP）
 ├── src/                见上「模块清单」
 ├── mcp/
 │   ├── ra3_mcp.py          MCP stdio 服务器（零依赖 Python）
 │   └── unit_catalog.json   单位目录（自动生成）
 ├── tools/              AOB 预检 / 注入诊断 / 渲染探针 / 目录生成等脚本
+├── build_out/          Ra3Copilot.exe（单文件发布版）/ ra3copilot.dll
 ├── ra3copilot.dll      产物：注入模块
-├── injector.exe        产物：注入器
+├── injector.exe        产物：命令行注入器
 └── ra3copilot.map      产物：链接器符号表（诊断工具用）
 ```
 

@@ -29,7 +29,9 @@ if defined RA3_PY set "PY=%RA3_PY%"
 if not defined PY (
     where python >nul 2>&1 && set "PY=python"
 )
-if not defined PY if exist "C:\Users\admin\.workbuddy\binaries\python\versions\3.13.12\python.exe" set "PY=C:\Users\admin\.workbuddy\binaries\python\versions\3.13.12\python.exe"
+if not defined PY (
+    where py >nul 2>&1 && set "PY=py"
+)
 if defined PY (
     "%PY%" "%~dp0tools\inject_and_probe.py" --no-inject
 ) else (

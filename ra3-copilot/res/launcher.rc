@@ -1,0 +1,40 @@
+#include "resource.h"
+
+IDI_APP ICON "app.ico"
+
+// 24 = RT_MANIFEST（用数字，避免 rc 把 RT_MANIFEST 当成自定义字符串类型）
+1 24 "app.manifest"
+
+// 单文件载荷：DLL 与 MCP 运行文件在启动时释放到 %LOCALAPPDATA%\Ra3Copilot
+IDR_PAYLOAD_DLL     RCDATA "..\\build_out\\ra3copilot.dll"
+IDR_PAYLOAD_MCP     RCDATA "..\\mcp\\ra3_mcp.py"
+IDR_PAYLOAD_CATALOG RCDATA "..\\mcp\\unit_catalog.json"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "ProbiusOfficial"
+            VALUE "FileDescription", "Ra3-Copilot Launcher"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "Ra3Copilot"
+            VALUE "LegalCopyright", "Single-player study only"
+            VALUE "OriginalFilename", "Ra3Copilot.exe"
+            VALUE "ProductName", "Ra3-Copilot"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

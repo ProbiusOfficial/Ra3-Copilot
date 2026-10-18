@@ -23,7 +23,7 @@
 
 ## 快速开始
 
-要求：**VS2019 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.19041**
+要求：**VS2022 BuildTools（x86 工具链 + MASM `ml.exe`）+ Windows SDK 10.0.22621**
 
 ```bat
 ra3-copilot\build.bat
@@ -31,8 +31,10 @@ ra3-copilot\build.bat
 
 产物（均为 x86——游戏是 32 位进程，注入器必须同位数）：
 
-- `ra3copilot.dll` —— 注入模块
-- `injector.exe` —— 注入器
+- `ra3-copilot\build_out\Ra3Copilot.exe` —— **单文件发布版**（启动器 + DLL + MCP 自解压）
+- `dist\Ra3Copilot.exe` —— 对外发布件（与上面同文件，单独放一份便于分发）
+- `ra3copilot.dll` —— 注入模块（开发 / 热重载用）
+- `injector.exe` —— 命令行注入器（开发用）
 
 > `build.bat` 不调用 `vcvars32.bat`（其内部调用的 `reg.exe` 会被部分环境的安全策略拦截），而显式设置 `PATH/INCLUDE/LIB`。
 > `.bat` 必须保持 CRLF 行尾 + 纯 ASCII 内容，仓库已通过 `.gitattributes` 保证检出为 CRLF。
@@ -47,9 +49,14 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ## 使用
 
 1. 启动游戏并进入对局（遭遇战 / 战役均可）
-2. 运行 `ra3-copilot\deploy.bat`（自动 UAC 提权 → 注入 → 打印诊断；Python 仅用于只读诊断，可用 `RA3_PY` 指定解释器）
+2. 双击 `Ra3Copilot.exe`：自动识别游戏进程；点「注入修改器」即可
+   - 游戏以管理员权限运行时，启动器会请求一次 UAC 提权
+   - 已注入时显示「卸载修改器」，另有「重载修改器」用于更新 DLL 后重新注入
 3. 游戏内 `INSERT` 显示 / 隐藏菜单，`Ctrl+F1` 加钱（默认热键，可在「设置」里改键）
-4. AI 接入无需开关：接口注入即**常驻监听** `127.0.0.1:17832`，把 MCP 配置交给 AI 即可（详见 `docs/MCP开放-脑机接口.md`）
+4. AI 接入无需开关：接口注入即**常驻监听** `127.0.0.1:17832`；启动器「MCP 配置」可复制客户端配置
+
+> 单文件版运行时会把 `ra3copilot.dll`、MCP 脚本与目录释放到 `%LOCALAPPDATA%\Ra3Copilot\`；
+> 日志、按键配置、面板布局也都在这个目录，启动器「打开目录」可直达。
 
 ## 目录
 
@@ -63,6 +70,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 │   ├── tools/             AOB 预检 / 注入诊断 / 渲染探针等脚本
 │   ├── mcp/               脑机接口（MCP stdio 服务器 + 单位目录）
 │   ├── build.bat / deploy.bat / refresh_dll.bat
+│   ├── build_out/         构建产物（Ra3Copilot.exe / ra3copilot.dll）
 │   └── README.md          架构 / hook 清单 / 渲染原理
 ├── unit-codes/            单位代码（SAGE 对象类型哈希）
 │   ├── README.md / 单位代码与哈希算法.md   结论与完整报告
