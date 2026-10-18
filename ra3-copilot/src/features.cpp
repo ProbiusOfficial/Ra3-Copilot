@@ -32,6 +32,7 @@ uint32_t g_telemEnter     = 0;
 uint32_t g_telemApplied   = 0;
 
 uint32_t g_retMoney = 0, g_retPlayerId = 0, g_retPower = 0, g_retSCPoint = 0;
+uint32_t g_scPointObj = 0, g_scPointVal = 0;
 uint32_t g_retHaveAllSC = 0, g_retFastBuild1 = 0, g_retFastBuild2 = 0;
 uint32_t g_retFastBuild3 = 0, g_retMap = 0, g_retUnitAmmo = 0;
 uint32_t g_retDangerLevel = 0, g_retOreMine = 0, g_retGodMode = 0;

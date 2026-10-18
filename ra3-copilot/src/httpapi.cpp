@@ -11,6 +11,7 @@
 #include "features.h"
 #include "actions.h"
 #include "battlefield.h"
+#include "protocol.h"
 #include "aicmd.h"
 #include "battle_catalog.h"
 #include <cstdio>
@@ -276,6 +277,53 @@ void ExecCmd(CmdSlot& c) {
                      (unsigned)c.a1, (unsigned)c.a2, (unsigned)ea, ec);
         } else
             CmdReply("aicall fn=%08X this=%08X ret=%08X", (unsigned)c.a1, (unsigned)c.a2, (unsigned)r);
+        break;
+    }
+    case 22: {  // protocol: a1=act(0=points 1=science 2=grant 3=all 4=fast 5=disable 9=read) a2=n a3=idx a4=on
+        const int act = (int)c.a1;
+        if (act == 0) {
+            const int n = (int)c.a2;
+            const bool ok = ProtocolSetPoints(n);
+            CmdReply("protocol points <- %d : %s", n, ok ? "ok" : "fail");
+        } else if (act == 1) {
+            const bool ok = ProtocolSetScience(399.0f);
+            CmdReply("protocol science <- 399.0f : %s", ok ? "ok" : "fail");
+        } else if (act == 2) {
+            char out[160] = { 0 };
+            const int r = ProtocolGrant((int)c.a3, "<This Player>", out, sizeof(out));
+            CmdReply("protocol grant idx=%d r=%d %s", (int)c.a3, r, out);
+        } else if (act >= 3 && act <= 5) {
+            const int which = act - 3;
+            const bool on = c.a4 != 0;
+            const bool ok = ProtocolSetToggle(which, on);
+            CmdReply("protocol toggle %d=%d : %s", which, on ? 1 : 0, ok ? "ok" : "fail");
+        } else if (act == 8) {
+            char out[192] = { 0 };
+            const int r = ProtocolGrantLocal((int)c.a3, out, sizeof(out));
+            CmdReply("protocol grantlocal idx=%d r=%d %s", (int)c.a3, r, out);
+        } else if (act == 14) {
+            char out[192] = { 0 };
+            const int r = ProtocolGrantNode((uint32_t)c.a3, out, sizeof(out));
+            CmdReply("protocol node hash=%08X r=%d %s", (uint32_t)c.a3, r, out);
+        } else if (act == 17) {
+            char out[192] = { 0 };
+            const int r = ProtocolNativeGrant((uint32_t)c.a3, out, sizeof(out));
+            CmdReply("protocol ngrant hash=%08X r=%d %s", (uint32_t)c.a3, r, out);
+        } else if (act == 15) {
+            const int r = ProtocolTraceExecInstall();
+            CmdReply("protocol exectrace install=%d %s", r, ProtocolLastError());
+        } else if (act == 16) {
+            char out[192] = { 0 };
+            ProtocolTraceExecRead(out, sizeof(out));
+            CmdReply("protocol exectrace %s", out);
+        } else {
+            CmdReply("protocol points=%d science=%.1f all=%d fast=%d disable=%d count=%d scObj=%08X scVal=%d",
+                     ProtocolPoints(), ProtocolScience(),
+                     ProtocolGetToggle(0) ? 1 : 0,
+                     ProtocolGetToggle(1) ? 1 : 0,
+                     ProtocolGetToggle(2) ? 1 : 0,
+                     ProtocolCount(), g_scPointObj, (int)g_scPointVal);
+        }
         break;
     }
     case 21: {  // order: a1=unit(Thing) a2=act(0=attack 1=move 2=idle) a3=target(Thing) a4..a6=xyz(float位)
@@ -869,6 +917,32 @@ void Handle(SOCKET c, char* req) {
         args[4] = (int)*(uint32_t*)&oy;                         // -> c.a5
         args[5] = (int)*(uint32_t*)&oz;                         // -> c.a6
         na = 6;
+    } else if (strcmp(path, "/protocol") == 0) {
+        fn = 22;
+        char ab[24] = { 0 };
+        GetParam(query, "act", ab, sizeof(ab));
+        int act = 9;
+        if (strcmp(ab, "points") == 0) act = 0;
+        else if (strcmp(ab, "science") == 0) act = 1;
+        else if (strcmp(ab, "grant") == 0) act = 2;
+        else if (strcmp(ab, "all") == 0) act = 3;
+        else if (strcmp(ab, "fast") == 0) act = 4;
+        else if (strcmp(ab, "disable") == 0) act = 5;
+        else if (strcmp(ab, "local") == 0) act = 8;
+        else if (strcmp(ab, "node") == 0) act = 14;
+        else if (strcmp(ab, "exectrace") == 0) act = 15;
+        else if (strcmp(ab, "execinfo") == 0) act = 16;
+        else if (strcmp(ab, "ngrant") == 0) act = 17;
+        args[0] = act;
+        args[1] = GetParamInt(query, "n", 0);
+        args[2] = GetParamInt(query, "idx", 0);
+        args[3] = GetParamInt(query, "on", 1);
+        if (act == 14 || act == 17) {
+            char hb[32] = { 0 };
+            if (GetParam(query, "hash", hb, sizeof(hb)))
+                args[2] = (int)strtoul(hb, nullptr, 0);
+        }
+        na = 4;
     } else if (strcmp(path, "/scratch") == 0) {
         // Coord3D 传参缓冲：写 DLL 自有内存，回地址。仅 RE 实验用。
         char vb[32] = { 0 };

@@ -30,6 +30,7 @@ extern uint32_t g_telemApplied;    // 加钱生效次数
 
 // 各 hook 返回地址（C++ 侧填充）
 extern uint32_t g_retMoney, g_retPlayerId, g_retPower, g_retSCPoint, g_retHaveAllSC;
+extern uint32_t g_scPointObj, g_scPointVal;
 extern uint32_t g_retFastBuild1, g_retFastBuild2, g_retFastBuild3, g_retMap;
 extern uint32_t g_retUnitAmmo, g_retDangerLevel, g_retOreMine, g_retGodMode;
 extern uint32_t g_retEnemyCantBuild, g_retSuperPower, g_retDisableAllSP;

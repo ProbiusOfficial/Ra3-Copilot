@@ -22,6 +22,7 @@
 #include "symres.h"
 #include "httpapi.h"
 #include "battlefield.h"
+#include "protocol.h"
 #include "units_corona.h"
 #include "imgui.h"
 #include "backends/imgui_impl_dx9.h"
@@ -1288,6 +1289,90 @@ void PanelMisc() {
     }
 }
 
+// ===== 面板：协议技能 =====
+// 协议点 / 科技点是本地玩家对象上的纯数据字段（+0x34 / +0x2C）；
+// 全协议 / 快速冷却 / 禁用技能走既有 hook；按条授予走引擎 Lua 的 ExecuteAction。
+void PanelProtocol() {
+    const int pts = ProtocolPoints();
+    ImGui::Text("本地玩家 %d   协议点 %d", LocalPlayerId(), pts);
+    if (pts < 0)
+        ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f), "未抓到玩家对象：先进遭遇战");
+
+    static int s_points = 99;
+    ImGui::SetNextItemWidth(90);
+    ImGui::InputInt("##proto_pts", &s_points, 1, 10);
+    if (s_points < 0) s_points = 0;
+    if (s_points > 9999) s_points = 9999;
+    ImGui::SameLine();
+    if (ImGui::Button("设置协议点", ImVec2(100, 0))) {
+        const bool ok = ProtocolSetPoints(s_points);
+        AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → %d %s", s_points, ok ? "" : "失败");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("协议点 99", ImVec2(80, 0))) {
+        const bool ok = ProtocolSetPoints(99);
+        AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → 99 %s", ok ? "" : "失败");
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("直接写本地玩家 +0x34（协议点）。游戏不会立刻覆盖；\n"
+                          "买协议后由游戏自己扣减。");
+
+    ImGui::Separator();
+    bool all = ProtocolGetToggle(0);
+    if (ImGui::Checkbox("全协议（All Secret Protocols）", &all)) {
+        ProtocolSetToggle(0, all);
+        AddLog(all ? LOG_OK : LOG_INFO, "[协议] 全协议 %s", all ? "开" : "关");
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("写玩家科技字段（+0x2C = 399.0f）。\n"
+                          "关掉后该 hook 不再写入，数值由游戏逻辑自行回填。");
+    bool fast = ProtocolGetToggle(1);
+    if (ImGui::Checkbox("技能/超武快速冷却", &fast)) {
+        ProtocolSetToggle(1, fast);
+        AddLog(fast ? LOG_OK : LOG_INFO, "[协议] 快速冷却 %s", fast ? "开" : "关");
+    }
+    bool dis = ProtocolGetToggle(2);
+    if (ImGui::Checkbox("禁用技能", &dis)) {
+        ProtocolSetToggle(2, dis);
+        AddLog(dis ? LOG_OK : LOG_INFO, "[协议] 禁用技能 %s", dis ? "开" : "关");
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("协议目录 %d 条", ProtocolCount());
+    static char s_items[8192] = { 0 };
+    if (!s_items[0]) {
+        char* p = s_items;
+        for (int i = 0; i < ProtocolCount(); ++i) {
+            const int n = _snprintf_s(p, static_cast<size_t>(s_items + sizeof(s_items) - p),
+                                      _TRUNCATE, "%s · %s", ProtocolFaction(i), ProtocolName(i));
+            if (n <= 0) break;
+            p += n + 1;                 // ImGui 用 \0 分隔
+            if (p >= s_items + sizeof(s_items) - 2) break;
+        }
+        *p = 0;
+    }
+    static int s_idx = 0;
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::Combo("##proto_list", &s_idx, s_items);
+    static char s_player[64] = "<This Player>";
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::InputText("##proto_player", s_player, sizeof(s_player));
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("脚本玩家选择器：<This Player> / Player_1 / Player_2 …");
+    if (ImGui::Button("授予选中协议", ImVec2(-1, 0))) {
+        char out[160] = { 0 };
+        const int r = ProtocolGrant(s_idx, s_player, out, sizeof(out));
+        AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("先 PLAYER_LOCK_PLAYER_TECH 解锁 PlayerTech，再 PLAYER_GRANT_SPECIAL_POWER；\n"
+                          "走引擎内 Lua 的 ExecuteAction。效果需在协议面板确认。");
+    if (ImGui::Button("清除科技锁（未实现）", ImVec2(-1, 0))) {
+        AddLog(LOG_WARN, "[协议] 清除科技锁尚未接入");
+    }
+    ImGui::TextDisabled("%s", ProtocolLastError());
+}
+
 // ===== 面板：脑机接口（MCP）=====
 // AI（任意 MCP 客户端）通过本机 HTTP 接口读取局势、投放单位/箱子。
 // 本面板 = 态势显示 + 客户端配置 + AI 调用记录。
@@ -1698,7 +1783,8 @@ void OverlayTick() {
 // ---- 各面板显隐（多浮动面板，2026-10-15 UI 改版）----
 // 默认只展开主面板；子面板由主面板勾选或「全部展开」打开。避免开局一屏铺满 6 个窗口。
 static bool g_pMain = true, g_pRes = false, g_pUnit = false, g_pSummon = false,
-            g_pMisc = false, g_pSet = false, g_pLog = false, g_pAi = false;
+            g_pMisc = false, g_pSet = false, g_pLog = false, g_pAi = false,
+            g_pProto = false;
 static int  g_rectFill = 0;
 
 // 记录当前窗口矩形（供 WndProc 判断"鼠标是否落在某个面板上"）
@@ -1716,9 +1802,10 @@ void BuildUI() {
     if (!g_cfg.visible) { DrainColorStack(); g_panelRectN = 0; return; }   // INSERT 总开关：关掉时一个面板都不画
 
     // 默认布局（仅首次显示生效；之后用户拖动的位置会被 ImGui 记住）
-    static const ImVec2 kPos[8] = {
+    static const ImVec2 kPos[9] = {
         ImVec2(40, 90),  ImVec2(40, 350),  ImVec2(300, 90), ImVec2(300, 400),
-        ImVec2(660, 90), ImVec2(660, 350), ImVec2(40, 640), ImVec2(660, 560)
+        ImVec2(660, 90), ImVec2(660, 350), ImVec2(40, 640), ImVec2(660, 560),
+        ImVec2(980, 90)
     };
 
     // ===== 主面板 =====
@@ -1730,14 +1817,15 @@ void BuildUI() {
         ImGui::Checkbox("资源科技", &g_pRes);
         ImGui::Checkbox("单位操作", &g_pUnit);
         ImGui::Checkbox("支援召唤", &g_pSummon);
+        ImGui::Checkbox("协议技能", &g_pProto);
         ImGui::Checkbox("杂项操作", &g_pMisc);
         ImGui::Checkbox("脑机接口", &g_pAi);
         ImGui::Checkbox("设置", &g_pSet);
         ImGui::Checkbox("输出记录", &g_pLog);
         ImGui::Separator();
-        if (ImGui::Button("全部收起")) { g_pRes = g_pUnit = g_pSummon = g_pMisc = g_pSet = g_pLog = g_pAi = false; }
+        if (ImGui::Button("全部收起")) { g_pRes = g_pUnit = g_pSummon = g_pMisc = g_pSet = g_pLog = g_pAi = g_pProto = false; }
         ImGui::SameLine();
-        if (ImGui::Button("全部展开")) { g_pRes = g_pUnit = g_pSummon = g_pMisc = g_pSet = g_pLog = g_pAi = true; }
+        if (ImGui::Button("全部展开")) { g_pRes = g_pUnit = g_pSummon = g_pMisc = g_pSet = g_pLog = g_pAi = g_pProto = true; }
         ImGui::Separator();
         if (ImGui::Button("隐藏全部 (INSERT)")) g_cfg.visible = false;
     }
@@ -1759,6 +1847,13 @@ void BuildUI() {
     if (g_pSummon) {
         ImGui::SetNextWindowPos(kPos[3], ImGuiCond_FirstUseEver);
         if (ImGui::Begin("支援召唤##summon", &g_pSummon)) { MarkPanelRect(); TabUnits(); }
+        ImGui::End();
+    }
+    // ===== 协议技能 =====
+    if (g_pProto) {
+        ImGui::SetNextWindowPos(kPos[8], ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(430, 620), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("协议技能##proto", &g_pProto)) { MarkPanelRect(); PanelProtocol(); }
         ImGui::End();
     }
     // ===== 杂项操作 =====

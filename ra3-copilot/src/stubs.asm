@@ -43,6 +43,8 @@ EXTERNDEF g_retMoney        : DWORD
 EXTERNDEF g_retPlayerId     : DWORD
 EXTERNDEF g_retPower        : DWORD
 EXTERNDEF g_retSCPoint      : DWORD
+EXTERNDEF g_scPointObj      : DWORD
+EXTERNDEF g_scPointVal      : DWORD
 EXTERNDEF g_retHaveAllSC    : DWORD
 EXTERNDEF g_retFastBuild1   : DWORD
 EXTERNDEF g_retFastBuild2   : DWORD
@@ -149,6 +151,9 @@ PowerCaveStub ENDP
 SCPointCaveStub PROC
     pushad
     pushfd
+    mov   dword ptr [g_scPointObj], eax
+    mov   edi, dword ptr [eax+034h]
+    mov   dword ptr [g_scPointVal], edi
     cmp   byte ptr [g_flags+9], 0
     je    sc_skip
     mov   dword ptr [eax+034h], 0000000Fh   ; 15
