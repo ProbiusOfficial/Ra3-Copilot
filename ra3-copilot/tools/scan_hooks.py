@@ -7,7 +7,7 @@ import os, sys
 
 # exe 路径：命令行参数 > RA3_GAME_EXE 环境变量 > 兜底默认值
 EXE = sys.argv[1] if len(sys.argv) > 1 else \
-    os.environ.get("RA3_GAME_EXE") or r'D:\GAME\Game_RTS\Red Alert 3\Data\ra3_1.12.game'
+    os.environ.get("RA3_GAME_EXE") or r'C:\GAME\Red Alert 3\Data\ra3_1.12.game'
 
 # (名称, 预期RVA或None, AOB hex)  —— RVA 相对模块基址
 HOOKS = [

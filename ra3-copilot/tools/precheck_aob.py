@@ -21,7 +21,7 @@ import struct
 import sys
 
 # 游戏 exe 路径：--game 参数 > RA3_GAME_EXE 环境变量 > 兜底默认值
-DEFAULT_GAME = os.environ.get("RA3_GAME_EXE") or r"D:\GAME\Game_RTS\Red Alert 3\Data\ra3_1.12.game"
+DEFAULT_GAME = os.environ.get("RA3_GAME_EXE") or r"C:\GAME\Red Alert 3\Data\ra3_1.12.game"
 DEFAULT_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "features.cpp")
 
 
