@@ -5,7 +5,7 @@
 //            「创建出来能选中、能操作」（缺 SELECTABLE 的如 AlliedChronoBeacon_Poseidon 已剔除，
 //             它们能 resolve 但召唤出来不可选、不能用）。已排除中立阵营。
 // 剔除留档 : unit-codes/data/callable_dropped.tsv（每条带原因）
-// 箱子   : 54 条（哈希沿用旧表；显示名按对象模板名译成中文）
+// 箱子   : 55 条（哈希沿用旧表；显示名按对象模板名译成中文）
 // 字段   : 阵营 / **类型** / 中文名 / 对象模板名 / 拼音(首字母 全拼) / 对象类型哈希 / 是否基准形态
 // 类型   : 建筑·步兵·载具·空军·海军·箱子·其他 —— 按命名规则推断（SAGE 的权威分类是模板里的
 //          KindOf 位掩码，需运行时读；这里先用命名规则，取名字里**最后出现的兵种词**）
@@ -498,7 +498,8 @@ static const SupportUnit kCrates[] = {
     { u8"中立", u8"箱子", u8"晋升箱", "VeterancyCrate", "jsx jinshengxiang", 0x71ED78EEu, 1 },
     { u8"中立", u8"箱子", u8"部队箱", "UnitCrate", "bdx buduixiang", 0x3FA3F32Cu, 1 },
     { u8"中立", u8"箱子", u8"部队箱·新版", "UnitCrateNew", "bdxxb buduixiangxinban", 0xDC56666Au, 1 },
+    { u8"中立", u8"箱子", u8"空投仓", "OnSeaUnitCrate", "ktc kongtoucang", 0x13145F3Du, 1 },
 };
-static const int kCrateCount = 54;
+static const int kCrateCount = 55;
 
 } // namespace ra3
