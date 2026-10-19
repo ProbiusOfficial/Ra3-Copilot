@@ -441,6 +441,43 @@ int ProtoGrantPower(int idx, char* out, size_t outsz) {
 // 按内部名直接授予一个 SpecialPower（2026-10-19 实测可用，见引擎Lua脚本接口.md §九）。
 // 实测**无阵营检查**：盟军/苏军技能都能给天朝玩家，`who` 也认裸玩家名（可指向敌方）。
 // 唯一门槛：技能必须有「可授予对象」（`[[template+8]+0x134]` 非空）；单位能力/被禁用的超武会被静默跳过。
+//
+// 「授予是否真的生效」用差分判定，不用模板预判：
+//   0x839C30(name) → 0x4A6BE0(容器 0x81D85EFA, nameKey, 0) 的查表按**名字键指针**做数值比较，
+//   外部传 C 字面量永远查不到（实测 tpl 恒为 0）。所以改为比对 SCPoint+0x18 列表长度：
+//   引擎的 grantPower（0x854300）对「已在列表」的指针去重、对「无授予对象」的模板整条跳过，
+//   两种情况列表都不增长 —— 这就是「返回 1 但没反应」的唯一判据。
+namespace {
+int OwnedDelta(int before) {
+    const int after = ProtocolOwnedCount();
+    if (before < 0 || after < 0) return -1;
+    return after - before;
+}
+} // namespace
+
+// 候选名字形式：扫描器同时产出 `SpecialPowerXxx` 与 `SpecialPower_Xxx` 两种写法，
+// 但引擎容器里只登记了其中一种。授予前不预判，未生效时自动换另一种再试一次。
+static void AltPowerName(const char* in, char* out, size_t outsz) {
+    out[0] = 0;
+    if (!in) return;
+    if (strncmp(in, "SpecialPower_", 13) == 0) {
+        _snprintf_s(out, outsz, _TRUNCATE, "SpecialPower%s", in + 13);
+    } else if (strncmp(in, "SpecialPower", 12) == 0 && in[12]) {
+        _snprintf_s(out, outsz, _TRUNCATE, "SpecialPower_%s", in + 12);
+    }
+}
+
+// 试一次：返回列表增量（>0 表示真的授予了）
+static int TryGrant(const char* name, const char* who, char* detail, size_t detsz) {
+    const int before = ProtocolOwnedCount();
+    if (detail && detsz) detail[0] = 0;
+    const int r = LuaExecuteAction("PLAYER_GRANT_SPECIAL_POWER", name, who, nullptr, detail, detsz, 0);
+    const int after = ProtocolOwnedCount();
+    if (before < 0 || after < 0) return -1;
+    (void)r;
+    return after - before;
+}
+
 int ProtoGrantByName(const char* power, const char* who, char* out, size_t outsz) {
     if (!power || !power[0]) {
         g_lastErr = "power 为空";
@@ -448,13 +485,66 @@ int ProtoGrantByName(const char* power, const char* who, char* out, size_t outsz
         return 0;
     }
     if (!who || !who[0]) who = "<This Player>";
+
     char detail[192] = { 0 };
-    const int r = LuaExecuteAction("PLAYER_GRANT_SPECIAL_POWER", power, who, nullptr,
-                                   detail, sizeof(detail), 0);
-    if (out && outsz) {
-        _snprintf_s(out, outsz, _TRUNCATE, "%s -> %s : r=%d %s", power, who, r, detail);
+    int delta = TryGrant(power, who, detail, sizeof(detail));
+    if (delta > 0) {
+        if (out && outsz)
+            _snprintf_s(out, outsz, _TRUNCATE, "%s -> %s : 已授予（列表 +%d）%s",
+                        power, who, delta, detail);
+        return 1;
     }
-    return r;
+
+    // 换另一种拼写再试：容器里只登记一种形式，另一种查不到模板会被整条跳过。
+    char alt[128];
+    AltPowerName(power, alt, sizeof(alt));
+    if (alt[0]) {
+        char d2[192] = { 0 };
+        const int d2v = TryGrant(alt, who, d2, sizeof(d2));
+        if (d2v > 0) {
+            if (out && outsz)
+                _snprintf_s(out, outsz, _TRUNCATE, "%s -> %s : 已授予（列表 +%d，实际名字 %s）%s",
+                            power, who, d2v, alt, d2);
+            return 1;
+        }
+    }
+
+    if (out && outsz) {
+        if (delta < 0)
+            _snprintf_s(out, outsz, _TRUNCATE, "%s -> %s : %s（列表读不到，无法确认）", power, who, detail);
+        else
+            _snprintf_s(out, outsz, _TRUNCATE,
+                        "%s -> 未生效：容器里查不到这个名字，或模板无可授予对象、已在列表中", power);
+    }
+    return 0;
+}
+
+// 技能栏按钮的可用性状态：脚本动作 PLAYER_SPECIAL_POWER_AVAILABILITY(player, power, state)，
+// state 取字符串 "Available" / "Disabled" / "Hidden"（引擎里映射成 0/1/2 三个枚举，
+// 分别对应玩家技能管理器里 +0xC4（可用）/ +0xD4（禁用）两个列表的增删）。
+// 跨阵营注入的技能默认是禁用态 —— 用 Available 强制放进可用列表即可亮起来。
+int ProtoSetPowerState(const char* power, const char* state, const char* who,
+                       char* out, size_t outsz) {
+    if (!power || !power[0]) {
+        g_lastErr = "power 为空";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return 0;
+    }
+    if (!state || !state[0]) state = "Available";
+    if (strcmp(state, "Available") != 0 && strcmp(state, "Disabled") != 0 &&
+        strcmp(state, "Hidden") != 0) {
+        g_lastErr = "state 只能是 Available / Disabled / Hidden";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return 0;
+    }
+    if (!who || !who[0]) who = "<This Player>";
+    char detail[192] = { 0 };
+    const int r = LuaExecuteAction("PLAYER_SPECIAL_POWER_AVAILABILITY", who, power, state,
+                                   detail, sizeof(detail), 0);
+    if (out && outsz)
+        _snprintf_s(out, outsz, _TRUNCATE, "%s -> %s : %s r=%d %s",
+                    power, who, state, r, detail);
+    return (r >= 0) ? 1 : 0;
 }
 
 // 脚本动作表诊断：按名字定位 action id（= ExecuteAction 绑定里 strcmp 命中的下标，

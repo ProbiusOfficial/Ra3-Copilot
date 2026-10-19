@@ -1440,8 +1440,8 @@ void PanelProtocol() {
             if (!s_sel[i]) continue;
             char out[256] = { 0 };
             const int r = ProtoGrantPick(i, out, sizeof(out));
-            if (r >= 0) ++ok; else ++fail;
-            AddLog(r >= 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
+            if (r > 0) ++ok; else ++fail;
+            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
         }
         AddLog(fail ? LOG_WARN : LOG_OK, "[协议] 批量赋予完成：成功 %d，失败 %d", ok, fail);
     }
@@ -1486,16 +1486,16 @@ void PanelUpgrade() {
     }
 
     ImGui::TextDisabled("常用（点一下即授予）：");
-    struct Preset { const char* label; const char* id; };
+    struct Preset { const char* label; const char* id; const char* fac; const char* note; };
     static const Preset kPresets[] = {
-        { "电磁炮",   "Upgrade_CelestialElectromagneticGun" },
-        { "辅助瞄准", "Upgrade_CelestialAuxiliaryAimingSystem" },
-        { "导弹舱",   "Upgrade_CelestialMissilePod" },
-        { "航速",     "Upgrade_CelestialSpeedUpdate" },
-        { "复合装甲", "Upgrade_SovietCompositeArmor" },
-        { "智能弹药", "Upgrade_JapanIntelligentAmmunition" },
-        { "冷冻武器", "Upgrade_AlliedCryoWeaponArray" },
-        { "纳米力场", "Upgrade_JapanNanoSustainingForceField" },
+        { "电磁炮",   "Upgrade_CelestialElectromagneticGun",    "神州", "玄冥级战列巡洋舰主炮换装电磁炮" },
+        { "辅助瞄准", "Upgrade_CelestialAuxiliaryAimingSystem", "神州", "" },
+        { "导弹舱",   "Upgrade_CelestialMissilePod",            "神州", "官方名：装备升格" },
+        { "航速",     "Upgrade_CelestialSpeedUpdate",           "神州", "" },
+        { "复合装甲", "Upgrade_SovietCompositeArmor",           "苏联", "" },
+        { "智能弹药", "Upgrade_JapanIntelligentAmmunition",     "帝国", "" },
+        { "冷冻武器", "Upgrade_AlliedCryoWeaponArray",          "盟军", "" },
+        { "纳米力场", "Upgrade_JapanNanoSustainingForceField",  "帝国", "" },
     };
     const int per = 4;
     for (int i = 0; i < (int)(sizeof(kPresets) / sizeof(kPresets[0])); ++i) {
@@ -1506,7 +1506,15 @@ void PanelUpgrade() {
             const int r = ProtoGrantUpgrade(kPresets[i].id, 2, out, sizeof(out));
             AddLog(r > 0 ? LOG_OK : LOG_WARN, "[升级] %s", out);
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", kPresets[i].id);
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("%s · %s", kPresets[i].fac, kPresets[i].label);
+            if (kPresets[i].note[0]) ImGui::TextColored(ImVec4(0.70f, 0.86f, 1.f, 1.f),
+                                                        "%s", kPresets[i].note);
+            ImGui::Separator();
+            ImGui::TextDisabled("%s", kPresets[i].id);
+            ImGui::EndTooltip();
+        }
         ImGui::PopID();
     }
 }

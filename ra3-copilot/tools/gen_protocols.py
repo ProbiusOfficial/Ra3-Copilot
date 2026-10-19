@@ -23,6 +23,18 @@ FACTIONS = [
     ("Generic", "通用"),
 ]
 
+# 名字里没有厂牌词的协议：按模组自带 SpecialPowerEnum.lua 的分组与字符串表键定点覆盖。
+# （通用池里混着四个阵营的原版协议，不点名就只能标"通用"。）
+FACTION_OVERRIDES = {
+    "SpecialPowerParticleCannon": "盟军",          # 盟军超武 AlliedSuperWeaponAdvanced
+    "SpecialPowerSatelliteSweep": "盟军",          # SpecialPowerEnum 盟军段
+    "SpecialPowerHighTechnology": "盟军",          # SpecialPowerEnum 盟军段
+    "SpecialPowerPointDefenseDrones": "帝国",      # SpecialPowerEnum 帝国段
+    "SpecialPower_ProductionKickbacks": "苏联",    # SpecialPowerEnum 苏联段
+    "SpecialPowerPause01": "神州",                 # 字符串表键 CelestialPlayerPowerPause
+    "SpecialPower_GrantCelestialTech": "神州",
+}
+
 # 两种命名都存在：SpecialPower_Xxx（带下划线）与 SpecialPowerXxx（不带）。
 # 后者会顺带匹配到 "SpecialPowerTemplate" 这个类型名，扫完用 _skip 过滤掉。
 POWER_RE = re.compile(rb"SpecialPower_?([A-Z][A-Za-z0-9_]{3,})")
@@ -56,6 +68,8 @@ def scan(root):
 
 
 def faction_of(name):
+    if name in FACTION_OVERRIDES:
+        return FACTION_OVERRIDES[name]
     for token, cn in FACTIONS:
         if token.lower() in name.lower():
             return cn

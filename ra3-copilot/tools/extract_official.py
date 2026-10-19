@@ -41,6 +41,11 @@ ALIASES = {
     "SatelliteSweep":                     "PLAYERPOWERSATELLITE",
 }
 
+# 名字键和描述键不同名的情况（右：描述用的键）
+DESC_ALIASES = {
+    "PLAYERPOWERSATELLITE": "PLAYERPOWERSATELLITESWEEP",
+}
+
 
 def parse_csf(path):
     """返回 {key: value}；key 形如 NAME:Foo / DESC:Foo。"""
@@ -124,10 +129,10 @@ def main():
         if got:
             key, official = got
             # 描述可能挂在别名去掉等级后缀的键上（如 CelestialLightningTroop）
-            desc = descs.get(key)
+            desc = descs.get(DESC_ALIASES.get(key, key))
             if desc is None:
                 base = re.sub(r"(_RANK\d|_Lvl\d|_Lv\d|L\d)$", "", key, flags=re.I)
-                desc = descs.get(base, "")
+                desc = descs.get(DESC_ALIASES.get(base, base), "")
             out.append((full, official, fac, desc))
             hit += 1
         else:

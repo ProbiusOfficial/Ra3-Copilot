@@ -458,6 +458,14 @@ void ExecCmd(CmdSlot& c) {
         CmdReply("aidx %d %s", ia, o7);
         break;
     }
+    case 35: {  // power: 设置技能栏按钮状态（g_scriptArgs[0]=技能名 [1]=state [2]=玩家）
+        char o10[320] = { 0 };
+        const int rs = ProtoSetPowerState(g_scriptArgs[0], g_scriptArgs[1],
+                                          g_scriptArgs[2][0] ? g_scriptArgs[2] : "<This Player>",
+                                          o10, sizeof(o10));
+        CmdReply("power r=%d %s", rs, o10);
+        break;
+    }
     case 33: {  // upgrade: g_scriptArgs[0]=名字，a1=mode(2=Upgrade 1=PlayerTech)
         char o8[256] = { 0 };
         const int ru = ProtoGrantUpgrade(g_scriptArgs[0], (int)c.a1, o8, sizeof(o8));
@@ -714,6 +722,7 @@ void Handle(SOCKET c, char* req) {
             "                               例：/action?name=PLAYER_GRANT_SPECIAL_POWER&a1=SpecialPower_X&a2=%3CThis%20Player%3E\n"
             "POST /grant?power=SpecialPower_X[&who=<This Player>|Player_2|<All Players>]  按内部名授予协议技能（可跨阵营/指向敌方）\n"
             "POST /upgrade?name=Upgrade_X[&mode=2]  按内部名授予 Upgrade（mode=2，默认）或 PlayerTech（mode=1），不走脚本层\n"
+            "POST /power?power=SpecialPower_X[&state=Available|Disabled|Hidden][&who=..]  设技能栏按钮状态\n"
             "GET  /grant?list=1[&from=0&n=40]            协议目录分页（官方中文名 + 阵营 + 内部名）\n"
             "POST /lua?rva=0x..&a1=&a2=&a3=  按 RVA 直调引擎 Lua C 函数（只支持名字串参数）\n"
             "POST /freebuild?on=0|1         免费建造\n"
@@ -1247,6 +1256,20 @@ void Handle(SOCKET c, char* req) {
             if (GetParam(query, "who", tmp4, sizeof(tmp4)))
                 URLDecode(tmp4, g_scriptArgs[1], sizeof(g_scriptArgs[1]));
         }
+        na = 1;
+    } else if (strcmp(path, "/power") == 0) {
+        // 技能栏按钮状态：power=SpecialPower_X[&state=Available|Disabled|Hidden][&who=..]
+        char pb[128];
+        g_scriptArgs[0][0] = 0;
+        lstrcpynA(g_scriptArgs[1], "Available", (int)sizeof(g_scriptArgs[1]));
+        g_scriptArgs[2][0] = 0;
+        if (GetParam(query, "power", pb, sizeof(pb)))
+            URLDecode(pb, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
+        if (GetParam(query, "state", pb, sizeof(pb)))
+            lstrcpynA(g_scriptArgs[1], pb, (int)sizeof(g_scriptArgs[1]));
+        if (GetParam(query, "who", pb, sizeof(pb)))
+            URLDecode(pb, g_scriptArgs[2], sizeof(g_scriptArgs[2]));
+        fn = 35;
         na = 1;
     } else if (strcmp(path, "/upgrade") == 0) {
         // 按名字授予 Upgrade / PlayerTech（不走脚本参数解析）：name=Upgrade_X[&mode=2]

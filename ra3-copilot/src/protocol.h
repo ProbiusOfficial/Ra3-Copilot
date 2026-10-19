@@ -43,6 +43,10 @@ int  ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz);
 // 走引擎真入口 ExecuteAction(0x182C50) + PLAYER_GRANT_SPECIAL_POWER。
 // 实测无阵营检查（跨阵营可授予）；who 认 <This Player> / <All Players> / 裸玩家名，可指向敌方。
 // 只有「无授予对象」的技能（单位能力、被禁用的超武）会被静默跳过。
+// 技能栏按钮状态：PLAYER_SPECIAL_POWER_AVAILABILITY(player, power, state)，
+// state = Available / Disabled / Hidden。跨阵营注入的技能默认禁用，改 Available 即可点亮。
+int  ProtoSetPowerState(const char* power, const char* state, const char* who,
+                        char* out, size_t outsz);
 int  ProtoGrantByName(const char* power, const char* who, char* out, size_t outsz);
 // 诊断：在脚本动作表（[0xCDD190]+0x48，573 条 ×0x80，名字在 +0x0C）里按名字找下标。
 // 下标就是执行器 0x5A2B40 里 switch 用的 action id —— 反汇编某个动作的实现时先查它。
