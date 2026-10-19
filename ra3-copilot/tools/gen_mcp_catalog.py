@@ -4,7 +4,7 @@
 
 数据源：
   <ws>/unit-codes/data/unit_codes_all.tsv    全量 5461（筛「可玩对象」∪「可召唤」）
-  ra3-copilot/src/units_corona.h 的 kCrates[]  54 个箱子（/crate 的 idx 顺序 == 这里的下标）
+  ra3-copilot/src/units_corona.h 的 kCrates[]  全部箱子（/crate 的 idx 顺序 == 这里的下标）
 产出：
   ra3-copilot/mcp/unit_catalog.json  （UTF-8；MCP 服务器启动时读；缺失则退化为"只能按哈希"）
 """

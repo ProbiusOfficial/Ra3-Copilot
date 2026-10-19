@@ -5,7 +5,7 @@
 数据源
   <ws>/unit-codes/data/callable_final.tsv        ← 首选：逐条实测「能召唤」的清单（已排除中立）
   <ws>/unit-codes/data/unit_codes_trainer.tsv    ← 退路：未筛选的 718 条原始表
-  src/units_corona.h 里现有的 kCrates[]          ← 54 条箱子（哈希沿用，显示名换成中文）
+  src/units_corona.h 里现有的 kCrates[]          ← 现有箱子条目（哈希沿用，显示名换成中文）
 产出
   src/units_corona.h （UTF-8 无 BOM；编译器带 /utf-8）
 
@@ -396,7 +396,7 @@ def main():
 //            「创建出来能选中、能操作」（缺 SELECTABLE 的如 AlliedChronoBeacon_Poseidon 已剔除，
 //             它们能 resolve 但召唤出来不可选、不能用）。已排除中立阵营。
 // 剔除留档 : unit-codes/data/callable_dropped.tsv（每条带原因）
-// 箱子   : 55 条（哈希沿用旧表；显示名按对象模板名译成中文）
+// 箱子   : %d 条（哈希沿用旧表；显示名按对象模板名译成中文）
 // 字段   : 阵营 / **类型** / 中文名 / 对象模板名 / 拼音(首字母 全拼) / 对象类型哈希 / 是否基准形态
 // 类型   : 建筑·步兵·载具·空军·海军·箱子·其他 —— 按命名规则推断（SAGE 的权威分类是模板里的
 //          KindOf 位掩码，需运行时读；这里先用命名规则，取名字里**最后出现的兵种词**）
@@ -433,7 +433,7 @@ static const SupportUnit kCrates[] = {
 static const int kCrateCount = %d;
 
 } // namespace ra3
-''' % (', '.join('"%s"' % f for f in facs), len(facs),
+''' % (len(crate_lines), ', '.join('"%s"' % f for f in facs), len(facs),
        '\n'.join(lines), len(lines),
        '\n'.join(crate_lines), len(crate_lines))
 
