@@ -41,6 +41,44 @@ POWER_RE = re.compile(rb"SpecialPower_?([A-Z][A-Za-z0-9_]{3,})")
 POWER_SKIP = ("Template", "Store")
 TECH_RE = re.compile(rb"PlayerTech_([A-Z][A-Za-z0-9_]{3,})")
 
+# ---- 授予门槛（2026-10-19 两局实测，判据是读引擎容器，不是看脚本返回值）----
+# PLAYER_GRANT_SPECIAL_POWER 要求模板的 [[tpl+8]+0x134] 非空，该字段是「玩家协议记录」指针；
+# 为 0 时引擎在循环里 continue，列表不增长、也不报错 —— 面板上点它只会没反应。
+# 下列模板在本模组里该字段为 0。测量方法见 tools/proto_probe.py（只读，进对局后跑）。
+NO_PLAYER_POWER = {
+    "SpecialPowerCelestialCannon",                 # 天朝主炮（舰炮类单位技能）
+    "SpecialPower_CelestialMassiveOrbitalStrike",  # 大规模轨道打击
+    "SpecialPower_CelestialPowerPlantDetection",   # 弧光破云
+    "SpecialPowerDragonShipAttackDrones",          # 蜂群出击
+    "SpecialPowerChronosphereObjectSelect",        # 超时空传送仪
+    "SpecialPowerAlliedMissileCrisis",             # 战术打击
+    "SpecialPowerAlliedRangerAirAssault",          # 突击行动
+    "SpecialPowerAlliedShipboardWarplaneSquadron", # 区域轰炸
+    "SpecialPowerAlliedPrecisionAssault",          # 黑鸟行动
+    "SpecialPowerIronCurtain",                     # 铁幕
+    "SpecialPowerVacuumBomb",                      # 真空内爆弹
+    "SpecialPowerNanoSwarmHive",                   # 纳米虫群
+    "SpecialPowerTelekineticProjectorDevice",      # 超能波毁灭装置
+    "SpecialPowerPause01",                         # 止戈力场
+    "SpecialPowerParticleCannon",                  # 质子撞击炮
+}
+
+# +0x134 与另一条指向同一个协议记录 ⇒ 0x854300 按指针去重，后授予的那个列表不增长。
+SHARED_OWNER = {
+    "SpecialPower_CelestialPantaOrbitalStrike": "SpecialPower_CelestialOrbitalStrike",
+}
+
+KIND_OK, KIND_NO_POWER, KIND_SHARED = 0, 1, 2
+
+
+def pick_kind(name):
+    if name in NO_PLAYER_POWER:
+        return KIND_NO_POWER
+    if name in SHARED_OWNER:
+        return KIND_SHARED
+    return KIND_OK
+
+
 
 def scan(root):
     powers, techs = set(), set()
@@ -131,14 +169,19 @@ def emit(path, powers, techs, picks):
     L.append("static const int kProtoTechCount = %d;" % len(techs))
     L.append("")
     L.append("// ---- 协议技能（人工整理中文名，见 tools/proto_zh.tsv）----")
-    L.append("// 只有这批是「面板上能选、能授予」的协议；其余 SpecialPower 多为单位能力，引擎会拒绝。")
-    L.append("struct ProtoPick { const char* id; const char* zh; const char* faction; const char* desc; };")
+    L.append("// kind：0=可授予；1=本模组无玩家协议记录（引擎静默跳过）；2=与另一条共用同一协议记录（先去重）。")
+    L.append("// 1/2 两类由实测得出，判定依据见 tools/proto_probe.py 与本文件 NO_PLAYER_POWER / SHARED_OWNER。")
+    L.append("struct ProtoPick { const char* id; const char* zh; const char* faction; const char* desc; int kind; };")
     L.append("")
     L.append("static const ProtoPick kProtoPicks[] = {")
     for pid, zh, fac, desc in picks:
-        L.append("    { %s, %s, %s, %s }," % (cstr(pid), cstr(zh), cstr(fac), cstr(desc)))
+        L.append("    { %s, %s, %s, %s, %d }," % (cstr(pid), cstr(zh), cstr(fac), cstr(desc),
+                                                 pick_kind(pid)))
     L.append("};")
     L.append("static const int kProtoPickCount = %d;" % len(picks))
+    n_nopower = sum(1 for p in picks if pick_kind(p[0]) == KIND_NO_POWER)
+    n_shared = sum(1 for p in picks if pick_kind(p[0]) == KIND_SHARED)
+    L.append("// 其中无玩家协议记录 %d 条、共用记录 %d 条。" % (n_nopower, n_shared))
     L.append("")
     L.append("} // namespace ra3")
     L.append("")

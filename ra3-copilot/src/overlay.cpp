@@ -1408,8 +1408,17 @@ void PanelProtocol() {
             ImGui::PushID(1000 + i);
             bool on = s_sel[i] != 0;
             char label[256];
-            snprintf(label, sizeof(label), "%s   [%s]##p%d", zh, fac, i);
-            if (ImGui::Checkbox(label, &on)) s_sel[i] = on ? 1 : 0;
+            const int kind = ProtocolPickKind(i);
+            if (kind == 0) {
+                snprintf(label, sizeof(label), "%s   [%s]##p%d", zh, fac, i);
+                if (ImGui::Checkbox(label, &on)) s_sel[i] = on ? 1 : 0;
+            } else {
+                // 1 = 本模组无玩家协议记录，2 = 与另一条共用记录：都授予不了，列出来只为看得见。
+                // TextDisabled 不走 ## 隐 ID 那套，显示串要单独拼。
+                s_sel[i] = 0;
+                ImGui::TextDisabled("%s   [%s]  %s", zh, fac,
+                                    kind == 1 ? "不可授予" : "共用入口");
+            }
             if (ImGui::IsItemHovered()) {
                 // 悬停：官方名 + 官方描述（与游戏内提示框同源），再给内部名备查
                 const char* desc = ProtocolPickDesc(i);
@@ -1420,6 +1429,10 @@ void PanelProtocol() {
                     ImGui::TextUnformatted(desc);
                 ImGui::Separator();
                 ImGui::TextDisabled("%s", id);
+                if (kind == 1)
+                    ImGui::TextDisabled("本模组没有这条的玩家协议记录，授予会被引擎静默跳过");
+                else if (kind == 2)
+                    ImGui::TextDisabled("与另一条共用同一个协议记录，先授予的那条生效");
                 ImGui::TextDisabled("授予对象：%s", who[0] ? who : "(未抓到玩家)");
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
@@ -1451,6 +1464,7 @@ void PanelProtocol() {
         int ok = 0, fail = 0;
         for (int i = 0; i < pickN; ++i) {
             if (!s_sel[i]) continue;
+            if (ProtocolPickKind(i) != 0) { s_sel[i] = 0; continue; }
             char out[256] = { 0 };
             const int r = ProtoGrantPick(i, out, sizeof(out));
             if (r > 0) ++ok; else ++fail;
@@ -1461,6 +1475,7 @@ void PanelProtocol() {
     ImGui::SameLine();
     if (ImGui::Button("全选本页", ImVec2(84, 0))) {
         for (int i = 0; i < pickN; ++i) {
+            if (ProtocolPickKind(i) != 0) continue;
             if (s_fac > 0 && strcmp(ProtocolPickFaction(i), kFacs[s_fac - 1]) != 0) continue;
             if (searching && !SubStrNoCase(ProtocolPickZh(i), s_search) &&
                 !SubStrNoCase(ProtocolPickId(i), s_search)) continue;

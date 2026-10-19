@@ -22,6 +22,9 @@ const char* ProtocolPickId(int idx);
 const char* ProtocolPickZh(int idx);
 const char* ProtocolPickFaction(int idx);
 const char* ProtocolPickDesc(int idx);
+// 授予门槛（实测得出，依据见 protocols_corona.h 的 kind 注释与 tools/proto_probe.py）：
+//   0 = 可授予；1 = 本模组无玩家协议记录（引擎静默跳过）；2 = 与另一条共用同一协议记录。
+int  ProtocolPickKind(int idx);
 int  ProtoGrantPick(int idx, char* out, size_t outsz);
 
 int  ProtocolPoints();

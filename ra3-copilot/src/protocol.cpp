@@ -329,11 +329,29 @@ const char* ProtocolPickZh(int idx)      { return (idx >= 0 && idx < kProtoPickC
 const char* ProtocolPickFaction(int idx) { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].faction : ""; }
 // 官方描述串（来自日冕 gamestrings.csf 的 DESC:<名>，与游戏内提示框一致）；没有则为空串。
 const char* ProtocolPickDesc(int idx)    { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].desc : ""; }
+// 授予门槛：0=可授予 1=本模组无玩家协议记录 2=与另一条共用记录（见 protocols_corona.h 注释）。
+int ProtocolPickKind(int idx) { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].kind : 0; }
 
 int ProtoGrantPick(int idx, char* out, size_t outsz) {
     if (idx < 0 || idx >= kProtoPickCount) {
         g_lastErr = "协议序号越界";
         if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return 0;
+    }
+    // 这两类点了也只会「没反应」，先说清楚为什么，别让调用方以为名字写错了。
+    const int kind = kProtoPicks[idx].kind;
+    if (kind == 1) {
+        if (out && outsz)
+            _snprintf_s(out, outsz, _TRUNCATE,
+                        "%s -> 不可授予：本模组没有这条的玩家协议记录（模板无授予对象，引擎会静默跳过）",
+                        kProtoPicks[idx].id);
+        return 0;
+    }
+    if (kind == 2) {
+        if (out && outsz)
+            _snprintf_s(out, outsz, _TRUNCATE,
+                        "%s -> 不可单独授予：与另一条共用同一个协议记录，先授予的那条生效，这条会被去重",
+                        kProtoPicks[idx].id);
         return 0;
     }
     return ProtoGrantByName(kProtoPicks[idx].id, nullptr, out, outsz);
