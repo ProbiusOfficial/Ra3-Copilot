@@ -1003,6 +1003,196 @@ void PlayerDeepDiff(char* out, size_t outsz) {
         _snprintf_s(out + w, outsz - w, _TRUNCATE, "| 子对象 %d 个", g_deepN);
 }
 
+// ---- 全堆页级快照 / 差分 ----
+// 用途：抓「展开某阵营基地后玩家身上哪个字段翻了」这种**没有结构线索**的状态变化。
+// 只扫 MEM_PRIVATE 的已提交页（游戏堆），跳过本 DLL 镜像页与自己的缓冲页；每页一个 FNV-1a。
+// 三步用法：
+//   act=heapsnap                    建立基线
+//   （场上做一次操作，例如展开/召唤某阵营基地）
+//   act=heapdiff                    列出变化页，并把**变化后的字节**存下来
+//   （把操作撤销，例如摧毁那个基地）
+//   act=pagediff                    打印选中页里每个翻转的 u32（old->new）
+static constexpr uint32_t kPageSz  = 0x1000;
+static constexpr int      kPgKeep  = 256;
+static constexpr size_t   kPageMax = 262144;
+
+struct PageSig { uint32_t addr; uint32_t sum; };
+static std::vector<PageSig>  g_pageSnap;
+static std::vector<uint32_t> g_pgAddr;
+static uint8_t               g_pgBytes[kPgKeep][0x1000];
+static int                   g_pgN = 0;
+static uint32_t              g_pgScanned = 0;
+
+static uint32_t FnvPage(const uint8_t* p) {
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < kPageSz; ++i) { h ^= p[i]; h *= 16777619u; }
+    return h;
+}
+
+static void SelfModuleRange(uintptr_t* lo, uintptr_t* hi) {
+    *lo = 0; *hi = 0;
+    HMODULE hm = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)&FnvPage, &hm) && hm) {
+        *lo = reinterpret_cast<uintptr_t>(hm);
+        *hi = *lo + 0x02000000;
+    }
+}
+
+static uint8_t* PageBuf() {
+    static uint8_t* p = nullptr;
+    if (!p) p = static_cast<uint8_t*>(VirtualAlloc(nullptr, kPageSz, MEM_COMMIT, PAGE_READWRITE));
+    return p;
+}
+
+bool HeapPageSnap(int* outPages) {
+    if (g_pageSnap.capacity() < kPageMax) g_pageSnap.reserve(kPageMax);
+    g_pageSnap.clear();
+    g_pgAddr.clear();
+    g_pgN = 0;
+    uint8_t* page = PageBuf();
+    if (!page) { g_lastErr = "页缓冲分配失败"; return false; }
+    uintptr_t slo = 0, shi = 0;
+    SelfModuleRange(&slo, &shi);
+    const uint32_t bufLo = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_pageSnap.data()));
+    const uint32_t bufHi = bufLo + static_cast<uint32_t>(g_pageSnap.capacity() * sizeof(PageSig)) + kPageSz;
+
+    // 只扫游戏堆：0x02000000..0x14000000（玩家/协议点/科技对象/兵种全在这段）。
+    // 全地址空间要 2.9 s，游戏线程会被按住；缩到这段约 1/7。
+    uintptr_t a = 0x02000000;
+    const uintptr_t hiEnd = 0x14000000;
+    while (a < hiEnd) {
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (!VirtualQuery(reinterpret_cast<LPCVOID>(a), &mbi, sizeof(mbi))) break;
+        const uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+        const uintptr_t sz = mbi.RegionSize;
+        const DWORD pr = mbi.Protect;
+        const bool ok = mbi.State == MEM_COMMIT && mbi.Type == MEM_PRIVATE &&
+                        (pr & PAGE_GUARD) == 0 &&
+                        (pr & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                               PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                               PAGE_EXECUTE_WRITECOPY)) != 0;
+        if (ok) {
+            for (uintptr_t off = 0; off + kPageSz <= sz; off += kPageSz) {
+                const uintptr_t pa = base + off;
+                if (pa >= slo && pa < shi) continue;
+                const uint32_t pa32 = static_cast<uint32_t>(pa);
+                if (pa32 >= bufLo && pa32 < bufHi) continue;
+                SIZE_T got = 0;
+                if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(pa),
+                                       page, kPageSz, &got) || got != kPageSz)
+                    continue;
+                PageSig sg; sg.addr = pa32; sg.sum = FnvPage(page);
+                g_pageSnap.push_back(sg);
+                if (g_pageSnap.size() >= kPageMax) break;
+            }
+        }
+        const uintptr_t next = base + sz;
+        if (next <= a) break;
+        a = next;
+    }
+    g_pgScanned = static_cast<uint32_t>(g_pageSnap.size());
+    if (outPages) *outPages = static_cast<int>(g_pageSnap.size());
+    return true;
+}
+
+// mode 0 = 本次变化集；1 = 与上一轮取交集；2 = 从上一轮里减掉（用来剔掉每帧都在变的抖动页）
+static std::vector<uint32_t> g_pgPrev;
+
+static void KeepBytes(const std::vector<uint32_t>& v) {
+    uint8_t* page = PageBuf();
+    g_pgN = 0;
+    if (!page) return;
+    for (size_t i = 0; i < v.size() && g_pgN < kPgKeep; ++i) {
+        SIZE_T got = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(v[i])),
+                               page, kPageSz, &got) || got != kPageSz)
+            continue;
+        memcpy(g_pgBytes[g_pgN], page, kPageSz);
+        g_pgAddr.push_back(v[i]);
+        ++g_pgN;
+    }
+}
+
+void HeapPageDiff(char* out, size_t outsz, int mode) {
+    if (g_pageSnap.empty()) { _snprintf_s(out, outsz, _TRUNCATE, "没有页快照（先 act=heapsnap）"); return; }
+    uint8_t* page = PageBuf();
+    if (!page) { _snprintf_s(out, outsz, _TRUNCATE, "页缓冲不可用"); return; }
+
+    std::vector<uint32_t> cur;
+    int changed = 0, gone = 0;
+    for (size_t i = 0; i < g_pageSnap.size(); ++i) {
+        const PageSig& sg = g_pageSnap[i];
+        SIZE_T got = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(sg.addr)),
+                               page, kPageSz, &got) || got != kPageSz) { ++gone; continue; }
+        if (FnvPage(page) == sg.sum) continue;
+        ++changed;
+        cur.push_back(sg.addr);
+    }
+
+    std::vector<uint32_t> prev; prev.swap(g_pgPrev);
+    g_pgPrev = cur;                      // 本轮变化集，供下一轮交集/差集
+
+    std::vector<uint32_t> res;
+    if (mode == 1) {
+        for (size_t i = 0; i < cur.size(); ++i)
+            for (size_t j = 0; j < prev.size(); ++j)
+                if (cur[i] == prev[j]) { res.push_back(cur[i]); break; }
+    } else if (mode == 2) {              // cur - prev：剔掉上一轮也在变的抖动页
+        for (size_t i = 0; i < cur.size(); ++i) {
+            bool inPrev = false;
+            for (size_t j = 0; j < prev.size(); ++j) if (cur[i] == prev[j]) { inPrev = true; break; }
+            if (!inPrev) res.push_back(cur[i]);
+        }
+    } else {
+        res = cur;
+    }
+
+    // 结果页的当前字节存下来，供 pagediff
+    g_pgAddr.clear(); g_pgN = 0;
+    KeepBytes(res);
+
+    size_t w = 0;
+    const int shown = (res.size() < 40) ? (int)res.size() : 40;
+    for (int i = 0; i < shown && w + 12 < outsz; ++i)
+        w += _snprintf_s(out + w, outsz - w, _TRUNCATE, "%08X ", res[i]);
+    if (w < outsz)
+        _snprintf_s(out + w, outsz - w, _TRUNCATE,
+                    "| 本次变 %d 页 / 结果 %d 页（抓 %d 页字节）/ 共 %u 页 / 失联 %d",
+                    changed, (int)res.size(), g_pgN, g_pgScanned, gone);
+}
+
+void HeapPageDetail(char* out, size_t outsz) {
+    if (!g_pgN) { _snprintf_s(out, outsz, _TRUNCATE, "没有抓取页（先在变化后调 act=heapdiff）"); return; }
+    uint8_t cur[0x1000];
+    size_t w = 0; int hits = 0, pages = 0;
+    for (int k = 0; k < g_pgN; ++k) {
+        SIZE_T got = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(g_pgAddr[k])),
+                               cur, kPageSz, &got) || got != kPageSz)
+            continue;
+        int n = 0;
+        for (uint32_t off = 0; off + 4 <= kPageSz; off += 4) {
+            uint32_t x = 0, y = 0;
+            memcpy(&x, g_pgBytes[k] + off, 4);
+            memcpy(&y, cur + off, 4);
+            if (x == y) continue;
+            ++n;
+            if (n <= 8 && w + 40 < outsz) {
+                w += _snprintf_s(out + w, outsz - w, _TRUNCATE, "%08X+%03X:%u->%u ",
+                                 g_pgAddr[k], off, x, y);
+                ++hits;
+            }
+        }
+        if (n) ++pages;
+    }
+    if (w + 48 < outsz)
+        _snprintf_s(out + w, outsz - w, _TRUNCATE, "| %d 页有变化", pages);
+    if (!hits) _snprintf_s(out, outsz, _TRUNCATE, "抓下的 %d 页里没有 u32 变化", g_pgN);
+}
+
 // 诊断一行：引擎 / 当前脚本玩家（0 = <This Player> 解析不了）/ 玩家对象 / 序号
 void ProtocolDiag(char* out, size_t outsz) {
     uint32_t eng = 0, cur = 0;

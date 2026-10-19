@@ -308,6 +308,20 @@ void ExecCmd(CmdSlot& c) {
         } else if (act == 20) {
             const bool ok = PlayerFieldsSnap();
             CmdReply("protocol snap : %s", ok ? "ok（现在去游戏里买一个协议，再调 act=21）" : ProtocolLastError());
+        } else if (act == 50) {          // heapsnap: 全堆页级基线
+            int pages = 0;
+            const bool ok = HeapPageSnap(&pages);
+            CmdReply("heap snap %d 页 : %s", pages, ok ? "ok（去场上展开/召唤目标阵营基地，再调 heapdiff）" : ProtocolLastError());
+        } else if (act == 51) {          // heapdiff: 列变化页并抓下变化后的字节
+            static char out[4200];
+            out[0] = 0;
+            HeapPageDiff(out, sizeof(out), (int)c.a2);
+            CmdReply("%s", out);
+        } else if (act == 52) {          // pagediff: 撤销操作后再调，打印翻转的 u32
+            static char out[4200];
+            out[0] = 0;
+            HeapPageDetail(out, sizeof(out));
+            CmdReply("%s", out);
         } else if (act == 30) {          // unlock: 写协议格解锁索引（n=-1 视为「解锁到最后一格」）
             int n = (int)c.a2;
             const int total = ProtocolSlotTotal();
@@ -1171,6 +1185,9 @@ void Handle(SOCKET c, char* req) {
         else if (strcmp(ab, "owned") == 0) act = 41;
         else if (strcmp(ab, "deepsnap") == 0) act = 24;
         else if (strcmp(ab, "deepdiff") == 0) act = 25;
+        else if (strcmp(ab, "heapsnap") == 0) act = 50;
+        else if (strcmp(ab, "heapdiff") == 0) act = 51;
+        else if (strcmp(ab, "pagediff") == 0) act = 52;
         else if (strcmp(ab, "diff") == 0) act = 21;
         args[0] = act;
         args[1] = GetParamInt(query, "n", 0);

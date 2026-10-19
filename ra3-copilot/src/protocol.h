@@ -70,6 +70,10 @@ bool PlayerDeepSnap();
 int  PScanMark(uint32_t value, uint32_t* outCount);
 int  PScanFilter(uint32_t want, uint32_t* outCount, char* out, size_t outsz);
 void PlayerDeepDiff(char* out, size_t outsz);
+// 全堆页级快照 / 差分（抓「展基地后哪个字段翻了」这类无结构变化）。三步：snap -> diff -> detail
+bool HeapPageSnap(int* outPages);
+void HeapPageDiff(char* out, size_t outsz, int mode);
+void HeapPageDetail(char* out, size_t outsz);
 void PlayerFieldsDiff(char* out, size_t outsz);
 // 只读诊断：记录游戏动作执行器 0x5A2B40 的 action index / 参数
 // 通用脚本动作：action 名 + 最多 3 个名字串参数，走引擎 ExecuteAction。
