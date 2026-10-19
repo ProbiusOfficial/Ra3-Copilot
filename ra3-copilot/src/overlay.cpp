@@ -1285,6 +1285,7 @@ void PanelMisc() {
 }
 
 // ===== 面板：协议技能 =====
+void PanelUpgrade();   // 定义在协议面板之后，末尾由 PanelProtocol 调用
 bool SubStrNoCase(const char* hay, const char* needle);   // 定义在召唤面板之后
 
 // 协议面板：设置协议点 + 开关 + **技能列表**（点一行就授予，和召唤单位一个操作习惯）
@@ -1460,6 +1461,54 @@ void PanelProtocol() {
     ImGui::TextDisabled("已选 %d / %d", selCount, pickN);
 
     ImGui::TextDisabled("%s", ProtocolLastError());
+
+    ImGui::Separator();
+    PanelUpgrade();
+}
+
+// ===== 面板：兵种升级（战役可用）=====
+// 战役 HUD 不显示 mod 阵营的协议按钮，但 Upgrade 可以直接授给玩家：
+// 授予后作用于该玩家的同类单位（实测：玄冥级战列巡洋舰换装电磁炮）。
+// 名字不存在会由 ProtoGrantUpgrade 直接报回来，所以预设按钮也兼作探测器。
+void PanelUpgrade() {
+    if (!ImGui::CollapsingHeader("兵种升级（Upgrade 直授）")) return;
+    ImGui::TextDisabled("按内部名授予 Upgrade —— 协议按钮不显示时，用这里给兵种上效果。");
+
+    static char s_upg[128] = "Upgrade_CelestialElectromagneticGun";
+    ImGui::PushItemWidth(-96);
+    ImGui::InputTextWithHint("##upg_name", "Upgrade_X", s_upg, sizeof(s_upg));
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+    if (ImGui::Button("授予", ImVec2(88, 0))) {
+        char out[256] = { 0 };
+        const int r = ProtoGrantUpgrade(s_upg, 2, out, sizeof(out));
+        AddLog(r > 0 ? LOG_OK : LOG_WARN, "[升级] %s", out);
+    }
+
+    ImGui::TextDisabled("常用（点一下即授予）：");
+    struct Preset { const char* label; const char* id; };
+    static const Preset kPresets[] = {
+        { "电磁炮",   "Upgrade_CelestialElectromagneticGun" },
+        { "辅助瞄准", "Upgrade_CelestialAuxiliaryAimingSystem" },
+        { "导弹舱",   "Upgrade_CelestialMissilePod" },
+        { "航速",     "Upgrade_CelestialSpeedUpdate" },
+        { "复合装甲", "Upgrade_SovietCompositeArmor" },
+        { "智能弹药", "Upgrade_JapanIntelligentAmmunition" },
+        { "冷冻武器", "Upgrade_AlliedCryoWeaponArray" },
+        { "纳米力场", "Upgrade_JapanNanoSustainingForceField" },
+    };
+    const int per = 4;
+    for (int i = 0; i < (int)(sizeof(kPresets) / sizeof(kPresets[0])); ++i) {
+        if (i % per) ImGui::SameLine();
+        ImGui::PushID(1000 + i);
+        if (ImGui::Button(kPresets[i].label, ImVec2(84, 0))) {
+            char out[256] = { 0 };
+            const int r = ProtoGrantUpgrade(kPresets[i].id, 2, out, sizeof(out));
+            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[升级] %s", out);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", kPresets[i].id);
+        ImGui::PopID();
+    }
 }
 
 // ===== 面板：脑机接口（MCP）=====
