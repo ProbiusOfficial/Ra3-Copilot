@@ -1357,6 +1357,19 @@ void PanelProtocol() {
         ProtocolSetToggle(2, dis);
         AddLog(dis ? LOG_OK : LOG_INFO, "[协议] 禁用技能 %s", dis ? "开" : "关");
     }
+    ImGui::SameLine();
+    {
+        bool pu = GetProtoUnlock();
+        if (ImGui::Checkbox("免基地前置", &pu)) {
+            bool ok = SetProtoUnlock(pu);
+            AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 免基地 %s",
+                   ok ? (pu ? "已开启" : "已关闭") : "失败（字节不符，未改动）");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("跨阵营注入的协议技能不再要求场上存在该阵营的建造场\n"
+                              "原理：把「玩家建筑列表谓词」(0x83B740) 的未命中分支改成恒真\n"
+                              "注意：同一谓词也用于建造前置，可能一并放开");
+    }
 
     ImGui::Separator();
     // ---- 选择式赋予：勾一批 → 一次全给 ----

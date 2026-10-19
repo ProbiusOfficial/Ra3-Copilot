@@ -9,6 +9,7 @@
 #include "httpapi.h"
 #include "overlay.h"
 #include "features.h"
+#include "hook.h"   // WriteRaw（poke 要能改 .text）
 #include "actions.h"
 #include "battlefield.h"
 #include "protocol.h"
@@ -183,6 +184,10 @@ static float g_coordScratch[8];   // 两组：[0..2] 主 [4..6] 备
 // HTTP 线程写 → 渲染线程读，PostAndWaitN 串行化，无并发。
 static char g_scriptArgs[4][96];
 
+// RE 实验用：往 DLL 自有内存里放 C 字符串，回地址给 /aicall 当参数。
+// 引擎里大量接口收的是 interned name key / const char*，没有这块就没法按名字查模板。
+static char g_strScratch[8][128];
+
 // 在渲染线程里执行（由 HttpApiPump 调用）
 void ExecCmd(CmdSlot& c) {
     switch (c.fn) {
@@ -260,9 +265,10 @@ void ExecCmd(CmdSlot& c) {
         uintptr_t at = (uintptr_t)(uint32_t)c.a1;
         uint32_t v = (uint32_t)c.a3;
         bool ok = false;
-        if (c.a2 == 2)      { __try { *(uint8_t*)at = (uint8_t)v; ok = true; } __except (EXCEPTION_EXECUTE_HANDLER) {} }
-        else if (c.a2 == 3) { __try { *(uint16_t*)at = (uint16_t)v; ok = true; } __except (EXCEPTION_EXECUTE_HANDLER) {} }
-        else                { ok = WrDword(at, v); }
+        // 走 WriteRaw：自动改页保护，所以既能写数据段也能写 .text（RE 实验要改代码）
+        if (c.a2 == 2)      { uint8_t  b = (uint8_t)v;  ok = WriteRaw(at, &b, 1); }
+        else if (c.a2 == 3) { uint16_t h = (uint16_t)v; ok = WriteRaw(at, &h, 2); }
+        else                { ok = WriteRaw(at, &v, 4); }
         CmdReply("poke %08X <- %08X : %s", (unsigned)at, v, ok ? "ok" : "fail");
         break;
     }
@@ -746,6 +752,9 @@ void Handle(SOCKET c, char* req) {
             "POST /order?unit=0x..&act=attack&target=0x..   指挥单位：攻击目标（Thing 地址）\n"
             "            |act=move&x=&y=&z=                  指挥单位：走向世界坐标\n"
             "GET  /scratch?x=&y=&z=[&idx=0|1]  Coord3D 传参缓冲，回地址\n"
+            "GET  /sbuf?s=文本[&idx=0..7]      C 字符串传参缓冲（intern 用），回地址\n"
+            "GET  /probe                      技能按钮锁定探针（hook 0xA7E9AB，只读）\n"
+            "GET  /unlock?on=0|1              协议技能免「该阵营基地」前置（0x83B740 恒真）\n"
             "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
             "GET  /postproc?on=0|1          创建后处理链开关（让召唤物登记进玩家体系）\n"
             "POST /postproc?obj=0x..[&team=0x..&a=1&b=1]  对单个对象手动跑后处理（验证用）\n"
@@ -1299,6 +1308,43 @@ void Handle(SOCKET c, char* req) {
             URLDecode(ub, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
         args[0] = GetParamInt(query, "mode", 2);
         na = 1;
+    } else if (strcmp(path, "/sbuf") == 0) {
+        // 字符串搬运：?s=文本[&idx=0..7]，回地址。仅 RE 实验用。
+        char vb[160] = { 0 };
+        int idx = GetParamInt(query, "idx", 0);
+        if (idx < 0) idx = 0;
+        if (idx > 7) idx = 7;
+        if (GetParam(query, "s", vb, sizeof(vb)))
+            URLDecode(vb, g_strScratch[idx], sizeof(g_strScratch[idx]));
+        else
+            g_strScratch[idx][0] = 0;
+        _snprintf_s(out, sizeof(out), _TRUNCATE, "sbuf[%d] @%08X = \"%s\"",
+                    idx, (unsigned)(uintptr_t)g_strScratch[idx], g_strScratch[idx]);
+        HttpSend(c, out, (int)strlen(out));
+        return;
+    } else if (strcmp(path, "/unlock") == 0) {
+        // 协议技能「需要该阵营基地」解锁：?on=0|1（不带 on 则取反）
+        int on = GetParamInt(query, "on", -1);
+        if (on < 0) on = GetProtoUnlock() ? 0 : 1;
+        const bool ok = SetProtoUnlock(on != 0);
+        _snprintf_s(out, sizeof(out), _TRUNCATE, "unlock %s : %s",
+                    on ? "on" : "off", ok ? "ok" : "fail（字节不符，未改动）");
+        HttpSend(c, out, (int)strlen(out));
+        return;
+    } else if (strcmp(path, "/probe") == 0) {
+        // 只读：技能按钮「锁定」探针（hook 0xA7E9AB，只记录不改行为）
+        static char pb[4096];
+        size_t w = 0;
+        w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "lockprobe n=%u ret=%08X\n",
+                         g_lpCount, g_retLockProbe);
+        for (uint32_t i = 0; i < g_lpCount && i < 64 && w + 72 < sizeof(pb); ++i) {
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  [%u] this=%08X sub=%08X p4=%08X %s%s%s\n",
+                             i, g_lpBuf[i*3], g_lpBuf[i*3+1], g_lpBuf[i*3+2],
+                             "", "", "");
+        }
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
     } else if (strcmp(path, "/scratch") == 0) {
         // Coord3D 传参缓冲：写 DLL 自有内存，回地址。仅 RE 实验用。
         char vb[32] = { 0 };

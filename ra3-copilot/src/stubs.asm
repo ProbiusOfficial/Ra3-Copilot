@@ -52,6 +52,9 @@ EXTERNDEF g_scPointVal      : DWORD
 EXTERNDEF g_retHaveAllSC    : DWORD
 EXTERNDEF g_retProtoAll     : DWORD
 EXTERNDEF g_retProtoClick   : DWORD
+EXTERNDEF g_retLockProbe     : DWORD    ; 技能按钮锁定探针返回地址
+EXTERNDEF g_lpCount          : DWORD    ; 探针命中条数
+EXTERNDEF g_lpBuf            : DWORD    ; 探针记录 {this, esi, [this+4]} × 64
 EXTERNDEF g_retFastBuild1   : DWORD
 EXTERNDEF g_retFastBuild2   : DWORD
 EXTERNDEF g_retFastBuild3   : DWORD
@@ -646,6 +649,36 @@ pc_norec:
     test  eax, eax                       ; 85 C0     原指令重放
     jmp   dword ptr g_retProtoClick
 ProtoClickCaveStub ENDP
+; ===========================================================================
+; LockProbeCaveStub <- base+0xA7E9AB  AOB E810B50500（5 字节整指令，exe 内唯一）
+;   UI「玩家技能按钮」画锁定态时调用的 call 0xAD9EC0。
+;   前文 0xA7E9A9: lea ecx,[esi+8]  ⇒ ecx = 按钮体+8，esi = 按钮体。
+;   本 stub 只做记录，不改任何行为：pushad/popfd 保现场 → 记录 → 恢复 →
+;   重放原 call（eax/al 即引擎算出的锁定标志）→ 跳回 A7E9B0。
+LockProbeCaveStub PROC
+    pushad
+    pushfd
+    mov   edi, ecx                        ; this（= 按钮体 + 8）
+    mov   edx, dword ptr [g_lpCount]
+    cmp   edx, 63
+    ja    lp_norec
+    imul  eax, edx, 12                    ; 3 个 DWORD / 条
+    lea   ecx, dword ptr [g_lpBuf]
+    add   eax, ecx
+    mov   dword ptr [eax], edi            ; this
+    mov   dword ptr [eax+4], esi          ; 子对象（按钮体）
+    mov   ecx, dword ptr [edi+4]          ; [this+4] = 锁定标志所在容器
+    mov   dword ptr [eax+8], ecx
+    inc   edx
+    mov   dword ptr [g_lpCount], edx
+lp_norec:
+    popfd
+    popad
+    mov   eax, 0AD9EC0h                   ; 原 call 目标（无 ASLR，绝对地址）
+    call  eax
+    jmp   dword ptr [g_retLockProbe]
+LockProbeCaveStub ENDP
+
 END
 
 ; ===========================================================================

@@ -33,11 +33,16 @@ extern uint32_t g_paBuf[64 * 4];
 // 协议格点击遥测：0x69AB03 进入时记录（esi / 父面板 / 协议对象 / 已拥有 / 列表begin / 列表end）
 extern uint32_t g_pcCount;
 extern uint32_t g_pcBuf[64 * 6];
+// 技能按钮「锁定」探针：0x0A7E9AB（call 0xAD9EC0 取锁定标志）进入时记录
+// 每条 3 DWORD = { this(=body+8), esi(子对象), [this+4](标志所在的容器指针) }
+extern uint32_t g_lpCount;
+extern uint32_t g_lpBuf[64 * 3];
 
 // 各 hook 返回地址（C++ 侧填充）
 extern uint32_t g_retMoney, g_retPlayerId, g_retPower, g_retSCPoint, g_retHaveAllSC;
 extern uint32_t g_retProtoAll;
 extern uint32_t g_retProtoClick;
+extern uint32_t g_retLockProbe;
 extern uint32_t g_scPointObj, g_scPointVal;
 extern uint32_t g_retFastBuild1, g_retFastBuild2, g_retFastBuild3, g_retMap;
 extern uint32_t g_retUnitAmmo, g_retDangerLevel, g_retOreMine, g_retGodMode;
@@ -73,6 +78,7 @@ void ZoomPostStub();
 void OneKillCaveStub();
 void OKData1CaveStub();
 void OKData2CaveStub();
+void LockProbeCaveStub();   // 技能按钮锁定探针（只记录）
 }
 
 // ---- 功能开关索引（对齐 CE 的 FLAGS 偏移）----
@@ -104,6 +110,11 @@ void TriggerOneShot(int idx);   // 置 1（cave 内消费后自动清零）
 // （基于 CE；比"快速建造"安全，不会破坏建造队列）
 bool SetFreeBuild(bool on);
 bool GetFreeBuild();
+
+// 协议技能「需要该阵营基地」解锁：0x83B740（遍历 Player+0x1260 建筑列表的谓词）恒真。
+// 2 字节补丁，幂等，字节不符时不改动。
+bool SetProtoUnlock(bool on);
+bool GetProtoUnlock();
 
 // ---- 遥测（overlay 侧）----
 extern uint32_t g_telemImguiReady;

@@ -1013,13 +1013,13 @@ void PlayerDeepDiff(char* out, size_t outsz) {
 //   （把操作撤销，例如摧毁那个基地）
 //   act=pagediff                    打印选中页里每个翻转的 u32（old->new）
 static constexpr uint32_t kPageSz  = 0x1000;
-static constexpr int      kPgKeep  = 256;
+static constexpr int      kPgKeep  = 2048;
 static constexpr size_t   kPageMax = 262144;
 
 struct PageSig { uint32_t addr; uint32_t sum; };
 static std::vector<PageSig>  g_pageSnap;
 static std::vector<uint32_t> g_pgAddr;
-static uint8_t               g_pgBytes[kPgKeep][0x1000];
+static uint8_t*              g_pgBytes = nullptr;    // kPgKeep*4KB，按需分配
 static int                   g_pgN = 0;
 static uint32_t              g_pgScanned = 0;
 
@@ -1100,16 +1100,23 @@ bool HeapPageSnap(int* outPages) {
 // mode 0 = 本次变化集；1 = 与上一轮取交集；2 = 从上一轮里减掉（用来剔掉每帧都在变的抖动页）
 static std::vector<uint32_t> g_pgPrev;
 
+static bool EnsurePgBuf() {
+    if (g_pgBytes) return true;
+    g_pgBytes = static_cast<uint8_t*>(VirtualAlloc(nullptr, static_cast<SIZE_T>(kPgKeep) * kPageSz,
+                                                   MEM_COMMIT, PAGE_READWRITE));
+    return g_pgBytes != nullptr;
+}
+
 static void KeepBytes(const std::vector<uint32_t>& v) {
     uint8_t* page = PageBuf();
     g_pgN = 0;
-    if (!page) return;
+    if (!page || !EnsurePgBuf()) return;
     for (size_t i = 0; i < v.size() && g_pgN < kPgKeep; ++i) {
         SIZE_T got = 0;
         if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(v[i])),
                                page, kPageSz, &got) || got != kPageSz)
             continue;
-        memcpy(g_pgBytes[g_pgN], page, kPageSz);
+        memcpy(g_pgBytes + static_cast<size_t>(g_pgN) * kPageSz, page, kPageSz);
         g_pgAddr.push_back(v[i]);
         ++g_pgN;
     }
@@ -1165,32 +1172,41 @@ void HeapPageDiff(char* out, size_t outsz, int mode) {
 }
 
 void HeapPageDetail(char* out, size_t outsz) {
-    if (!g_pgN) { _snprintf_s(out, outsz, _TRUNCATE, "没有抓取页（先在变化后调 act=heapdiff）"); return; }
+    if (!g_pgN || !g_pgBytes) { _snprintf_s(out, outsz, _TRUNCATE, "没有抓取页（先在变化后调 act=heapdiff）"); return; }
     uint8_t cur[0x1000];
-    size_t w = 0; int hits = 0, pages = 0;
+    size_t w = 0;
+    int pages = 0, clean = 0;
     for (int k = 0; k < g_pgN; ++k) {
         SIZE_T got = 0;
         if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(g_pgAddr[k])),
                                cur, kPageSz, &got) || got != kPageSz)
             continue;
+        const uint8_t* oldp = g_pgBytes + static_cast<size_t>(k) * kPageSz;
         int n = 0;
+        uint32_t lastOff = 0, lastA = 0, lastB = 0;
+        bool tinyVal = true;
         for (uint32_t off = 0; off + 4 <= kPageSz; off += 4) {
             uint32_t x = 0, y = 0;
-            memcpy(&x, g_pgBytes[k] + off, 4);
+            memcpy(&x, oldp + off, 4);
             memcpy(&y, cur + off, 4);
             if (x == y) continue;
-            ++n;
-            if (n <= 8 && w + 40 < outsz) {
-                w += _snprintf_s(out + w, outsz - w, _TRUNCATE, "%08X+%03X:%u->%u ",
-                                 g_pgAddr[k], off, x, y);
-                ++hits;
-            }
+            ++n; lastOff = off; lastA = x; lastB = y;
+            if (x >= 0x10000 || y >= 0x10000) tinyVal = false;
+            if (n > 4) break;
         }
-        if (n) ++pages;
+        if (!n) continue;
+        ++pages;
+        // 只列「干净翻转」：变化点 <=2 且两端都是小整数（0/1 这类标志位）
+        if (n <= 2 && tinyVal) {
+            ++clean;
+            if (w + 44 < outsz)
+                w += _snprintf_s(out + w, outsz - w, _TRUNCATE, "%08X+%03X:%u->%u ",
+                                 g_pgAddr[k], lastOff, lastA, lastB);
+        }
     }
-    if (w + 48 < outsz)
-        _snprintf_s(out + w, outsz - w, _TRUNCATE, "| %d 页有变化", pages);
-    if (!hits) _snprintf_s(out, outsz, _TRUNCATE, "抓下的 %d 页里没有 u32 变化", g_pgN);
+    if (w + 64 < outsz)
+        _snprintf_s(out + w, outsz - w, _TRUNCATE, "| 抓 %d 页 / 有变 %d 页 / 干净翻转 %d 处", g_pgN, pages, clean);
+    if (!pages) _snprintf_s(out, outsz, _TRUNCATE, "抓下的 %d 页里没有 u32 变化", g_pgN);
 }
 
 // 诊断一行：引擎 / 当前脚本玩家（0 = <This Player> 解析不了）/ 玩家对象 / 序号

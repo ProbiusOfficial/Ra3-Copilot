@@ -35,6 +35,9 @@ uint32_t g_paCount = 0;
 uint32_t g_paBuf[64 * 4] = { 0 };
 uint32_t g_pcCount = 0;
 uint32_t g_pcBuf[64 * 6] = { 0 };
+uint32_t g_lpCount = 0;
+uint32_t g_lpBuf[64 * 3] = { 0 };
+uint32_t g_retLockProbe = 0;
 
 uint32_t g_retMoney = 0, g_retPlayerId = 0, g_retPower = 0, g_retSCPoint = 0;
 uint32_t g_scPointObj = 0, g_scPointVal = 0;
@@ -74,8 +77,10 @@ const uint8_t AOB_ENEMYBUILD[5] = { 0x03, 0x50, 0x04, 0x3B, 0xD7 };
 const uint8_t AOB_SUPERPOWER[6] = { 0x8B, 0x98, 0x18, 0x04, 0x00, 0x00 };
 const uint8_t AOB_DISABLEALLSP[6] = { 0x8B, 0x51, 0x50, 0x3B, 0x50, 0x0C };
 // 0x43C3A0 前置条件检查：mov eax,[esp+4]/mov edx,[eax]/mov eax,[eax]/mov edx,[ecx+48h]/push esi/mov esi,[eax+4]
-// 0x686920 协议格锁定判定（覆盖所有分支，含 cond==NULL 与依赖递归）
-// 0x69A9B3 写控件状态：mov [esi+0x18],al / mov edx,[ecx]
+// ⚠ 以下两条语义**未经复核**：其依据是 0x69A990 起的反汇编，而该地址并非指令边界（2026-10-19 发现）。
+//    字节本身能对上（AOB 命中），但"它在做什么"存疑，见 docs/old/作废-协议格前置判定.md。
+// 0x686920 协议格锁定判定（待复核，含 cond==NULL 与依赖递归）
+// 0x69A9B3 写控件状态：mov [esi+0x18],al / mov edx,[ecx]（待复核）
 const uint8_t AOB_PROTOALL[6] = { 0x88,0x46,0x18, 0x8B,0x11, 0x8B };
 // 0x69AB03 协议格点击处理：mov eax,[esi+14h] / test eax,eax / je（+7 字节 AOB 仅定位，覆盖 5 字节）
 const uint8_t AOB_PROTOCLICK[7] = { 0x8B,0x46,0x14, 0x85,0xC0, 0x74,0x39 };
@@ -86,6 +91,9 @@ const uint8_t AOB_ZOOMENTRY[14] = { 0xA1,0x50,0xB7,0xCD,0x00,0x53,0x33,0xDB,0x38
 const uint8_t AOB_ONEKILL[7]  = { 0xF3,0x0F,0x11,0x46,0x04,0x74,0x20 };
 const uint8_t AOB_OKDATA1[8]  = { 0x8B,0x8E,0x3C,0x03,0x00,0x00,0x8B,0x95 };
 const uint8_t AOB_OKDATA2[10] = { 0x8B,0x89,0x3C,0x03,0x00,0x00,0x85,0xC9,0x74,0x0C };
+// 0xA7E9AB = UI「玩家技能按钮」画锁定时调用的 call 0xAD9EC0（5 字节整指令，exe 内唯一）
+//   前文 A7E9A9: lea ecx,[esi+8]  ⇒ 进入时 ecx = 按钮体+8，esi = 按钮体
+const uint8_t AOB_LOCKPROBE[5] = { 0xE8, 0x10, 0xB5, 0x05, 0x00 };
 
 struct HookDef {
     const char*    name;
@@ -122,6 +130,7 @@ const HookDef kHooks[] = {
     { "OneKill",    0x3651AE, AOB_ONEKILL, 7, (void*)&OneKillCaveStub,    &g_retOneKill, 5 },
     { "OKData1",    0x3FE714, AOB_OKDATA1, 8, (void*)&OKData1CaveStub,    &g_retOKData1, 6 },
     { "OKData2",    0x2E24E3, AOB_OKDATA2, 10,(void*)&OKData2CaveStub,    &g_retOKData2, 6 },
+    { "PowerLockProbe",0x67E9AB,AOB_LOCKPROBE, 5,(void*)&LockProbeCaveStub, &g_retLockProbe, 5 },   // VA 0xA7E9AB - 0x400000
 };
 
 // 已装站表（卸载回写用）：InstallHooks 记录，RemoveHooks 逆操作
@@ -228,6 +237,31 @@ bool GetFreeBuild() {
     const uintptr_t at = SymFreeBuildSite();
     if (!at) return false;
     return *reinterpret_cast<uint8_t*>(at) == 0xEB;
+}
+
+// ---- 协议技能「需要该阵营基地」解锁 ----
+// 0x83B740 = 玩家建筑列表谓词：遍历 Player+0x1260，逐个 Thing 调 0x7E43F0(tpl, filter)。
+//   0x83B81B: 32 C0   xor al,al   ← 未命中分支（返回 false）
+//   0x83B822: B0 01   mov al,1    ← 命中分支（返回 true）
+// 把未命中分支改成 mov al,1 ⇒ 谓词恒真 ⇒ 跨阵营协议技能不再要求场上存在该阵营基地。
+// 实测：改完后摧毁对方阵营建造场，技能按钮仍为可释放态。
+static const uint8_t  kProtoUnlockOff[2] = { 0x32, 0xC0 };
+static const uint8_t  kProtoUnlockOn[2]  = { 0xB0, 0x01 };
+static const uint32_t kProtoUnlockRva    = 0x43B81B;   // VA 0x83B81B - ImageBase
+
+bool GetProtoUnlock() {
+    const uintptr_t at = MainModuleBase() + kProtoUnlockRva;
+    return VerifyBytes(at, kProtoUnlockOn, 2);
+}
+
+bool SetProtoUnlock(bool on) {
+    const uintptr_t at = MainModuleBase() + kProtoUnlockRva;
+    if (!at) return false;
+    const uint8_t* want   = on ? kProtoUnlockOn : kProtoUnlockOff;
+    const uint8_t* expect = on ? kProtoUnlockOff : kProtoUnlockOn;
+    if (VerifyBytes(at, want, 2)) return true;      // 已是目标状态（幂等）
+    if (!VerifyBytes(at, expect, 2)) return false;  // 字节不符，别碰
+    return WriteRaw(at, want, 2);
 }
 
 int LocalPlayerId() {
