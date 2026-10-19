@@ -282,6 +282,22 @@ const char* ProtocolTechId(int idx)      { return (idx >= 0 && idx < kProtoTechC
 const char* ProtocolTechName(int idx)    { return (idx >= 0 && idx < kProtoTechCount) ? kProtoTechs[idx].name : ""; }
 const char* ProtocolTechFaction(int idx) { return (idx >= 0 && idx < kProtoTechCount) ? kProtoTechs[idx].faction : ""; }
 
+// ---- 协议技能（人工中文名，tools/proto_zh.tsv）----
+// 这批才是面板上「可勾选、可授予」的协议；其余 SpecialPower 多为单位能力（引擎会拒绝）。
+int ProtocolPickCount() { return kProtoPickCount; }
+const char* ProtocolPickId(int idx)      { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].id : ""; }
+const char* ProtocolPickZh(int idx)      { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].zh : ""; }
+const char* ProtocolPickFaction(int idx) { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].faction : ""; }
+
+int ProtoGrantPick(int idx, char* out, size_t outsz) {
+    if (idx < 0 || idx >= kProtoPickCount) {
+        g_lastErr = "协议序号越界";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return 0;
+    }
+    return ProtoGrantByName(kProtoPicks[idx].id, nullptr, out, outsz);
+}
+
 // 协议点（实测确认，2026-10-19）：
 //     SCPoint 对象 = [Player + 0x1320]
 //     点数         = [SCPoint + 0x34]      （整数；写 15 后面板即可全买）

@@ -1,0 +1,85 @@
+﻿# 协议技能中文名（人工整理，供 tools/gen_protocols.py 生成 kProtoPicks[]）
+# 列：内部名 <TAB> 中文名 <TAB> 阵营
+# 只收「协议/玩家技能」——单位能力不进这张表（引擎也会拒绝授予）。
+# 名字对照来源：RA3 原版技能名 + 日冕 mod.relo 里的 NAME: 条目 + 面板按钮名(ButtonPlayerPower*)。
+SpecialPower_Celestial_EMSuppressField_Lv1	电磁压制场 Lv1	神州
+SpecialPower_Celestial_EMSuppressField_Lv2	电磁压制场 Lv2	神州
+SpecialPower_Celestial_EMSuppressField_Lv3	电磁压制场 Lv3	神州
+SpecialPower_CelestiallightningTroopUpgrade_Lv1	闪电部队升级 Lv1	神州
+SpecialPower_CelestiallightningTroopUpgrade_Lv2	闪电部队升级 Lv2	神州
+SpecialPower_CelestiallightningTroopUpgrade_Lv3	闪电部队升级 Lv3	神州
+SpecialPowerCelestialSatelliteLaserSweep_Lv1	卫星激光扫射 Lv1	神州
+SpecialPowerCelestialSatelliteLaserSweep_Lv2	卫星激光扫射 Lv2	神州
+SpecialPowerCelestialSatelliteLaserSweep_Lv3	卫星激光扫射 Lv3	神州
+SpecialPower_CelestialQuantumLink	量子链接	神州
+SpecialPower_CelestialSpaceReinforce	太空增援	神州
+SpecialPower_CelestialPowerSealOff	能量封印	神州
+SpecialPower_CelestialCenturionUpgrade	百夫长升级	神州
+SpecialPowerCelestialEMTurretDrop	电磁炮塔空投	神州
+SpecialPowerCelestialCannon	天朝主炮	神州
+SpecialPower_CelestialOrbitalStrike	轨道打击	神州
+SpecialPower_CelestialMassiveOrbitalStrike	大规模轨道打击	神州
+SpecialPower_CelestialPantaOrbitalStrike	万式轨道打击	神州
+SpecialPower_CelestialPowerPlantDetection	电厂侦测	神州
+SpecialPower_Celestial_ElectromagneticGun	电磁炮	神州
+SpecialPowerDragonShipAttackDrones	龙船攻击无人机	神州
+SpecialPowerChronoRiftSelectLvl1	时空裂缝 Lv1	盟军
+SpecialPowerChronoRiftSelectLvl2	时空裂缝 Lv2	盟军
+SpecialPowerChronoRiftSelectLvl3	时空裂缝 Lv3	盟军
+SpecialPowerTimeBombLvl1	时间炸弹 Lv1	盟军
+SpecialPowerTimeBombLvl2	时间炸弹 Lv2	盟军
+SpecialPowerTimeBombLvl3	时间炸弹 Lv3	盟军
+SpecialPowerCryoSatelliteLvl1	冷冻卫星 Lv1	盟军
+SpecialPowerCryoSatelliteLvl2	冷冻卫星 Lv2	盟军
+SpecialPowerCryoSatelliteLvl3	冷冻卫星 Lv3	盟军
+SpecialPowerChronosphereObjectSelect	时空传送	盟军
+SpecialPowerChronoSwapSelect	时空交换	盟军
+SpecialPowerAlliedChronoAccelerate	超时空物流	盟军
+SpecialPowerPrecisionStrike	精确打击	盟军
+SpecialPowerAirPower	制空权	盟军
+SpecialPowerAlliedFreeTrade	自由贸易	盟军
+SpecialPowerAlliedMissileCrisis	导弹危机	盟军
+SpecialPowerAlliedRangerAirAssault	游骑兵空降突袭	盟军
+SpecialPowerAlliedShipboardWarplaneSquadron	舰载机中队	盟军
+SpecialPowerAlliedPrecisionAssault	精确突击	盟军
+SpecialPowerDesolatorBomb_Level1	辐射炸弹 Lv1	苏联
+SpecialPowerDesolatorBomb_Level2	辐射炸弹 Lv2	苏联
+SpecialPowerDesolatorBomb_Level3	辐射炸弹 Lv3	苏联
+SpecialPowerMagneticSatelliteLvl1	磁力卫星 Lv1	苏联
+SpecialPowerMagneticSatelliteLvl2	磁力卫星 Lv2	苏联
+SpecialPowerMagneticSatelliteLvl3	磁力卫星 Lv3	苏联
+SpecialPowerOrbitalRefuse_Rank1	轨道垃圾 I	苏联
+SpecialPowerOrbitalRefuse_Rank2	轨道垃圾 II	苏联
+SpecialPowerOrbitalRefuse_Rank3	轨道垃圾 III	苏联
+SpecialPowerIronCurtain	铁幕	苏联
+SpecialPowerMagneticSingularity	磁力奇点	苏联
+SpecialPowerVacuumBomb	真空炸弹	苏联
+SpecialPowerIrradiateTarget	辐射目标	苏联
+SpecialPowerSovietTeslaAirAssault	特斯拉空袭	苏联
+SpecialPowerSovietUnbreakableArmor	不破装甲	苏联
+SpecialPowerTerrorDroneEggs	恐怖机器人弹	苏联
+SpecialPowerCrushPuppies	碾压指令	苏联
+SpecialPowerJapanBalloonAttack_L1	气球轰炸 Lv1	帝国
+SpecialPowerJapanBalloonAttack_L2	气球轰炸 Lv2	帝国
+SpecialPowerJapanBalloonAttack_L3	气球轰炸 Lv3	帝国
+SpecialPowerJapanEmperorsResolve_L1	天皇决意 Lv1	帝国
+SpecialPowerJapanEmperorsResolve_L2	天皇决意 Lv2	帝国
+SpecialPowerJapanEmperorsResolve_L3	天皇决意 Lv3	帝国
+SpecialPowerFinalSquadron_L1	最终中队 Lv1	帝国
+SpecialPowerFinalSquadron_L2	最终中队 Lv2	帝国
+SpecialPowerFinalSquadron_L3	最终中队 Lv3	帝国
+SpecialPowerJapanAmbush	帝国伏击	帝国
+SpecialPowerNanoSwarmHive	纳米虫巢	帝国
+SpecialPowerJapanNanoMaintainHive	纳米维护巢	帝国
+SpecialPowerJapanAdvancedMissilePacks	高级导弹包	帝国
+SpecialPowerJapanNavalPower	海军强化	帝国
+SpecialPowerTelekineticProjectorDevice	念力投影仪	帝国
+SpecialPowerPause01	时间停止	帝国
+SpecialPower_LuckyUnitCrate	单抽！	通用
+SpecialPower_LuckyUnitCrateX10	十连！	通用
+SpecialPowerParticleCannon	粒子炮	通用
+SpecialPowerSatelliteSweep	卫星扫描	通用
+SpecialPowerPointDefenseDrones	点防御无人机	通用
+SpecialPowerProductionKickbacks	生产回扣	通用
+SpecialPowerHighTechnology	高科技	通用
+SpecialPower_GrantCelestialTech	授予天朝科技	通用

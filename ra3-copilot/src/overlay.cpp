@@ -1114,11 +1114,6 @@ void TabResource() {
     b = GetFeature(FID_POWER);
     if (ImGui::Checkbox("电力无限", &b)) SetFeature(FID_POWER, b);
     ImGui::SameLine(220);
-    b = GetFeature(FID_SCPOINT);
-    if (ImGui::Checkbox("科技点无限", &b)) SetFeature(FID_SCPOINT, b);
-    b = GetFeature(FID_HAVEALLSC);
-    if (ImGui::Checkbox("全科技", &b)) SetFeature(FID_HAVEALLSC, b);
-    ImGui::SameLine(220);
     b = GetFeature(FID_FASTBUILD);
     if (ImGui::Checkbox("快速建造", &b)) SetFeature(FID_FASTBUILD, b);
     ImGui::SameLine(360);
@@ -1297,16 +1292,21 @@ bool SubStrNoCase(const char* hay, const char* needle);   // 定义在召唤面�
 void PanelProtocol() {
     static char s_search[64] = { 0 };
     static int  s_fac = 0;
+    static bool s_showAll = false;
+    static std::vector<unsigned char> s_sel;
+
+    const int pickN = ProtocolPickCount();
+    if ((int)s_sel.size() != pickN) s_sel.assign(pickN ? pickN : 1, 0);
 
     const char* who = LocalPlayerName();
     const int pts = ProtocolPoints();
-    ImGui::Text("玩家 %s（序号 %d）   协议点 %d   技能 %d 条",
-                who[0] ? who : "未抓到", LocalPlayerId(), pts, ProtocolCount());
+    ImGui::Text("玩家 %s（序号 %d）   协议点 %d   可授予协议 %d 条",
+                who[0] ? who : "未抓到", LocalPlayerId(), pts, pickN);
     if (pts < 0)
         ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f),
                            "没有玩家对象：先进遭遇战");
 
-    // ---- 协议点：已定位到 [Player+0x1320]+0x34（2026-10-19 实测，写 15 后即可全买）----
+    // ---- 协议点 / 无限科技点 ----
     static int s_points = 99;
     ImGui::SetNextItemWidth(90);
     ImGui::InputInt("##proto_pts", &s_points, 1, 10);
@@ -1317,14 +1317,24 @@ void PanelProtocol() {
         const bool ok = ProtocolSetPoints(s_points);
         AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → %d %s", s_points, ok ? "" : "失败");
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("写 [Player+0x1320]+0x34（整数）。\n"
+                          "实测：写 15 后协议面板立刻可全买；界面上的数字要等刷新才变。");
     ImGui::SameLine();
     if (ImGui::Button("99", ImVec2(44, 0))) {
         const bool ok = ProtocolSetPoints(99);
         AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → 99 %s", ok ? "" : "失败");
     }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("写 [Player+0x1320]+0x34（整数）。\n"
-                          "实测：写 15 后协议面板立刻可全买；界面上的数字要等刷新才变。");
+    ImGui::SameLine();
+    {
+        bool inf = GetFeature(FID_SCPOINT);
+        if (ImGui::Checkbox("无限科技点", &inf)) {
+            SetFeature(FID_SCPOINT, inf);
+            AddLog(inf ? LOG_OK : LOG_INFO, "[协议] 无限科技点 %s", inf ? "开" : "关");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("每帧把协议点补满。\n（原在「资源」页，属于协议系统，已搬到这里）");
+    }
 
     ImGui::Separator();
     bool all = ProtocolGetToggle(0);
@@ -1332,6 +1342,8 @@ void PanelProtocol() {
         ProtocolSetToggle(0, all);
         AddLog(all ? LOG_OK : LOG_INFO, "[协议] 全协议 %s", all ? "开" : "关");
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("直接解锁整棵协议树（等价旧「资源」页的「全科技」）");
     ImGui::SameLine();
     bool fast = ProtocolGetToggle(1);
     if (ImGui::Checkbox("快速冷却", &fast)) {
@@ -1346,56 +1358,95 @@ void PanelProtocol() {
     }
 
     ImGui::Separator();
-    // ---- 技能列表：搜索 + 阵营页签 + 点选即授予 ----
+    // ---- 选择式赋予：勾一批 → 一次全给 ----
     static const char* kFacs[] = { "神州", "盟军", "苏联", "帝国", "通用" };
     const int kFacN = 5;
     if (s_fac < 0 || s_fac > kFacN) s_fac = 0;
 
-    ImGui::TextDisabled("下面列出的是引擎里全部 SpecialPower 模板（%d 条），"
-                        "不是游戏那 15 格协议；15 格按顺序购买即可。", ProtocolCount());
-    ImGui::SetNextItemWidth(190);
-    ImGui::InputTextWithHint("##proto_search", "搜索技能名（内部名片段）", s_search, sizeof(s_search));
+    ImGui::SetNextItemWidth(220);
+    ImGui::InputTextWithHint("##proto_search", "搜索（中文名 / 内部名）", s_search, sizeof(s_search));
     ImGui::SameLine();
-    ImGui::TextDisabled("共 %d 条", ProtocolCount());
+    ImGui::Checkbox("显示全部 SpecialPower（调试）", &s_showAll);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("完整 %d 条模板，含单位能力。\n单位能力没有「可授予对象」，引擎会静默拒绝。",
+                          ProtocolCount());
 
-    static std::vector<int> filt;
-    filt.clear();
-    const bool searching = (s_search[0] != 0);
-    for (int i = 0; i < ProtocolCount(); ++i) {
-        if (!searching && s_fac > 0 && strcmp(ProtocolFaction(i), kFacs[s_fac - 1]) != 0) continue;
-        if (searching && !SubStrNoCase(ProtocolId(i), s_search) &&
-            !SubStrNoCase(ProtocolName(i), s_search)) continue;
-        filt.push_back(i);
-    }
+    int selCount = 0;
+    for (int i = 0; i < pickN; ++i) if (s_sel[i]) ++selCount;
 
-    ImGui::BeginChild("##proto_fac", ImVec2(76, 210), true);
+    ImGui::BeginChild("##proto_fac", ImVec2(76, 250), true);
     if (ImGui::Selectable("全部", s_fac == 0)) s_fac = 0;
     for (int i = 0; i < kFacN; ++i)
         if (ImGui::Selectable(kFacs[i], s_fac == i + 1)) s_fac = i + 1;
     ImGui::EndChild();
 
     ImGui::SameLine();
-    ImGui::BeginChild("##proto_list", ImVec2(0, 210), true);
-    ImGui::TextDisabled("%d 项（点一行 = 授予）", (int)filt.size());
-    for (int fi = 0; fi < (int)filt.size(); ++fi) {
-        const int i = filt[fi];
-        ImGui::PushID(i);
-        char label[288];
-        if (searching)
-            snprintf(label, sizeof(label), "[%s] %s##%d", ProtocolFaction(i), ProtocolName(i), i);
-        else
-            snprintf(label, sizeof(label), "%s##%d", ProtocolName(i), i);
-        if (ImGui::Selectable(label, false)) {
-            char out[224] = { 0 };
-            const int r = ProtoGrantPower(i, out, sizeof(out));
-            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
+    ImGui::BeginChild("##proto_list", ImVec2(0, 250), true);
+    const bool searching = (s_search[0] != 0);
+    if (!s_showAll) {
+        ImGui::TextDisabled("勾选想要的协议，再点下面「赋予选中」");
+        for (int i = 0; i < pickN; ++i) {
+            const char* zh  = ProtocolPickZh(i);
+            const char* fac = ProtocolPickFaction(i);
+            const char* id  = ProtocolPickId(i);
+            if (!searching && s_fac > 0 && strcmp(fac, kFacs[s_fac - 1]) != 0) continue;
+            if (searching && !SubStrNoCase(zh, s_search) && !SubStrNoCase(id, s_search)) continue;
+            ImGui::PushID(1000 + i);
+            bool on = s_sel[i] != 0;
+            char label[256];
+            snprintf(label, sizeof(label), "%s   [%s]##p%d", zh, fac, i);
+            if (ImGui::Checkbox(label, &on)) s_sel[i] = on ? 1 : 0;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s\n执行：PLAYER_GRANT_SPECIAL_POWER\n玩家：%s",
+                                  id, who[0] ? who : "(未抓到)");
+            ImGui::PopID();
         }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s\n执行：PLAYER_GRANT_SPECIAL_POWER\n玩家：%s",
-                              ProtocolId(i), who[0] ? who : "(未抓到)");
-        ImGui::PopID();
+    } else {
+        ImGui::TextDisabled("%d 项（点一行 = 授予，内部名）", ProtocolCount());
+        for (int i = 0; i < ProtocolCount(); ++i) {
+            if (!searching && s_fac > 0 && strcmp(ProtocolFaction(i), kFacs[s_fac - 1]) != 0) continue;
+            if (searching && !SubStrNoCase(ProtocolId(i), s_search) &&
+                !SubStrNoCase(ProtocolName(i), s_search)) continue;
+            ImGui::PushID(i);
+            char label[288];
+            snprintf(label, sizeof(label), "[%s] %s##d%d", ProtocolFaction(i), ProtocolName(i), i);
+            if (ImGui::Selectable(label, false)) {
+                char out[224] = { 0 };
+                const int r = ProtoGrantPower(i, out, sizeof(out));
+                AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", ProtocolId(i));
+            ImGui::PopID();
+        }
     }
     ImGui::EndChild();
+
+    if (ImGui::Button("赋予选中", ImVec2(110, 0))) {
+        int ok = 0, fail = 0;
+        for (int i = 0; i < pickN; ++i) {
+            if (!s_sel[i]) continue;
+            char out[256] = { 0 };
+            const int r = ProtoGrantPick(i, out, sizeof(out));
+            if (r >= 0) ++ok; else ++fail;
+            AddLog(r >= 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
+        }
+        AddLog(fail ? LOG_WARN : LOG_OK, "[协议] 批量赋予完成：成功 %d，失败 %d", ok, fail);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("全选本页", ImVec2(84, 0))) {
+        for (int i = 0; i < pickN; ++i) {
+            if (s_fac > 0 && strcmp(ProtocolPickFaction(i), kFacs[s_fac - 1]) != 0) continue;
+            if (searching && !SubStrNoCase(ProtocolPickZh(i), s_search) &&
+                !SubStrNoCase(ProtocolPickId(i), s_search)) continue;
+            s_sel[i] = 1;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("清空", ImVec2(64, 0)))
+        for (int i = 0; i < pickN; ++i) s_sel[i] = 0;
+    ImGui::SameLine();
+    ImGui::TextDisabled("已选 %d / %d", selCount, pickN);
 
     ImGui::TextDisabled("%s", ProtocolLastError());
 }

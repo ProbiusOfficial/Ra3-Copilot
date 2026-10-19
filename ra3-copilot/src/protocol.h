@@ -15,6 +15,14 @@ const char* ProtocolTechId(int idx);
 const char* ProtocolTechName(int idx);
 const char* ProtocolTechFaction(int idx);
 
+// ---- 协议技能选择表（人工中文名，来自 tools/proto_zh.tsv）----
+// 与上面 439 条原始 SpecialPower 目录分开：这里只有「真正能授予的协议」。
+int  ProtocolPickCount();
+const char* ProtocolPickId(int idx);
+const char* ProtocolPickZh(int idx);
+const char* ProtocolPickFaction(int idx);
+int  ProtoGrantPick(int idx, char* out, size_t outsz);
+
 int  ProtocolPoints();
 float ProtocolScience();
 bool ProtocolSetPoints(int n);
