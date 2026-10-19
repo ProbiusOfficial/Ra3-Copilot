@@ -5,12 +5,15 @@
 
 namespace ra3 {
 
-int  ProtocolCount();
-const char* ProtocolFaction(int idx);
+int  ProtocolCount();                 // = 可授予的 SpecialPower 数
+const char* ProtocolId(int idx);
 const char* ProtocolName(int idx);
-const char* ProtocolTech(int idx);
-const char* ProtocolUpgrade(int idx);
-const char* ProtocolPower(int idx);
+const char* ProtocolFaction(int idx);
+
+int  ProtocolTechCount();
+const char* ProtocolTechId(int idx);
+const char* ProtocolTechName(int idx);
+const char* ProtocolTechFaction(int idx);
 
 int  ProtocolPoints();
 float ProtocolScience();
@@ -21,18 +24,47 @@ bool ProtocolSetScience(float v);
 bool ProtocolSetToggle(int which, bool on);
 bool ProtocolGetToggle(int which);
 
-// 按条授予：先解锁 PlayerTech，再授予 SpecialPower（实验通道，效果需实机确认）
-// player 传脚本玩家名（如 "<This Player>" / "Player_1"）；返回 0 失败 / 1 已投递
-int  ProtocolGrant(int idx, const char* player, char* out, size_t outsz);
-// 把脚本引擎“当前对象”上下文指向本地玩家，再用 <This Object> 授予（实验）
-int  ProtocolGrantLocal(int idx, char* out, size_t outsz);
-// 直接按 PlayerTech hash 找 TechNode 并追加到玩家的协议 vector（行为验证路径）
-int  ProtocolGrantNode(uint32_t hash, char* out, size_t outsz);
-// 原生入口：hash -> 升级模板 -> grant(team, template, 2, 1)
-int  ProtocolNativeGrant(uint32_t hash, char* out, size_t outsz);
+// 授予：走引擎 ExecuteAction，参数用「内部名 + 真实玩家名」，失败原因写进 out
+int  ProtoGrantPower(int idx, char* out, size_t outsz);
+int  ProtoGrantTech(int idx, char* out, size_t outsz);
+// 按 SpecialPower 内部名直接授予（不查字典）。who 用脚本玩家过滤器，缺省 "<This Player>"。
+// 走引擎真入口 ExecuteAction(0x182C50) + PLAYER_GRANT_SPECIAL_POWER。
+// 实测无阵营检查（跨阵营可授予）；who 认 <This Player> / <All Players> / 裸玩家名，可指向敌方。
+// 只有「无授予对象」的技能（单位能力、被禁用的超武）会被静默跳过。
+int  ProtoGrantByName(const char* power, const char* who, char* out, size_t outsz);
+// 诊断：在脚本动作表（[0xCDD190]+0x48，573 条 ×0x80，名字在 +0x0C）里按名字找下标。
+// 下标就是执行器 0x5A2B40 里 switch 用的 action id —— 反汇编某个动作的实现时先查它。
+int  ActionIndexByName(const char* name, char* out, size_t outsz);
+const char* LocalPlayerName();
+
+// 玩家字段探针：先 snap，让玩家在游戏里买一个协议，再 diff 找真正变化的字段
+int   ProtocolUnlockIndex();
+bool  ProtocolSetUnlockIndex(int n);
+int   ProtocolSlotTotal();
+// 已拥有协议 id 列表：SCPoint+0x18 起的 std::vector<uint32>（begin/end/cap = +0x18/+0x1C/+0x20）
+int   ProtocolOwnedCount();
+bool  ProtocolOwnedAt(int i, uint32_t* outId);
+bool  ProtocolClaimId(uint32_t id);      // 直接塞进已购列表（面板该格立刻变「已拥有」）
+bool  ProtocolClaimGrid(int grid);       // 按面板格序（0..14）取该格协议 id 并塞入
+float ProtocolProgress();
+bool  ProtocolSetProgress(float v);
+bool PlayerFieldsSnap();
+bool PlayerFieldsCalibrate();
+bool PlayerDeepSnap();
+int  PScanMark(uint32_t value, uint32_t* outCount);
+int  PScanFilter(uint32_t want, uint32_t* outCount, char* out, size_t outsz);
+void PlayerDeepDiff(char* out, size_t outsz);
+void PlayerFieldsDiff(char* out, size_t outsz);
 // 只读诊断：记录游戏动作执行器 0x5A2B40 的 action index / 参数
-int  ProtocolTraceExecInstall();
-int  ProtocolTraceExecRead(char* out, size_t outsz);
+// 通用脚本动作：action 名 + 最多 3 个名字串参数，走引擎 ExecuteAction。
+// 注意：只能传字符串参数（数字/表参数暂不支持）。返回 -1 表示投递失败，>=0 为引擎返回值。
+int  LuaExecuteAction(const char* action, const char* a1, const char* a2, const char* a3,
+                      char* out, size_t outsz, int mode = 0);
+// 按 RVA 直调引擎 Lua C 函数（参数只支持名字串），用于 ObjectCreateAndFireTempWeapon 一类接口。
+int  LuaCallRva(uint32_t rva, const char* a1, const char* a2, const char* a3,
+                char* out, size_t outsz);
+int  LuaSelfTest(const char* text, char* out, size_t outsz);
+void ProtocolDiag(char* out, size_t outsz);
 const char* ProtocolLastError();
 
 } // namespace ra3

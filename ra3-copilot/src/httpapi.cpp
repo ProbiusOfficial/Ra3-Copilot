@@ -179,6 +179,10 @@ uintptr_t CallRva(uint32_t rva, int cc, uint32_t a0, uint32_t a1, uint32_t a2, u
 // Coord3D 传参 scratch（DLL 自有内存，不经游戏堆；渲染线程/HTTP 线程写都安全）
 static float g_coordScratch[8];   // 两组：[0..2] 主 [4..6] 备
 
+// 脚本动作字符串参数：[0]=动作名 [1..3]=参数。命令槽只带 int，串走这里；
+// HTTP 线程写 → 渲染线程读，PostAndWaitN 串行化，无并发。
+static char g_scriptArgs[4][96];
+
 // 在渲染线程里执行（由 HttpApiPump 调用）
 void ExecCmd(CmdSlot& c) {
     switch (c.fn) {
@@ -279,7 +283,7 @@ void ExecCmd(CmdSlot& c) {
             CmdReply("aicall fn=%08X this=%08X ret=%08X", (unsigned)c.a1, (unsigned)c.a2, (unsigned)r);
         break;
     }
-    case 22: {  // protocol: a1=act(0=points 1=science 2=grant 3=all 4=fast 5=disable 9=read) a2=n a3=idx a4=on
+    case 22: {  // protocol: a1=act(0=points 1=science 2=授予技能 3=全协议 4=快速 5=禁用 20=快照 21=差分)
         const int act = (int)c.a1;
         if (act == 0) {
             const int n = (int)c.a2;
@@ -288,44 +292,123 @@ void ExecCmd(CmdSlot& c) {
         } else if (act == 1) {
             const bool ok = ProtocolSetScience(399.0f);
             CmdReply("protocol science <- 399.0f : %s", ok ? "ok" : "fail");
-        } else if (act == 2) {
-            char out[160] = { 0 };
-            const int r = ProtocolGrant((int)c.a3, "<This Player>", out, sizeof(out));
-            CmdReply("protocol grant idx=%d r=%d %s", (int)c.a3, r, out);
-        } else if (act >= 3 && act <= 5) {
+        } else if (act == 2) {          // 授予技能（索引见 /protocol?act=read 的 count）
+            char out[224] = { 0 };
+            const int r = ProtoGrantPower((int)c.a3, out, sizeof(out));
+            CmdReply("protocol grant %d %s", r, out);
+        } else if (act == 3 + 0 || act == 3 || act == 4 || act == 5) {
             const int which = act - 3;
             const bool on = c.a4 != 0;
             const bool ok = ProtocolSetToggle(which, on);
             CmdReply("protocol toggle %d=%d : %s", which, on ? 1 : 0, ok ? "ok" : "fail");
-        } else if (act == 8) {
-            char out[192] = { 0 };
-            const int r = ProtocolGrantLocal((int)c.a3, out, sizeof(out));
-            CmdReply("protocol grantlocal idx=%d r=%d %s", (int)c.a3, r, out);
-        } else if (act == 14) {
-            char out[192] = { 0 };
-            const int r = ProtocolGrantNode((uint32_t)c.a3, out, sizeof(out));
-            CmdReply("protocol node hash=%08X r=%d %s", (uint32_t)c.a3, r, out);
-        } else if (act == 17) {
-            char out[192] = { 0 };
-            const int r = ProtocolNativeGrant((uint32_t)c.a3, out, sizeof(out));
-            CmdReply("protocol ngrant hash=%08X r=%d %s", (uint32_t)c.a3, r, out);
-        } else if (act == 15) {
-            const int r = ProtocolTraceExecInstall();
-            CmdReply("protocol exectrace install=%d %s", r, ProtocolLastError());
-        } else if (act == 16) {
-            char out[192] = { 0 };
-            ProtocolTraceExecRead(out, sizeof(out));
-            CmdReply("protocol exectrace %s", out);
+        } else if (act == 8) {          // 解锁科技
+            char out[224] = { 0 };
+            const int r = ProtoGrantTech((int)c.a3, out, sizeof(out));
+            CmdReply("protocol tech %d %s", r, out);
+        } else if (act == 20) {
+            const bool ok = PlayerFieldsSnap();
+            CmdReply("protocol snap : %s", ok ? "ok（现在去游戏里买一个协议，再调 act=21）" : ProtocolLastError());
+        } else if (act == 30) {          // unlock: 写协议格解锁索引（n=-1 视为「解锁到最后一格」）
+            int n = (int)c.a2;
+            const int total = ProtocolSlotTotal();
+            if (n < 0 && total > 0) n = total - 1;
+            const bool ok = ProtocolSetUnlockIndex(n);
+            CmdReply("protocol unlock idx=%d/%d : %s", n, total, ok ? "ok" : ProtocolLastError());
+        } else if (act == 31) {          // slot: 读解锁进度
+            CmdReply("protocol unlock=%d/%d progress=%.1f points=%d",
+                     ProtocolUnlockIndex(), ProtocolSlotTotal(), ProtocolProgress(), ProtocolPoints());
+        } else if (act == 32) {          // ui: 协议格刷新遥测（按 esi 去重，取最新一轮）
+            using namespace ra3;
+            char out[3900] = { 0 };
+            int w = 0;
+            int k = _snprintf_s(out, sizeof(out), _TRUNCATE,
+                                "pa=%u pc=%u\n", g_paCount, g_pcCount);
+            if (k > 0) w = k;
+            for (int i = (int)g_paCount - 1; i >= 0 && w < 3600; --i) {
+                const uint32_t* r = &g_paBuf[i * 4];
+                bool dup = false;
+                for (int j = i + 1; j < (int)g_paCount; ++j)
+                    if (g_paBuf[j * 4] == r[0]) { dup = true; break; }
+                if (dup) continue;
+                k = _snprintf_s(out + w, sizeof(out) - w, _TRUNCATE,
+                                "slot esi=%08X obj=%08X raw=%u forced=%u\n",
+                                r[0], r[1], r[2], r[3]);
+                if (k > 0) w += k; else break;
+            }
+            CmdReply("%s", out);
+        } else if (act == 33) {          // ui: 协议格点击遥测
+            using namespace ra3;
+            char out[3900] = { 0 };
+            int w = 0;
+            int k = _snprintf_s(out, sizeof(out), _TRUNCATE, "tap=%u\n", g_pcCount);
+            if (k > 0) w = k;
+            for (int i = 0; i < (int)g_pcCount && w < 3700; ++i) {
+                const uint32_t* r = &g_pcBuf[i * 6];
+                const unsigned begin = r[4], end = r[5];
+                const int n = (begin && end && end >= begin) ? (int)((end - begin) / 4) : -1;
+                k = _snprintf_s(out + w, sizeof(out) - w, _TRUNCATE,
+                                "tap esi=%08X par=%08X obj=%08X own=%u list=%08X..%08X n=%d\n",
+                                r[0], r[1], r[2], r[3], begin, end, n);
+                if (k > 0) w += k; else break;
+            }
+            CmdReply("%s", out);
+        } else if (act == 41) {          // owned: 读已购协议 id 列表
+            const int n = ProtocolOwnedCount();
+            char out[1200] = { 0 };
+            int w = 0;
+            int k = _snprintf_s(out, sizeof(out), _TRUNCATE, "owned=%d:", n);
+            if (k > 0) w = k;
+            for (int i = 0; i < n && w < 1100; ++i) {
+                uint32_t id = 0;
+                if (!ProtocolOwnedAt(i, &id)) break;
+                k = _snprintf_s(out + w, sizeof(out) - w, _TRUNCATE, " %08X", id);
+                if (k > 0) w += k; else break;
+            }
+            CmdReply("%s", out);
+        } else if (act == 40) {          // claim: 直接把 protocol id 塞进已购列表
+            const bool ok = ProtocolClaimId((uint32_t)c.a2);
+            CmdReply("protocol claim id=%08X : %s", (unsigned)c.a2, ok ? "ok" : ProtocolLastError());
+        } else if (act == 34) {          // ui: 清零遥测
+            using namespace ra3;
+            g_paCount = 0;
+            g_pcCount = 0;
+            CmdReply("protoui reset");
+        } else if (act == 26) {          // pscan mark: 扫描「值==n」的 u32
+            uint32_t cnt = 0;
+            PScanMark((uint32_t)c.a2, &cnt);
+            CmdReply("pscan mark val=%u 命中=%u（花掉它之后用 act=27&n=新值）", (unsigned)c.a2, cnt);
+        } else if (act == 27) {          // pscan filter: 在命中里筛「现在==n」
+            char o6[300] = { 0 };
+            uint32_t cnt = 0;
+            PScanFilter((uint32_t)c.a2, &cnt, o6, sizeof(o6));
+            CmdReply("pscan filter val=%u 剩余=%u %s", (unsigned)c.a2, cnt, o6);
+        } else if (act == 24) {
+            const bool ok = PlayerDeepSnap();
+            CmdReply("protocol deepsnap : %s", ok ? "ok（现在买一个协议，再调 act=25）" : ProtocolLastError());
+        } else if (act == 25) {
+            char out[900] = { 0 };
+            PlayerDeepDiff(out, sizeof(out));
+            CmdReply("protocol deepdiff %s", out);
+        } else if (act == 22) {
+            const bool ok = PlayerFieldsCalibrate();
+            CmdReply("protocol calib : %s", ok ? "ok（已排除漂移字段，现在去买一个协议）" : ProtocolLastError());
+        } else if (act == 21) {
+            char out[512] = { 0 };
+            PlayerFieldsDiff(out, sizeof(out));
+            CmdReply("protocol diff %s", out);
         } else {
-            CmdReply("protocol points=%d science=%.1f all=%d fast=%d disable=%d count=%d scObj=%08X scVal=%d",
+            char dg[160] = { 0 };
+            ProtocolDiag(dg, sizeof(dg));
+            CmdReply("protocol points=%d science=%.1f all=%d fast=%d disable=%d powers=%d | %s",
                      ProtocolPoints(), ProtocolScience(),
                      ProtocolGetToggle(0) ? 1 : 0,
                      ProtocolGetToggle(1) ? 1 : 0,
                      ProtocolGetToggle(2) ? 1 : 0,
-                     ProtocolCount(), g_scPointObj, (int)g_scPointVal);
+                     ProtocolCount(), dg);
         }
         break;
     }
+
     case 21: {  // order: a1=unit(Thing) a2=act(0=attack 1=move 2=idle) a3=target(Thing) a4..a6=xyz(float位)
         const uintptr_t unit = (uintptr_t)(uint32_t)c.a1;
         const int act = c.a2;
@@ -364,6 +447,64 @@ void ExecCmd(CmdSlot& c) {
                      ActUnitStatus(c.a1, c.a2, c.a3), SummonLastError());
         break;
     }
+    case 25: {  // burst: a1=hash a2=delayMs(0=同帧) —— 创建箱子并引爆
+        const int r = ActBurstCrate((uint32_t)c.a1, (int)c.a2);
+        CmdReply("burst=%d obj=%08X %s", r, (unsigned)BurstLastObj(), BurstLastError());
+        break;
+    }
+    case 31: {  // aidx: 脚本动作表按名字查 id（g_scriptArgs[0]=动作名）
+        char o7[256] = { 0 };
+        const int ia = ActionIndexByName(g_scriptArgs[0], o7, sizeof(o7));
+        CmdReply("aidx %d %s", ia, o7);
+        break;
+    }
+    case 30: {  // grant: 按名字授予 SpecialPower（g_scriptArgs[0]=技能名 [1]=玩家过滤器）
+        char o6[512] = { 0 };
+        const int rg = ProtoGrantByName(g_scriptArgs[0],
+                                        g_scriptArgs[1][0] ? g_scriptArgs[1] : "<This Player>",
+                                        o6, sizeof(o6));
+        CmdReply("grant r=%d %s", rg, o6);
+        break;
+    }
+    case 27: {  // action: 引擎脚本动作，动作名与参数取自 g_scriptArgs；a4=mode
+        char o2[512] = { 0 };
+        const int r = LuaExecuteAction(g_scriptArgs[0],
+                                       g_scriptArgs[1][0] ? g_scriptArgs[1] : nullptr,
+                                       g_scriptArgs[2][0] ? g_scriptArgs[2] : nullptr,
+                                       g_scriptArgs[3][0] ? g_scriptArgs[3] : nullptr,
+                                       o2, sizeof(o2), (int)c.a4);
+        CmdReply("%s", o2);
+        (void)r;
+        break;
+    }
+    case 26: {  // buildable: a1..a3=xyz(float) a4=模板哈希 a5=angle(float) a6=options
+        const float bx = *(float*)&c.a1, by = *(float*)&c.a2, bz = *(float*)&c.a3;
+        const int r = BuildableAt(bx, by, bz, (uint32_t)c.a4, *(float*)&c.a5, (uint32_t)c.a6);
+        if (r < 0)
+            CmdReply("buildable (%.1f,%.1f,%.1f) hash=%08X -> 失败 %s",
+                     bx, by, bz, (unsigned)(uint32_t)c.a4, BuildableLastError());
+        else
+            CmdReply("buildable (%.1f,%.1f,%.1f) hash=%08X angle=%.1f opts=%04X -> code=%d%s",
+                     bx, by, bz, (unsigned)(uint32_t)c.a4, *(float*)&c.a5,
+                     (unsigned)(uint32_t)c.a6, r, r == 0 ? " 可建" : " 不可建");
+        break;
+    }
+    case 29: {  // luatest: Lua 栈自检
+        char o4[512] = { 0 };
+        LuaSelfTest(g_scriptArgs[0], o4, sizeof(o4));
+        CmdReply("%s", o4);
+        break;
+    }
+    case 28: {  // lua: a1=RVA，参数取自 g_scriptArgs[0..2]（只支持名字串）
+        char o3[512] = { 0 };
+        LuaCallRva((uint32_t)c.a1,
+                   g_scriptArgs[0][0] ? g_scriptArgs[0] : nullptr,
+                   g_scriptArgs[1][0] ? g_scriptArgs[1] : nullptr,
+                   g_scriptArgs[2][0] ? g_scriptArgs[2] : nullptr,
+                   o3, sizeof(o3));
+        CmdReply("%s", o3);
+        break;
+    }
     default:
         CmdReply("unknown fn=%d", c.fn);
         break;
@@ -390,6 +531,24 @@ int GetParamInt(const char* q, const char* key, int def) {
     char b[32];
     if (!GetParam(q, key, b, sizeof(b))) return def;
     return (int)strtoul(b, nullptr, 0);   // atoi 不认 0x 前缀（左下角惨案真根因）；base=0 同时支持十/十六进制
+}
+
+// %xx 与 + 解码（脚本动作参数里常带 "<This Player>" 这类尖括号）
+void URLDecode(const char* in, char* out, int n) {
+    int i = 0, o = 0;
+    while (in && in[i] && o < n - 1) {
+        if (in[i] == '%' && in[i + 1] && in[i + 2]) {
+            char h[3] = { in[i + 1], in[i + 2], 0 };
+            out[o++] = (char)strtoul(h, nullptr, 16);
+            i += 3;
+        } else if (in[i] == '+') {
+            out[o++] = ' ';
+            ++i;
+        } else {
+            out[o++] = in[i++];
+        }
+    }
+    out[o] = 0;
 }
 
 // /status?kind= 名字 → US_* 枚举；不认识返回 -1（调用方回退按数字解析）
@@ -521,7 +680,13 @@ void Handle(SOCKET c, char* req) {
             "                                按哈希召唤（owner 见 /snapshot）。落点：place 指定来源，\n"
             "                                或给 x/y/z 指定坐标；都不给则按「落点来源」设置。回执带实际落点\n"
             "POST /crate?idx=N&count=N      空投箱\n"
+            "POST /burst?hash=0x..[&x=&y=&z=|&place=view|selection|cursor][&delay=ms]\n"
+            "                                箱子即爆：创建后下一帧自动击杀（效果=死亡开火）\n"
             "POST /toggle?f=N&on=0|1        功能开关（索引见 features.h）\n"
+            "POST /action?name=&a1=&a2=&a3= 执行引擎脚本动作（ExecuteAction），参数只支持名字串\n"
+            "                               例：/action?name=PLAYER_GRANT_SPECIAL_POWER&a1=SpecialPower_X&a2=%3CThis%20Player%3E\n"
+            "POST /grant?power=SpecialPower_X[&who=<This Player>|Player_2|<All Players>]  按内部名授予协议技能（可跨阵营/指向敌方）\n"
+            "POST /lua?rva=0x..&a1=&a2=&a3=  按 RVA 直调引擎 Lua C 函数（只支持名字串参数）\n"
             "POST /freebuild?on=0|1         免费建造\n"
             "POST /poke?addr=0x..&type=u32&val=0x..   写内存（RE 用）\n"
             "POST /call?rva=0x..&cc=fc|cdecl&a0=..&a1=..&a2=..  按 RVA 调函数\n"
@@ -529,6 +694,7 @@ void Handle(SOCKET c, char* req) {
             "POST /order?unit=0x..&act=attack&target=0x..   指挥单位：攻击目标（Thing 地址）\n"
             "            |act=move&x=&y=&z=                  指挥单位：走向世界坐标\n"
             "GET  /scratch?x=&y=&z=[&idx=0|1]  Coord3D 传参缓冲，回地址\n"
+            "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
             "GET  /postproc?on=0|1          创建后处理链开关（让召唤物登记进玩家体系）\n"
             "POST /postproc?obj=0x..[&team=0x..&a=1&b=1]  对单个对象手动跑后处理（验证用）\n"
             "  ↳ 变更类请求可加 &ai=1：仅作遥测计数；接口恒开放（无闸门）\n"
@@ -841,6 +1007,31 @@ void Handle(SOCKET c, char* req) {
             SetSummonPosOverride(true, px, py, pz);
         }
     }
+    else if (strcmp(path, "/burst") == 0) {
+        // 箱子即爆：一次请求完成「按哈希创建箱子 → 下一帧校验 → 击杀」。
+        //   hash  = 箱子模板哈希（必需）
+        //   delay = 额外等待的毫秒数，缺省 0 = 创建后下一帧就引爆（对象初始化所需的最短间隔）
+        //   落点与 /summon 共用：place=view|selection|cursor，或给 x/y/z
+        fn = 25;
+        char hb[24] = { 0 };
+        GetParam(query, "hash", hb, sizeof(hb));
+        args[0] = (int)strtoul(hb, nullptr, 0);
+        args[1] = GetParamInt(query, "delay", 0);
+        na = 2;
+        char plb[16] = { 0 };
+        if (GetParam(query, "place", plb, sizeof(plb))) {
+            const int m = (strcmp(plb, "view") == 0) ? 0
+                        : (strcmp(plb, "selection") == 0 || strcmp(plb, "selected") == 0) ? 1
+                        : (strcmp(plb, "cursor") == 0 || strcmp(plb, "mouse") == 0) ? 2 : -1;
+            if (m >= 0) SetSummonPlace(m);
+        }
+        char bx[32] = { 0 }, by[32] = { 0 }, bz[32] = { 0 };
+        if (GetParam(query, "x", bx, sizeof(bx)) && GetParam(query, "y", by, sizeof(by))) {
+            float px = strtof(bx, nullptr), py = strtof(by, nullptr), pz = 0.0f;
+            if (GetParam(query, "z", bz, sizeof(bz))) pz = strtof(bz, nullptr);
+            SetSummonPosOverride(true, px, py, pz);
+        }
+    }
     else if (strcmp(path, "/crate") == 0) {
         fn = 13; args[0] = GetParamInt(query, "idx", 0); args[1] = GetParamInt(query, "count", 1); na = 2;
     }
@@ -928,21 +1119,99 @@ void Handle(SOCKET c, char* req) {
         else if (strcmp(ab, "all") == 0) act = 3;
         else if (strcmp(ab, "fast") == 0) act = 4;
         else if (strcmp(ab, "disable") == 0) act = 5;
-        else if (strcmp(ab, "local") == 0) act = 8;
-        else if (strcmp(ab, "node") == 0) act = 14;
-        else if (strcmp(ab, "exectrace") == 0) act = 15;
-        else if (strcmp(ab, "execinfo") == 0) act = 16;
-        else if (strcmp(ab, "ngrant") == 0) act = 17;
+        else if (strcmp(ab, "tech") == 0) act = 8;
+        else if (strcmp(ab, "snap") == 0) act = 20;
+        else if (strcmp(ab, "calib") == 0) act = 22;
+        else if (strcmp(ab, "pscan") == 0) act = 26;
+        else if (strcmp(ab, "pfilter") == 0) act = 27;
+        else if (strcmp(ab, "unlock") == 0) act = 30;
+        else if (strcmp(ab, "slot") == 0) act = 31;
+        else if (strcmp(ab, "ui") == 0) act = 32;
+        else if (strcmp(ab, "tap") == 0) act = 33;
+        else if (strcmp(ab, "uireset") == 0) act = 34;
+        else if (strcmp(ab, "claim") == 0) act = 40;
+        else if (strcmp(ab, "owned") == 0) act = 41;
+        else if (strcmp(ab, "deepsnap") == 0) act = 24;
+        else if (strcmp(ab, "deepdiff") == 0) act = 25;
+        else if (strcmp(ab, "diff") == 0) act = 21;
         args[0] = act;
         args[1] = GetParamInt(query, "n", 0);
         args[2] = GetParamInt(query, "idx", 0);
         args[3] = GetParamInt(query, "on", 1);
-        if (act == 14 || act == 17) {
-            char hb[32] = { 0 };
-            if (GetParam(query, "hash", hb, sizeof(hb)))
-                args[2] = (int)strtoul(hb, nullptr, 0);
-        }
         na = 4;
+    } else if (strcmp(path, "/action") == 0) {
+        // 引擎脚本动作：name=动作名，a1..a3=名字串参数（URL 编码）
+        // 例：/action?name=PLAYER_GRANT_SPECIAL_POWER&a1=SpecialPower_X&a2=%3CThis%20Player%3E
+        fn = 27;
+        char tmp[96];
+        const char* keys[4] = { "name", "a1", "a2", "a3" };
+        for (int i = 0; i < 4; ++i) {
+            g_scriptArgs[i][0] = 0;
+            if (GetParam(query, keys[i], tmp, sizeof(tmp)))
+                URLDecode(tmp, g_scriptArgs[i], sizeof(g_scriptArgs[i]));
+        }
+        // mode=1：动作名按引擎串(tag4)，参数按普通 Lua 串(tag3)
+        args[4] = GetParamInt(query, "mode", 0);
+        if (!g_scriptArgs[0][0]) {
+            const char* msg = "action: 缺 name";
+            HttpSend(c, msg, (int)strlen(msg));
+            return;
+        }
+        na = 0;
+    } else if (strcmp(path, "/luatest") == 0) {
+        fn = 29;
+        na = 1;
+    } else if (strcmp(path, "/lua") == 0) {
+        // 直调引擎 Lua C 函数：rva=0x..&a1=&a2=&a3=（参数只支持名字串）
+        fn = 28;
+        char tmp2[96];
+        const char* keys2[3] = { "a1", "a2", "a3" };
+        for (int i = 0; i < 3; ++i) {
+            g_scriptArgs[i][0] = 0;
+            if (GetParam(query, keys2[i], tmp2, sizeof(tmp2)))
+                URLDecode(tmp2, g_scriptArgs[i], sizeof(g_scriptArgs[i]));
+        }
+        args[0] = GetParamInt(query, "rva", 0);
+        na = 1;
+    } else if (strcmp(path, "/buildable") == 0) {
+        // 建筑落点可建造性：x=&y=&z=&hash=&angle=&opts=
+        fn = 26;
+        char vb[32] = { 0 }, hb2[32] = { 0 };
+        float x = 0, y = 0, z = 0, ang = 0;
+        if (GetParam(query, "x", vb, sizeof(vb))) x = strtof(vb, nullptr);
+        if (GetParam(query, "y", vb, sizeof(vb))) y = strtof(vb, nullptr);
+        if (GetParam(query, "z", vb, sizeof(vb))) z = strtof(vb, nullptr);
+        if (GetParam(query, "angle", vb, sizeof(vb))) ang = strtof(vb, nullptr);
+        uint32_t hash = 0, opts = 0x1A20;
+        GetParam(query, "hash", hb2, sizeof(hb2));
+        hash = (uint32_t)strtoul(hb2, nullptr, 0);
+        if (GetParam(query, "opts", vb, sizeof(vb))) opts = (uint32_t)strtoul(vb, nullptr, 0);
+        args[0] = (int)*(uint32_t*)&x;
+        args[1] = (int)*(uint32_t*)&y;
+        args[2] = (int)*(uint32_t*)&z;
+        args[3] = (int)hash;
+        args[4] = (int)*(uint32_t*)&ang;
+        args[5] = (int)opts;
+        na = 6;
+    } else if (strcmp(path, "/aidx") == 0) {
+        // 脚本动作表按名字查 id：?name=PLAYER_GRANT_SPECIAL_POWER
+        fn = 31;
+        char tmp5[96];
+        g_scriptArgs[0][0] = 0;
+        if (GetParam(query, "name", tmp5, sizeof(tmp5)))
+            URLDecode(tmp5, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
+        na = 1;
+    } else if (strcmp(path, "/grant") == 0) {
+        // 按 SpecialPower 内部名授予协议技能：power=SpecialPower_X[&who=<This Player>]
+        fn = 30;
+        char tmp4[128];
+        g_scriptArgs[0][0] = 0;
+        g_scriptArgs[1][0] = 0;
+        if (GetParam(query, "power", tmp4, sizeof(tmp4)))
+            URLDecode(tmp4, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
+        if (GetParam(query, "who", tmp4, sizeof(tmp4)))
+            URLDecode(tmp4, g_scriptArgs[1], sizeof(g_scriptArgs[1]));
+        na = 1;
     } else if (strcmp(path, "/scratch") == 0) {
         // Coord3D 传参缓冲：写 DLL 自有内存，回地址。仅 RE 实验用。
         char vb[32] = { 0 };

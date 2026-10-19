@@ -237,14 +237,35 @@ int wmain(int argc, wchar_t** argv) {
 
     // 路径写进目标进程
     const SIZE_T pathBytes = (wcslen(dllPath) + 1) * sizeof(wchar_t);
-    LPVOID remote = VirtualAllocEx(h, nullptr, pathBytes, MEM_COMMIT, PAGE_READWRITE);
+    // 未指定基址的分配在长对局里会因地址空间碎片化而 err=8（ERROR_NOT_ENOUGH_MEMORY），
+    // 这里改成逐个试常用空闲带；游戏是 LAA，能用到 4GB。
+    static const ULONG_PTR kHints[] = {
+        0, 0x10000000, 0x20000000, 0x08000000, 0x30000000,
+        0x40000000, 0x50000000, 0x60000000, 0x70000000, 0x04000000,
+        // LAA：2GB 以上也试试（低 2GB 常被长对局占满/打碎）
+        0x80000000, 0x90000000, 0xA0000000, 0xB0000000,
+        0xC0000000, 0xD0000000, 0xE0000000, 0xF0000000
+    };
+    LPVOID remote = nullptr;
+    for (ULONG_PTR hint : kHints) {
+        remote = VirtualAllocEx(h, hint ? reinterpret_cast<LPVOID>(hint) : nullptr,
+                                pathBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        if (remote) {
+            if (hint) wprintf(L"[*] 地址空间碎片：改在 0x%08IX 分配\n", hint);
+            break;
+        }
+    }
     if (!remote) {
-        wprintf(L"[x] VirtualAllocEx 失败 err=%lu\n", GetLastError());
+        const DWORD ve = GetLastError();
+        wprintf(L"[x] VirtualAllocEx failed err=%lu\n", ve);
+        if (ve == 8)
+            wprintf(L"    err=8 = no address space. 32-bit target is near its 2GB limit;\n"
+                    L"    restart the game (a long skirmish with the mod can fill it).\n");
         CloseHandle(h);
         return 1;
     }
     if (!WriteProcessMemory(h, remote, dllPath, pathBytes, nullptr)) {
-        wprintf(L"[x] WriteProcessMemory 失败 err=%lu\n", GetLastError());
+        wprintf(L"[x] WriteProcessMemory failed err=%lu\n", GetLastError());
         VirtualFreeEx(h, remote, 0, MEM_RELEASE);
         CloseHandle(h);
         return 1;
@@ -256,7 +277,7 @@ int wmain(int argc, wchar_t** argv) {
         GetProcAddress(k32, "LoadLibraryW"));
     HANDLE t = CreateRemoteThread(h, nullptr, 0, pfnLoad, remote, 0, nullptr);
     if (!t) {
-        wprintf(L"[x] CreateRemoteThread 失败 err=%lu\n", GetLastError());
+        wprintf(L"[x] CreateRemoteThread failed err=%lu\n", GetLastError());
         VirtualFreeEx(h, remote, 0, MEM_RELEASE);
         CloseHandle(h);
         return 1;
@@ -268,6 +289,11 @@ int wmain(int argc, wchar_t** argv) {
     VirtualFreeEx(h, remote, 0, MEM_RELEASE);
     CloseHandle(h);
 
+    // 判据以模块表为准：LAA 进程里 DLL 可能落在 2GB 以上，句柄高位不等于失败
+    if (!WaitModule(pid, base, true, 3000)) {
+        wprintf(L"[x] DLL 未出现在模块表，线程退出码=%08X\n", hmod);
+        return 1;
+    }
     if (hmod) {
         wprintf(L"[+] 注入成功! 模块句柄=%p\n", (void*)hmod);
 

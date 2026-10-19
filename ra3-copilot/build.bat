@@ -67,8 +67,8 @@ if errorlevel 1 (
 rem copy out of build_out (root copy may be briefly locked by preview/AV handles)
 copy /Y build_out\ra3copilot.dll ra3copilot.dll >nul 2>&1
 if errorlevel 1 (
-    echo [!] root ra3copilot.dll is locked by preview/AV.
-    echo     Fresh build is at build_out\ra3copilot.dll - copy it manually.
+    echo *** DLL_STALE *** root ra3copilot.dll NOT updated - locked by running game or AV.
+    echo     Run injector.exe --unload first, then copy build_out\ra3copilot.dll manually.
 )
 copy /Y build_out\ra3copilot.map ra3copilot.map >nul 2>&1
 
@@ -89,6 +89,8 @@ if errorlevel 1 (
     exit /b 1
 )
 copy /Y build_out\Ra3Copilot.exe Ra3Copilot.exe >nul 2>&1
+rem injector.exe / hot_reload.bat 读的是根目录这份 DLL；不拷就会一直注入旧版
+copy /Y build_out\ra3copilot.dll ra3copilot.dll >nul 2>&1
 
 echo [5/5] Building injector.exe
 cl /nologo /O2 /MT /EHsc /W3 /utf-8 /Fe:injector.exe src\injector.cpp ^

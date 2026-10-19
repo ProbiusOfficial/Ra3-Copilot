@@ -30,6 +30,10 @@ EXTERNDEF g_moneyValue   : DWORD    ; 金额
 EXTERNDEF g_flags        : BYTE     ; 功能开关数组（索引对齐 CE 的 FLAGS 偏移）
 EXTERNDEF g_telemEnter   : DWORD    ; 遥测：money cave 执行次数
 EXTERNDEF g_telemApplied : DWORD    ; 遥测：加钱生效次数
+EXTERNDEF g_paCount      : DWORD    ; 遥测：协议格刷新记录条数
+EXTERNDEF g_paBuf        : DWORD    ; 遥测：协议格刷新记录 {esi, obj, 原始标志, 强制标志} × 64
+EXTERNDEF g_pcCount      : DWORD    ; 遥测：协议格点击记录条数
+EXTERNDEF g_pcBuf        : DWORD    ; 遥测：协议格点击记录 {esi, parent, obj, owned, listBegin, listEnd} × 64
 EXTERNDEF g_zoomHits     : DWORD    ; 遥测：Zoom cave 进入次数
 EXTERNDEF g_zoomCam34    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x34] 相机系数
 EXTERNDEF g_zoomPitch    : DWORD    ; 遥测：ZoomPostStub 采样的 [+0x74] 俯仰角
@@ -46,6 +50,8 @@ EXTERNDEF g_retSCPoint      : DWORD
 EXTERNDEF g_scPointObj      : DWORD
 EXTERNDEF g_scPointVal      : DWORD
 EXTERNDEF g_retHaveAllSC    : DWORD
+EXTERNDEF g_retProtoAll     : DWORD
+EXTERNDEF g_retProtoClick   : DWORD
 EXTERNDEF g_retFastBuild1   : DWORD
 EXTERNDEF g_retFastBuild2   : DWORD
 EXTERNDEF g_retFastBuild3   : DWORD
@@ -568,4 +574,81 @@ ds_skip:
     jmp   dword ptr g_retDisableAllSP
 DisableAllSPCaveStub ENDP
 
+ProtoAllCaveStub PROC
+    pushad
+    pushfd
+    ; ---- 遥测：本格的 esi / 协议对象 / 游戏原始标志 / 强制后标志 ----
+    movzx eax, al                        ; 游戏算出的原始标志
+    mov   edx, dword ptr [g_paCount]
+    cmp   edx, 63
+    ja    pa_norec
+    imul  ecx, edx, 16
+    lea   ebx, dword ptr [g_paBuf]
+    add   ecx, ebx
+    mov   dword ptr [ecx], esi
+    mov   ebx, dword ptr [esi+14h]
+    mov   dword ptr [ecx+4], ebx
+    mov   dword ptr [ecx+8], eax
+    mov   ebx, eax
+    cmp   byte ptr [g_flags+18h], 0
+    je    pa_rec_done
+    xor   ebx, ebx
+pa_rec_done:
+    mov   dword ptr [ecx+0Ch], ebx
+    inc   edx
+    mov   dword ptr [g_paCount], edx
+pa_norec:
+    popfd
+    popad
+    cmp   byte ptr [g_flags+18h], 0
+    je    pa_replay
+    xor   al, al                        ; 强制 al=0：未锁定 / 可购买
+pa_replay:
+    mov   byte ptr [esi+18h], al        ; 88 46 18  原指令重放
+    mov   edx, dword ptr [ecx]          ; 8B 11     原指令重放
+    jmp   dword ptr g_retProtoAll
+ProtoAllCaveStub ENDP
+
+; ---------------------------------------------------------------------------
+; ProtoClickCaveStub <- base+0x69AB03  AOB 8B461485C07439 (7B, 实际覆盖 5B)
+;   协议格「点击处理」入口。此处 esi = 该格控件（0x69AB01 已 mov esi,ecx）。
+;   原指令: mov eax,[esi+14h] / test eax,eax
+;   记录: esi / 父面板 / 协议对象 / 已拥有标志 / 父面板+0x74..+0x78 的 id 列表
+ProtoClickCaveStub PROC
+    pushad
+    pushfd
+    mov   edx, dword ptr [g_pcCount]
+    cmp   edx, 63
+    ja    pc_norec
+    imul  eax, edx, 24                   ; 6 个 DWORD / 条
+    lea   ecx, dword ptr [g_pcBuf]
+    add   eax, ecx
+    mov   dword ptr [eax], esi
+    mov   ecx, dword ptr [esi+4]         ; 父面板
+    mov   dword ptr [eax+4], ecx
+    test  ecx, ecx
+    je    pc_nopar
+    mov   ebx, dword ptr [ecx+74h]
+    mov   dword ptr [eax+16], ebx
+    mov   ebx, dword ptr [ecx+78h]
+    mov   dword ptr [eax+20], ebx
+pc_nopar:
+    mov   ecx, dword ptr [esi+14h]
+    mov   dword ptr [eax+8], ecx
+    movzx ecx, byte ptr [esi+18h]
+    mov   dword ptr [eax+12], ecx
+    inc   edx
+    mov   dword ptr [g_pcCount], edx
+pc_norec:
+    popfd
+    popad
+    mov   eax, dword ptr [esi+14h]       ; 8B 46 14  原指令重放
+    test  eax, eax                       ; 85 C0     原指令重放
+    jmp   dword ptr g_retProtoClick
+ProtoClickCaveStub ENDP
 END
+
+; ===========================================================================
+; ProtoAllCaveStub <- base+0x69A9B3  AOB 8846188B118B (6B)
+;   直接把控件状态字节 [esi+0x18] 写成 0 = 未锁定。
+;   原函数 ret 4（一个栈参数），ecx = SCPoint。

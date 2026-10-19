@@ -364,7 +364,12 @@ _BURST_EFFECTS = {
 
 
 def t_burst_crate(a):
-    """空投箱子 → 延迟 → 对该箱子调引擎击杀（(6,1,0) = 拾取链原生参数）→ 死亡开火触发效果。"""
+    """空投箱子并引爆。
+
+    优先走 DLL 原生 /burst：创建后下一帧由渲染线程直接击杀，全程一条请求，
+    箱子最多被画一帧（MCP 层「/summon + /obj + /aicall」至少三帧，肉眼是闪一下）。
+    老 DLL 不认识 /burst 时退回旧路径（/summon → 校验 → /aicall）。
+    """
     kind = a.get("effect") or a.get("kind") or a.get("crate") or "freeze"
     key = str(kind).strip()
     target = _BURST_EFFECTS.get(key.lower(), key)
@@ -378,12 +383,34 @@ def t_burst_crate(a):
     if a.get("x") is not None and a.get("y") is not None:
         z = 0 if a.get("z") is None else a.get("z")
         pos = "&x=%s&y=%s&z=%s" % (a["x"], a["y"], z)
+
+    qs = "hash=%s%s%s" % (u["h"], _place_qs(a), pos)
+    if delay > 0:
+        qs += "&delay=%d" % int(delay * 1000)
+    native = None
+    try:
+        native = api_post("/burst?" + qs)
+    except RuntimeError as e:
+        if "404" not in str(e):          # 老 DLL 没有 /burst（404）→ 走旧路径；其它错误如实报
+            return "引爆失败（%s）：%s" % (u["n"], str(e).strip()[:180])
+    if native is not None:
+        m = re.search(r"burst=(\d+)\s+obj=([0-9A-Fa-f]+)\s*(.*)", native)
+        if not m:
+            return "引爆返回异常：%s" % native.strip()[:180]
+        ok, obj, why = m.group(1), m.group(2), (m.group(3) or "").strip()
+        if ok != "1":
+            return "引爆失败（%s）：%s" % (u["n"], why or "未知原因")
+        return ("已在落点释放「%s」：箱子 0x%s 由渲染线程在下一帧引爆（效果=死亡开火）"
+                % (u["n"], obj))
+
+    # ---- 降级：老 DLL（/burst 返回 404）----
     r = api_post("/summon?hash=%s&count=1%s%s" % (u["h"], _place_qs(a), pos))
     m = re.search(r"objs=\[([0-9A-Fa-f]+)", r)
     if not m:
         return "空投失败：%s" % r.strip()[:200]
     obj = m.group(1)
-    time.sleep(delay)                      # 默认 0；实测 0~0.5s 都能正常触发（见 research/crates/06）
+    if delay > 0:
+        time.sleep(delay)
     ok, info = http("/obj?addr=0x%s" % obj)
     j = {}
     if ok:
@@ -633,7 +660,7 @@ TOOLS = [
                 "z": {"type": "number", "description": "落点世界坐标 Z（可省）"},
                 "place": {"type": "string", "enum": ["view", "selection", "cursor"],
                           "description": "不给 x/y 时的落点来源（缺省=修改器设置）"},
-                "delay": {"type": "number", "description": "空投到引爆的等待秒数（默认 0 = 落地即爆；实测 0/0.1/0.25/0.5 均正常，一般不用改）"},
+                "delay": {"type": "number", "description": "额外等待的秒数（默认 0 = 创建后下一帧就引爆；一般不用改）"},
             },
         },
     },

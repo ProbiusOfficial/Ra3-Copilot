@@ -58,6 +58,18 @@ void LastSpawnPos(float out[4], const char** src);
 // 落点查询，写一行 JSON：kind 0=视野中心 1=选中单位 2=光标 3=按设置自动挑。
 //   ⚠️ 会调用游戏换算函数 → 必须投递到渲染线程执行。返回写入长度。
 int  SpawnPointJson(char* buf, int n, int kind);
+// ---- 箱子即爆（DLL 原生）----
+// 一次命令回调内完成「按哈希创建箱子 → 下一帧校验 + KillUnit(6,1,0)」。
+//   击杀参数取拾取链原生形态，与游戏自己拾取箱子同一条链；
+//   ⚠️ 不能同帧杀：CreateUnit 当帧对象未初始化完（Thing+4 读回 0），同帧 KillUnit 不消耗箱子、
+//     也不触发死亡开火（2026-10-18 实测）——所以最少隔一帧发力。
+//   delayMs > 0 时再额外等到该毫秒数，仅供对照实验。
+// 返回 1=已创建并入队（引爆在下一帧）；0=创建/护栏失败（原因见 SummonLastError / BurstLastError）。
+int ActBurstCrate(uint32_t hash, int delayMs);
+uintptr_t BurstLastObj();          // 最近一次 /burst 创建的对象（Thing 地址），失败为 0
+const char* BurstLastError();      // 最近一次失败原因（成功时为 "ok"）
+void BurstPump();                  // 引爆队列推进（渲染线程每帧调用）
+
 bool SummonMCV();          // 召唤三阵营基地车各一辆
 int  ActCopySelected();    // 复制选中单位（按"当前对象哈希"创建 1 个）
 int  ActSummonSquad();     // 召唤预设单位 ×8（基于 CE 的 We Need Back）
@@ -109,6 +121,12 @@ void DiagReport();
 int  DiagText(char* buf, int n);
 // 对象类型哈希 -> 模板指针（供 HTTP /resolve）
 uintptr_t ResolveTemplate(uint32_t hash);
+
+// ---- 建筑落点可建造性（直调游戏判定函数）----
+// 返回 LegalBuildCode：0 = 可建；-1 = 前置检查失败（看 last error）；-99 = 调用抛异常
+int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint32_t options);
+const char* BuildableLastError();
+
 // 最近一次召唤失败的具体原因（供 UI 显示）
 const char* SummonLastError();
 

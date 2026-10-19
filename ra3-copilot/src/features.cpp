@@ -31,8 +31,15 @@ uint32_t g_zoomEntry      = 0;      // 遥测：缩放函数入口命中次数
 uint32_t g_telemEnter     = 0;
 uint32_t g_telemApplied   = 0;
 
+uint32_t g_paCount = 0;
+uint32_t g_paBuf[64 * 4] = { 0 };
+uint32_t g_pcCount = 0;
+uint32_t g_pcBuf[64 * 6] = { 0 };
+
 uint32_t g_retMoney = 0, g_retPlayerId = 0, g_retPower = 0, g_retSCPoint = 0;
 uint32_t g_scPointObj = 0, g_scPointVal = 0;
+uint32_t g_retProtoAll = 0;
+uint32_t g_retProtoClick = 0;
 uint32_t g_retHaveAllSC = 0, g_retFastBuild1 = 0, g_retFastBuild2 = 0;
 uint32_t g_retFastBuild3 = 0, g_retMap = 0, g_retUnitAmmo = 0;
 uint32_t g_retDangerLevel = 0, g_retOreMine = 0, g_retGodMode = 0;
@@ -66,6 +73,12 @@ const uint8_t AOB_GODMODE[5]    = { 0x8B, 0x50, 0x3C, 0x8B, 0xCE };
 const uint8_t AOB_ENEMYBUILD[5] = { 0x03, 0x50, 0x04, 0x3B, 0xD7 };
 const uint8_t AOB_SUPERPOWER[6] = { 0x8B, 0x98, 0x18, 0x04, 0x00, 0x00 };
 const uint8_t AOB_DISABLEALLSP[6] = { 0x8B, 0x51, 0x50, 0x3B, 0x50, 0x0C };
+// 0x43C3A0 前置条件检查：mov eax,[esp+4]/mov edx,[eax]/mov eax,[eax]/mov edx,[ecx+48h]/push esi/mov esi,[eax+4]
+// 0x686920 协议格锁定判定（覆盖所有分支，含 cond==NULL 与依赖递归）
+// 0x69A9B3 写控件状态：mov [esi+0x18],al / mov edx,[ecx]
+const uint8_t AOB_PROTOALL[6] = { 0x88,0x46,0x18, 0x8B,0x11, 0x8B };
+// 0x69AB03 协议格点击处理：mov eax,[esi+14h] / test eax,eax / je（+7 字节 AOB 仅定位，覆盖 5 字节）
+const uint8_t AOB_PROTOCLICK[7] = { 0x8B,0x46,0x14, 0x85,0xC0, 0x74,0x39 };
 // Zoom / 秒杀 3 hook（基于 CE）—— 唯一长签名
 const uint8_t AOB_ZOOM[7]     = { 0xF3,0x0F,0x11,0x46,0x44,0x74,0x39 };
 const uint8_t AOB_ZOOMPOST[11] = { 0x88,0x9E,0x54,0x26,0x00,0x00,0xE8,0xB8,0xEA,0xFF,0xFF };
@@ -101,6 +114,8 @@ const HookDef kHooks[] = {
     { "EnemyCantBuild",0x30F530,AOB_ENEMYBUILD,5,(void*)&EnemyCantBuildCaveStub,&g_retEnemyCantBuild,5 },
     { "SuperPower", 0x2EBB69, AOB_SUPERPOWER,6, (void*)&SuperPowerCaveStub,  &g_retSuperPower,  6 },
     { "DisableAllSP",0x43ECA6,AOB_DISABLEALLSP,6,(void*)&DisableAllSPCaveStub,&g_retDisableAllSP,6 },
+    { "ProtoAll",   0x69A9B3,AOB_PROTOALL,    6,(void*)&ProtoAllCaveStub,   &g_retProtoAll,   5 },
+    { "ProtoClick", 0x69AB03,AOB_PROTOCLICK,  7,(void*)&ProtoClickCaveStub, &g_retProtoClick, 5 },
     { "Zoom",       0x1EC7CD, AOB_ZOOM,    7, (void*)&ZoomCaveStub,       &g_retZoom,    5 },
     { "ZoomPost",   0x1EC82D, AOB_ZOOMPOST,11,(void*)&ZoomPostStub,       &g_retZoomPost,6 },
     { "ZoomEntry",  0x1EC730, AOB_ZOOMENTRY,14,(void*)&ZoomEntryStub,     &g_retZoomEntry,5 },

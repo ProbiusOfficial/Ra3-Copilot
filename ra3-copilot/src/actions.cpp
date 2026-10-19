@@ -1506,6 +1506,61 @@ void DiagReport() { g_diagBuf = nullptr; DiagCore(); }
 // 供 HTTP /resolve：对象类型哈希 -> 模板指针（只读）
 uintptr_t ResolveTemplate(uint32_t hash) { return reinterpret_cast<uintptr_t>(FindTemplate(hash)); }
 
+// ---- 建筑落点可建造性：直调 TheBuildAssistant::isLocationLegalToBuild ----
+//
+// 槽 RVA 0x8DBBCC -> BuildAssistant*（启动注册流程 `mov [槽], eax` 实证）。
+// 判定函数 RVA 0x1535F0：thiscall，7 个栈参、`ret 0x1c`：
+//   (const Coord3D* pos, const ThingTemplate* build, Real angle, UnsignedInt options,
+//    const Object* builder, Player* player, void* outList)
+// 返回 LegalBuildCode：0 = 可建；其余非 0 即不可建（具体码义见文档）。
+// options 现有游戏侧调用点为 0x1A20；outList 传 0（函数体内已做空判）。
+static float g_baPos[3] = { 0, 0, 0 };
+static char  g_baErr[192] = { 0 };
+
+const char* BuildableLastError() { return g_baErr[0] ? g_baErr : "ok"; }
+
+int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint32_t options) {
+    g_baErr[0] = 0;
+    constexpr uint32_t R_BA_SLOT   = 0x8DBBCC;   // TheBuildAssistant 全局槽
+    constexpr uint32_t R_BA_LEGAL  = 0x1535F0;   // isLocationLegalToBuild
+    // AOB 预检：sub esp,0x12c; push ebx; push ebp; push esi; push edi
+    static const uint8_t kPro[] = { 0x81,0xEC,0x2C,0x01,0x00,0x00,0x53,0x55,0x56,0x57 };
+
+    const uintptr_t base = GameBase();
+    const uintptr_t fn = base + R_BA_LEGAL;
+    if (std::memcmp(reinterpret_cast<const void*>(fn), kPro, sizeof(kPro)) != 0) {
+        _snprintf_s(g_baErr, sizeof(g_baErr), _TRUNCATE, "AOB 不符 @%08X（版本不匹配）", (unsigned)fn);
+        return -1;
+    }
+    uint32_t ba = 0;
+    if (!SafeRead32(base + R_BA_SLOT, ba) || !ba) {
+        _snprintf_s(g_baErr, sizeof(g_baErr), _TRUNCATE, "TheBuildAssistant 槽为空（对局未就绪？）");
+        return -1;
+    }
+    const uintptr_t tmpl = ResolveTemplate(tmplHash);
+    if (!tmpl) {
+        _snprintf_s(g_baErr, sizeof(g_baErr), _TRUNCATE, "模板哈希 0x%08X 解析不到", (unsigned)tmplHash);
+        return -1;
+    }
+    const uintptr_t player = LocalPlayerObj();
+    if (!player) {
+        _snprintf_s(g_baErr, sizeof(g_baErr), _TRUNCATE, "本地玩家对象未抓到（进局后点一下资源再试）");
+        return -1;
+    }
+    g_baPos[0] = x; g_baPos[1] = y; g_baPos[2] = z;
+
+    typedef int(__thiscall* F7)(void*, const float*, uintptr_t, float, uint32_t, uintptr_t, uintptr_t, uintptr_t);
+    int r = -2;
+    __try {
+        r = ((F7)fn)(reinterpret_cast<void*>(static_cast<uintptr_t>(ba)), g_baPos, tmpl,
+                     angle, options, 0, player, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        _snprintf_s(g_baErr, sizeof(g_baErr), _TRUNCATE, "判定函数抛异常（参数或状态不匹配）");
+        r = -99;
+    }
+    return r;
+}
+
 // 文本版：把同样内容拼进缓冲区（供 HTTP /diag 直接返回），返回写入长度
 int DiagText(char* buf, int n) {
     if (!buf || n <= 0) return 0;
@@ -1639,6 +1694,102 @@ uintptr_t FirstSelectedObject() {
     SelIter it;
     if (!SelBegin(it)) return 0;
     return SelNext(it);
+}
+
+// ===================== 箱子即爆（DLL 原生）=====================
+// 存在的理由：MCP 层要 /summon → /obj → /aicall 三条请求，每条各占一帧，
+//   箱子至少被画 2~3 帧（≈33~50 ms，肉眼就是"闪一下"）。
+//   这里把「创建 + 校验 + 击杀」压进同一次命令回调 —— 命令泵在 Present hook 里跑，
+//   创建时本帧的渲染列表早已收集完，击杀也在同帧完成 ⇒ 箱子一帧都不出现。
+// 与 /aicall 的区别：不暴露"任意函数调用"，函数与栈参在编译期固定；函数地址走
+//   SymKillUnit()（RVA 0x39EA50）而非硬编码 VA。
+namespace {
+
+const int kBurstQMax = 16;
+struct BurstItem { uintptr_t thing; uint32_t hash; uint32_t dueTick; DWORD dueMs; };
+BurstItem g_burstQ[kBurstQMax];
+int       g_burstQN = 0;            // 只在渲染线程读写（ActBurstCrate / BurstPump 同线程）
+uintptr_t g_burstLast = 0;
+char      g_burstErr[160] = { 0 };
+
+void BurstSetErr(const char* s) {
+    if (s) strncpy_s(g_burstErr, s, _TRUNCATE); else g_burstErr[0] = 0;
+}
+
+// 校验 + 击杀。ecx 必须是 **Thing**（CreateUnit 的返回值），不是 body ——
+//   实测传 body 不消耗箱子、死亡开火也不触发（靶无冻结指纹）；传 Thing 立刻生效。
+// 地址复用防护：模板哈希必须等于本次创建时请求的哈希 ——
+//   引擎会把已销毁对象的地址分给新对象（research/crates/06 §三），只认 vtable 会误杀。
+bool BurstKillChecked(uintptr_t thing, uint32_t hash) {
+    const uintptr_t fnAddr = SymKillUnit();
+    if (!fnAddr) { BurstSetErr("击杀函数未解析到（符号解析失败）"); return false; }
+    if (!LooksLikeGameObject(thing)) { BurstSetErr("对象不像游戏对象（护栏拦下）"); return false; }
+    uint32_t tmpl = 0, h = 0;
+    if (!SafeRead32(thing + 4, tmpl) || !tmpl) { BurstSetErr("读不到模板指针"); return false; }
+    if (!SafeRead32(tmpl + 8, h) || h != hash) {
+        _snprintf_s(g_burstErr, sizeof(g_burstErr), _TRUNCATE,
+                    "模板哈希 %08X ≠ 请求 %08X（地址已被复用，拒绝开火）", h, hash);
+        return false;
+    }
+    auto fn = reinterpret_cast<KillUnit_t>(fnAddr);
+    __try { fn(reinterpret_cast<void*>(thing), nullptr, 6, 1, 0); }   // 拾取链原生参数
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        BurstSetErr("KillUnit 调用异常");
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+// 创建 → 入队（至少隔一帧发力）。
+//   为什么不能同帧杀：CreateUnit 当帧对象还没初始化完，Thing+4 的模板指针读回 0，
+//   此时调 KillUnit 既不消耗箱子也不触发死亡开火（2026-10-18 实测）。
+int ActBurstCrate(uint32_t hash, int delayMs) {
+    g_burstLast = 0;
+    BurstSetErr("ok");
+    if (!hash) { SetErr("缺 hash"); BurstSetErr("缺 hash"); return 0; }
+    if (!SummonByHashFor(hash, 1, 0, false, "burst")) {
+        BurstSetErr(SummonLastError());
+        return 0;
+    }
+    uintptr_t objs[2] = { 0, 0 };
+    if (LastCreatedObjs(objs, 2) < 1 || !objs[0]) {
+        BurstSetErr("创建返回成功但取不到对象地址");
+        return 0;
+    }
+    const uintptr_t thing = objs[0];
+    g_burstLast = thing;
+    if (!LooksLikeGameObject(thing)) { BurstSetErr("创建出的对象不像游戏对象（护栏拦下）"); return 0; }
+    if (g_burstQN >= kBurstQMax) { BurstSetErr("引爆队列已满"); return 0; }
+
+    BurstItem& it = g_burstQ[g_burstQN++];
+    it.thing = thing;
+    it.hash = hash;
+    it.dueTick = g_tickNow + 1;                        // 至少下一帧（对象初始化完成）
+    it.dueMs = GetTickCount() + (DWORD)(delayMs > 0 ? delayMs : 0);
+    return 1;
+}
+
+uintptr_t BurstLastObj() { return g_burstLast; }
+
+const char* BurstLastError() { return g_burstErr[0] ? g_burstErr : "ok"; }
+
+// 引爆队列推进（渲染线程每帧调用）。到期项若已被拾取/地址被复用 → BurstKillChecked 拒绝。
+void BurstPump() {
+    if (!g_burstQN) return;
+    const DWORD now = GetTickCount();
+    for (int i = 0; i < g_burstQN; ) {
+        const BurstItem& it = g_burstQ[i];
+        if (g_tickNow >= it.dueTick && (int)(now - it.dueMs) >= 0) {
+            const uintptr_t obj = it.thing;
+            if (BurstKillChecked(obj, it.hash)) R3_LOG(0, "[引爆] %08X 已引爆", (unsigned)obj);
+            else                               R3_LOG(1, "[引爆] %08X 失败：%s", (unsigned)obj, BurstLastError());
+            g_burstQ[i] = g_burstQ[--g_burstQN];
+        } else {
+            ++i;
+        }
+    }
 }
 
 // 选中单位按类型哈希聚合（纯内存读，跨线程安全）。返回种类数（≤ maxKinds）。

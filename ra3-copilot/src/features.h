@@ -27,9 +27,17 @@ extern uint32_t g_zoomPost;        // 遥测：clamp 之后 [esi+0x44] 的位模
 extern uint32_t g_zoomEntry;       // 遥测：缩放函数入口命中次数
 extern uint32_t g_telemEnter;      // money cave 执行次数
 extern uint32_t g_telemApplied;    // 加钱生效次数
+// 协议格遥测：0x69A9B3 每格刷新时记录（esi / 协议对象 / 原始标志 / 强制后标志）
+extern uint32_t g_paCount;
+extern uint32_t g_paBuf[64 * 4];
+// 协议格点击遥测：0x69AB03 进入时记录（esi / 父面板 / 协议对象 / 已拥有 / 列表begin / 列表end）
+extern uint32_t g_pcCount;
+extern uint32_t g_pcBuf[64 * 6];
 
 // 各 hook 返回地址（C++ 侧填充）
 extern uint32_t g_retMoney, g_retPlayerId, g_retPower, g_retSCPoint, g_retHaveAllSC;
+extern uint32_t g_retProtoAll;
+extern uint32_t g_retProtoClick;
 extern uint32_t g_scPointObj, g_scPointVal;
 extern uint32_t g_retFastBuild1, g_retFastBuild2, g_retFastBuild3, g_retMap;
 extern uint32_t g_retUnitAmmo, g_retDangerLevel, g_retOreMine, g_retGodMode;
@@ -46,6 +54,8 @@ void MoneyCaveStub();
 void PowerCaveStub();
 void SCPointCaveStub();
 void HaveAllSCCaveStub();
+void ProtoAllCaveStub();
+void ProtoClickCaveStub();
 void FastBuild1CaveStub();
 void FastBuild2CaveStub();
 void FastBuild3CaveStub();
@@ -82,6 +92,7 @@ enum FeatureIdx {
     FID_ENEMYBUILD = 0x15,  // 0=压5000 1=压1
     FID_GODMODE   = 0x16,
     FID_KILLMODE  = 0x17,   // 秒杀模式（敌方单位 HP 归零）
+    FID_PROTOALL  = 0x18,   // 协议格全解锁（跳过前置条件检查）
     FID_COUNT     = 32,
 };
 

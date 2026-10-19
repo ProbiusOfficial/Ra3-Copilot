@@ -3,7 +3,7 @@
 > 目的：**不用退游戏**就能验证功能。修改器 DLL 内部起一个只在 `127.0.0.1` 监听的 HTTP 服务，
 > 用 `curl` 就能读状态、改内存、调游戏函数、触发功能。
 >
-> 端口：**17832** ｜ 实现：`ra3-copilot/src/httpapi.cpp` ｜ 接线：`OverlayInit()` 启动、`BuildUI()` 每帧 `HttpApiPump()`
+> 端口：**17832** ｜ 实现：`ra3-copilot/src/httpapi.cpp` ｜ 接线：`OverlayInit()` 启动、`OverlayTick()` 每帧 `HttpApiPump()`
 
 ---
 
@@ -54,7 +54,7 @@
 | POST | `/mcv` | 召唤三阵营基地车 |
 | POST | `/capture` | 收编（归属改成本地玩家） |
 | POST | `/kill` | 摧毁选中 |
-| POST | `/status?kind=&on=&sec=` | **单位状态（表驱动）**：`kind` = `ironcurtain`(缺省) / `invulnerable` / `speedup` / `slow` / `brittle` / `damageup`，也认 `0..5` 数字；`kind=reset` = 撤销全部状态 + 速度/血量还原。`on=1` 施加（默认）/ `0` 解除；`sec` = 时长秒（默认 60，上限 600）。全部经引擎 modifier / ObjectStatus 通道 |
+| POST | `/status?kind=&on=&sec=` | **单位状态（表驱动）**：`kind` = `ironcurtain`(缺省) / `invulnerable` / `speedup` / `slow` / `brittle` / `damageup`，也认 `0..5` 数字；`kind=reset` = 撤销全部状态 + 速度/血量还原。`on=1` 施加（默认）/ `0` 解除；`sec` = 时长秒（默认 60，上限 600）。当前 6 项状态均走引擎 modifier 通道（表结构另支持 ObjectStatus，现表未启用） |
 | POST | `/rank` | 满级 |
 | POST | `/speed?mode=0..3` 或 `/speed?value=0..1000` | `mode`：0 超速 / 1 慢速 / 2 定住 / 3 恢复；`value`：按绝对速度值设置（0 = 定住） |
 | POST | `/health?mode=0..2` | 0 无敌 / 1 残血 / 2 恢复血量 |
@@ -135,6 +135,7 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 | GET | `/units?q=..` | 单位检索 |
 | GET | `/ai/status` | AI 通道遥测计数 |
 | GET | `/scratch` | 临时草稿区 |
+| GET | `/buildable?x=&y=&z=&hash=&opts=` | 建筑落点可建性：直调 `TheBuildAssistant::isLocationLegalToBuild`（RVA `0x1535F0`）。回 `code`：0 可建 / 2 对象阻挡 / 3 无通路 / 6 地形类 / 8 通用失败；`opts` 默认 `0x1A20`（同游戏 AI 找位）。只判范围与边界，不判重叠 |
 | POST | `/order?unit=..&act=attack\|move`（`idle` 未实现） | 指挥单位（AI 控制层）：`attack` 需 `target=<Thing>`，`move` 需 `x=&y=&z=` |
 | POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 **VA**（绝对地址，非 RVA）调任意方法：正统 `thiscall`，`fn=0xVA` / `this=0x..` / `a0..a2` 栈参 / `na` 栈参个数（RE 用） |
 | POST | `/postproc?on=0\|1` | 后处理开关 |
@@ -142,6 +143,6 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 ### 2. 监听与安全边界
 
 - 监听**注入即常驻**（`overlay.cpp` 的 `HttpApiStart(17832)`）。
-- 变更类端点直接执行；`ai=1` 仅作遥测（`g_aiCalls` 计数 + 日志）。
+- 变更类端点无闸门，但仍**投递渲染线程执行**；`ai=1` 仅作遥测（`g_aiCalls` 计数 + 日志）。
 - **安全边界 = 只绑 `127.0.0.1`**。接入说明见 `docs/AI接入指南.md`。
 

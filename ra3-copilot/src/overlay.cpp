@@ -1290,14 +1290,23 @@ void PanelMisc() {
 }
 
 // ===== 面板：协议技能 =====
-// 协议点 / 科技点是本地玩家对象上的纯数据字段（+0x34 / +0x2C）；
-// 全协议 / 快速冷却 / 禁用技能走既有 hook；按条授予走引擎 Lua 的 ExecuteAction。
-void PanelProtocol() {
-    const int pts = ProtocolPoints();
-    ImGui::Text("本地玩家 %d   协议点 %d", LocalPlayerId(), pts);
-    if (pts < 0)
-        ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f), "未抓到玩家对象：先进遭遇战");
+bool SubStrNoCase(const char* hay, const char* needle);   // 定义在召唤面板之后
 
+// 协议面板：设置协议点 + 开关 + **技能列表**（点一行就授予，和召唤单位一个操作习惯）
+// 目录来自 .lyi 解包生成的 protocols_corona.h；授予走引擎 ExecuteAction。
+void PanelProtocol() {
+    static char s_search[64] = { 0 };
+    static int  s_fac = 0;
+
+    const char* who = LocalPlayerName();
+    const int pts = ProtocolPoints();
+    ImGui::Text("玩家 %s（序号 %d）   协议点 %d   技能 %d 条",
+                who[0] ? who : "未抓到", LocalPlayerId(), pts, ProtocolCount());
+    if (pts < 0)
+        ImGui::TextColored(ImVec4(1.f, 0.55f, 0.35f, 1.f),
+                           "没有玩家对象：先进遭遇战");
+
+    // ---- 协议点：已定位到 [Player+0x1320]+0x34（2026-10-19 实测，写 15 后即可全买）----
     static int s_points = 99;
     ImGui::SetNextItemWidth(90);
     ImGui::InputInt("##proto_pts", &s_points, 1, 10);
@@ -1309,28 +1318,27 @@ void PanelProtocol() {
         AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → %d %s", s_points, ok ? "" : "失败");
     }
     ImGui::SameLine();
-    if (ImGui::Button("协议点 99", ImVec2(80, 0))) {
+    if (ImGui::Button("99", ImVec2(44, 0))) {
         const bool ok = ProtocolSetPoints(99);
         AddLog(ok ? LOG_OK : LOG_ERR, "[协议] 协议点 → 99 %s", ok ? "" : "失败");
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("直接写本地玩家 +0x34（协议点）。游戏不会立刻覆盖；\n"
-                          "买协议后由游戏自己扣减。");
+        ImGui::SetTooltip("写 [Player+0x1320]+0x34（整数）。\n"
+                          "实测：写 15 后协议面板立刻可全买；界面上的数字要等刷新才变。");
 
     ImGui::Separator();
     bool all = ProtocolGetToggle(0);
-    if (ImGui::Checkbox("全协议（All Secret Protocols）", &all)) {
+    if (ImGui::Checkbox("全协议", &all)) {
         ProtocolSetToggle(0, all);
         AddLog(all ? LOG_OK : LOG_INFO, "[协议] 全协议 %s", all ? "开" : "关");
     }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("写玩家科技字段（+0x2C = 399.0f）。\n"
-                          "关掉后该 hook 不再写入，数值由游戏逻辑自行回填。");
+    ImGui::SameLine();
     bool fast = ProtocolGetToggle(1);
-    if (ImGui::Checkbox("技能/超武快速冷却", &fast)) {
+    if (ImGui::Checkbox("快速冷却", &fast)) {
         ProtocolSetToggle(1, fast);
         AddLog(fast ? LOG_OK : LOG_INFO, "[协议] 快速冷却 %s", fast ? "开" : "关");
     }
+    ImGui::SameLine();
     bool dis = ProtocolGetToggle(2);
     if (ImGui::Checkbox("禁用技能", &dis)) {
         ProtocolSetToggle(2, dis);
@@ -1338,38 +1346,57 @@ void PanelProtocol() {
     }
 
     ImGui::Separator();
-    ImGui::TextDisabled("协议目录 %d 条", ProtocolCount());
-    static char s_items[8192] = { 0 };
-    if (!s_items[0]) {
-        char* p = s_items;
-        for (int i = 0; i < ProtocolCount(); ++i) {
-            const int n = _snprintf_s(p, static_cast<size_t>(s_items + sizeof(s_items) - p),
-                                      _TRUNCATE, "%s · %s", ProtocolFaction(i), ProtocolName(i));
-            if (n <= 0) break;
-            p += n + 1;                 // ImGui 用 \0 分隔
-            if (p >= s_items + sizeof(s_items) - 2) break;
+    // ---- 技能列表：搜索 + 阵营页签 + 点选即授予 ----
+    static const char* kFacs[] = { "神州", "盟军", "苏联", "帝国", "通用" };
+    const int kFacN = 5;
+    if (s_fac < 0 || s_fac > kFacN) s_fac = 0;
+
+    ImGui::TextDisabled("下面列出的是引擎里全部 SpecialPower 模板（%d 条），"
+                        "不是游戏那 15 格协议；15 格按顺序购买即可。", ProtocolCount());
+    ImGui::SetNextItemWidth(190);
+    ImGui::InputTextWithHint("##proto_search", "搜索技能名（内部名片段）", s_search, sizeof(s_search));
+    ImGui::SameLine();
+    ImGui::TextDisabled("共 %d 条", ProtocolCount());
+
+    static std::vector<int> filt;
+    filt.clear();
+    const bool searching = (s_search[0] != 0);
+    for (int i = 0; i < ProtocolCount(); ++i) {
+        if (!searching && s_fac > 0 && strcmp(ProtocolFaction(i), kFacs[s_fac - 1]) != 0) continue;
+        if (searching && !SubStrNoCase(ProtocolId(i), s_search) &&
+            !SubStrNoCase(ProtocolName(i), s_search)) continue;
+        filt.push_back(i);
+    }
+
+    ImGui::BeginChild("##proto_fac", ImVec2(76, 210), true);
+    if (ImGui::Selectable("全部", s_fac == 0)) s_fac = 0;
+    for (int i = 0; i < kFacN; ++i)
+        if (ImGui::Selectable(kFacs[i], s_fac == i + 1)) s_fac = i + 1;
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+    ImGui::BeginChild("##proto_list", ImVec2(0, 210), true);
+    ImGui::TextDisabled("%d 项（点一行 = 授予）", (int)filt.size());
+    for (int fi = 0; fi < (int)filt.size(); ++fi) {
+        const int i = filt[fi];
+        ImGui::PushID(i);
+        char label[288];
+        if (searching)
+            snprintf(label, sizeof(label), "[%s] %s##%d", ProtocolFaction(i), ProtocolName(i), i);
+        else
+            snprintf(label, sizeof(label), "%s##%d", ProtocolName(i), i);
+        if (ImGui::Selectable(label, false)) {
+            char out[224] = { 0 };
+            const int r = ProtoGrantPower(i, out, sizeof(out));
+            AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
         }
-        *p = 0;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\n执行：PLAYER_GRANT_SPECIAL_POWER\n玩家：%s",
+                              ProtocolId(i), who[0] ? who : "(未抓到)");
+        ImGui::PopID();
     }
-    static int s_idx = 0;
-    ImGui::SetNextItemWidth(-1.f);
-    ImGui::Combo("##proto_list", &s_idx, s_items);
-    static char s_player[64] = "<This Player>";
-    ImGui::SetNextItemWidth(-1.f);
-    ImGui::InputText("##proto_player", s_player, sizeof(s_player));
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("脚本玩家选择器：<This Player> / Player_1 / Player_2 …");
-    if (ImGui::Button("授予选中协议", ImVec2(-1, 0))) {
-        char out[160] = { 0 };
-        const int r = ProtocolGrant(s_idx, s_player, out, sizeof(out));
-        AddLog(r > 0 ? LOG_OK : LOG_WARN, "[协议] %s", out);
-    }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("先 PLAYER_LOCK_PLAYER_TECH 解锁 PlayerTech，再 PLAYER_GRANT_SPECIAL_POWER；\n"
-                          "走引擎内 Lua 的 ExecuteAction。效果需在协议面板确认。");
-    if (ImGui::Button("清除科技锁（未实现）", ImVec2(-1, 0))) {
-        AddLog(LOG_WARN, "[协议] 清除科技锁尚未接入");
-    }
+    ImGui::EndChild();
+
     ImGui::TextDisabled("%s", ProtocolLastError());
 }
 
@@ -1756,6 +1783,7 @@ void OverlayTick() {
     s_lastMs = now;
 
     HttpApiPump();                    // 执行调试接口投递过来的命令（本线程=游戏主线程）
+    BurstPump();                       // 箱子即爆：到期的延迟引爆（delay>0 时才用）
     PostProcPump();                   // 到期补跑"创建后处理"（登记召唤物进玩家体系）
     HKMsgTick();                      // 改键结果 → 输出记录（日志只在渲染线程写）
     ++g_tickNow;                      // 帧计数（选中单位新鲜度判断用）
