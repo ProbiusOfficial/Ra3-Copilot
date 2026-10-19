@@ -183,6 +183,45 @@ int LuaAction(const char* action, const char* a1, const char* a2, const char* a3
     return LuaPushAndCall(GameBase() + kRvaLuaExecuteAction, strs, 4, nullptr, 0, false, false);
 }
 
+// SAGE StringHasher（Paul Hsieh SuperFastHash 变体，init = 长度）。
+// 与 unit-codes/tools/sage_hash.py 逐位一致；调用方负责先转小写。
+static uint32_t SageHash(const char* s) {
+    if (!s || !s[0]) return 0;
+    const size_t n = strlen(s);
+    const unsigned char* b = reinterpret_cast<const unsigned char*>(s);
+    uint32_t h = static_cast<uint32_t>(n);
+    size_t i = 0;
+    for (size_t blocks = n / 4; blocks; --blocks, i += 4) {
+        h += static_cast<uint32_t>((b[i + 1] << 8) | b[i]);
+        const uint32_t tmp = static_cast<uint32_t>(((b[i + 3] << 8) | b[i + 2]) ^ (h << 5));
+        h ^= (tmp << 11);
+        h += (h >> 11);
+    }
+    switch (n % 4) {
+    case 1:
+        h += b[i];
+        h = (h << 10) ^ h;
+        h += (h >> 1);
+        break;
+    case 2:
+        h += static_cast<uint32_t>((b[i + 1] << 8) | b[i]);
+        h ^= (h << 11);
+        h += (h >> 17);
+        break;
+    case 3:
+        h += static_cast<uint32_t>((b[i + 1] << 8) | b[i]);
+        h ^= ((h ^ static_cast<uint32_t>(b[i + 2] << 2)) << 16);
+        h += (h >> 11);
+        break;
+    default:
+        break;
+    }
+    h ^= (h << 3);  h += (h >> 5);
+    h ^= (h << 2);  h += (h >> 15);
+    h ^= (h << 10);
+    return h;
+}
+
 } // namespace
 
 
@@ -464,7 +503,82 @@ int ProtoGrantTech(int idx, char* out, size_t outsz) {
     return (r >= 0) ? 1 : 0;
 }
 
-// 协议格解锁索引：SCPoint+0x30。购买一格 +1；只有 index < 总数 时下一格才可买。
+// 按名字授予 Upgrade（mode=2）或 PlayerTech（mode=1），不走 Lua。
+//
+// 为什么需要它：`NAMED_RECEIVE_UPGRADE` / `PLAYER_LOCK_PLAYER_TECH` 的对象与科技参数都要经过
+// 脚本层的值解析，而 /action 只能压名字串，解析不到就静默返回 —— 无法判断「名字不存在」还是
+// 「参数没解析」。这里直接按 hash 查注册表拿模板，再调 grant，两个结果分开报。
+//
+// 依据（1.12 实测，见 wiki/protocols/native-grant-path.md）：
+//   registry = [0xCDBBF0]
+//   lookup 0x5456F0(this=registry, ctx*)   ctx = { u32 0, u32 hash }（key 在 +4）
+//   grant  0x84D7C0(this=team, template, mode, flag)   ret 0xC，mode 1=PlayerTech / 2=Upgrade
+// grant 入口会读 [template+0xC] 再解引用，模板不完整会 AV —— 由 CallThisFn 的 SEH 兜住。
+int ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz) {
+    if (!name || !name[0]) {
+        g_lastErr = "name 为空";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return -1;
+    }
+    if (mode != 1) mode = 2;
+
+    char lower[192];
+    size_t i = 0;
+    for (; name[i] && i + 1 < sizeof(lower); ++i) {
+        const char ch = name[i];
+        lower[i] = (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch - 'A' + 'a') : ch;
+    }
+    lower[i] = 0;
+    const uint32_t hash = SageHash(lower);
+
+    uint32_t reg = 0;
+    if (!Rd32(0x00CDBBF0, reg) || !reg) {
+        g_lastErr = "Upgrade 注册表不可用（先进对局）";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
+        return -1;
+    }
+
+    struct LookupCtx { uint32_t reserved; uint32_t hash; } key = { 0u, hash };
+    const uintptr_t tpl = CallThisFn(GameBase() + 0x1456F0, reg,
+                                     reinterpret_cast<uintptr_t>(&key), 0, 0, 1);
+    if (tpl == 0xDEADDEADu) {
+        g_lastErr = "模板查找异常";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE,
+                                      "%s hash=%08X（lookup 0x5456F0 抛异常）", name, hash);
+        return -1;
+    }
+    if (!tpl) {
+        g_lastErr = "名字未注册";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE,
+                                      "%s hash=%08X -> 注册表里没有这个名字", name, hash);
+        return 0;
+    }
+
+    const uintptr_t team = RealPlayer();
+    if (!team) {
+        g_lastErr = "本地玩家对象不可用（先进对局）";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s tpl=%08X", g_lastErr, (unsigned)tpl);
+        return -1;
+    }
+
+    const uintptr_t r = CallThisFn(GameBase() + 0x44D7C0, team, tpl,
+                                   static_cast<uintptr_t>(mode), 1, 3);
+    if (r == 0xDEADDEADu) {
+        uintptr_t ea = 0; uint32_t ec = 0;
+        LastThisCallExc(&ea, &ec);
+        g_lastErr = "grant 异常（模板不完整）";
+        if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE,
+                                      "%s hash=%08X tpl=%08X mode=%d exc@%08X code=%08X",
+                                      name, hash, (unsigned)tpl, mode, (unsigned)ea, ec);
+        return -1;
+    }
+    if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE,
+                                  "%s hash=%08X tpl=%08X mode=%d ret=%08X",
+                                  name, hash, (unsigned)tpl, mode, (unsigned)r);
+    return 1;
+}
+
+
 // 依据（0x439500 / 0x43F570 反汇编）：
 //     idx = [SCPoint+0x30]; total = [[[Player+0x10]]+0xA8]
 //     需求 = [[[*]+0xAC][idx]] -> 虚表[+4]

@@ -36,6 +36,9 @@ bool ProtocolGetToggle(int which);
 // 授予：走引擎 ExecuteAction，参数用「内部名 + 真实玩家名」，失败原因写进 out
 int  ProtoGrantPower(int idx, char* out, size_t outsz);
 int  ProtoGrantTech(int idx, char* out, size_t outsz);
+// 按内部名直接授予 Upgrade（mode=2）或 PlayerTech（mode=1），不走 Lua 脚本层。
+// 返回 1=已派发、0=注册表里没这个名字、-1=不可用/异常；out 里带 hash 与模板地址，便于分辨失败原因。
+int  ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz);
 // 按 SpecialPower 内部名直接授予（不查字典）。who 用脚本玩家过滤器，缺省 "<This Player>"。
 // 走引擎真入口 ExecuteAction(0x182C50) + PLAYER_GRANT_SPECIAL_POWER。
 // 实测无阵营检查（跨阵营可授予）；who 认 <This Player> / <All Players> / 裸玩家名，可指向敌方。
