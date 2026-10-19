@@ -275,7 +275,10 @@ CRATE_CN = {
     'VeterancyCrate': '晋升箱',
     'UnitCrate': '部队箱',
     'UnitCrateNew': '部队箱·新版',
-    'OnSeaUnitCrate': '空投仓',
+    'OnSeaUnitCrate': '空投仓·陆',
+    # 海面箱要投放种子而非成品箱：种子落地时由引擎脚本判 OVER_WATER 并选 Navy 套 OCL，
+    # 直接建成品箱会跳过这条链，掉出来的是陆地单位且生成在水底。
+    'OnSeaUnitCrateDummySeed': '空投仓·海',
 }
 
 # 兼容箱子行的两种写法：

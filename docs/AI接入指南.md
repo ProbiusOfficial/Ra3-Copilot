@@ -83,7 +83,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 | `POST /capture` / `/kill` / `/rank` | 收编 / 摧毁选中 / 满级 |
 | `POST /speed?mode=0..3` | 超速 / 慢速 / 定住 / 恢复 |
 | `POST /health?mode=0..2` | 无敌 / 残血 / 恢复 |
-| `POST /crate?idx=N&count=N` | 空投箱子 |
+| `POST /crate?idx=N&count=N` | 空投箱：`idx=54` 空投仓·海（投种子，捡出海军）/ `idx=55` ·陆（成品箱，地面单位） |
 | `POST /toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h`） |
 | `POST /freebuild?on=0\|1` | 免费建造 |
 | `POST /poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |

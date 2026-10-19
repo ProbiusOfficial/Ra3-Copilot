@@ -59,7 +59,7 @@
 | POST | `/speed?mode=0..3` 或 `/speed?value=0..1000` | `mode`：0 超速 / 1 慢速 / 2 定住 / 3 恢复；`value`：按绝对速度值设置（0 = 定住） |
 | POST | `/health?mode=0..2` | 0 无敌 / 1 残血 / 2 恢复血量 |
 | POST | `/summon?hash=0x..&count=N[&owner=idx][&place=view\|selection\|cursor][&x=&y=&z=]` | 按哈希召唤单位。落点：`place` 指定来源；或给 `x/y/z` 指定坐标；都不给则按「落点来源」设置。回执带**实际落点与来源**（`at=.. via=..`） |
-| POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`） |
+| POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`）：`54` 空投仓·海 = 投种子，引擎生成一排带海面外观的箱子、捡出海军；`55` 空投仓·陆 = 成品箱原地叠放、捡出地面单位 |
 | POST | `/toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h` 的 `FeatureIdx`） |
 | POST | `/freebuild?on=0\|1` | 免费建造 |
 | POST | `/poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |

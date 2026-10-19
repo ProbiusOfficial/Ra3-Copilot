@@ -498,8 +498,9 @@ static const SupportUnit kCrates[] = {
     { u8"中立", u8"箱子", u8"晋升箱", "VeterancyCrate", "jsx jinshengxiang", 0x71ED78EEu, 1 },
     { u8"中立", u8"箱子", u8"部队箱", "UnitCrate", "bdx buduixiang", 0x3FA3F32Cu, 1 },
     { u8"中立", u8"箱子", u8"部队箱·新版", "UnitCrateNew", "bdxxb buduixiangxinban", 0xDC56666Au, 1 },
-    { u8"中立", u8"箱子", u8"空投仓", "OnSeaUnitCrate", "ktc kongtoucang", 0x13145F3Du, 1 },
+    { u8"中立", u8"箱子", u8"空投仓·海", "OnSeaUnitCrateDummySeed", "ktch kongtoucanghai", 0xA0508911u, 1 },
+    { u8"中立", u8"箱子", u8"空投仓·陆", "OnSeaUnitCrate", "ktcl kongtoucanglu", 0x13145F3Du, 1 },
 };
-static const int kCrateCount = 55;
+static const int kCrateCount = 56;
 
 } // namespace ra3
