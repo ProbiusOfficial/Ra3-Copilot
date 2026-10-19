@@ -1396,9 +1396,20 @@ void PanelProtocol() {
             char label[256];
             snprintf(label, sizeof(label), "%s   [%s]##p%d", zh, fac, i);
             if (ImGui::Checkbox(label, &on)) s_sel[i] = on ? 1 : 0;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s\n执行：PLAYER_GRANT_SPECIAL_POWER\n玩家：%s",
-                                  id, who[0] ? who : "(未抓到)");
+            if (ImGui::IsItemHovered()) {
+                // 悬停：官方名 + 官方描述（与游戏内提示框同源），再给内部名备查
+                const char* desc = ProtocolPickDesc(i);
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(460.f);
+                ImGui::TextColored(ImVec4(1.f, 0.85f, 0.45f, 1.f), "%s", zh);
+                if (desc[0])
+                    ImGui::TextUnformatted(desc);
+                ImGui::Separator();
+                ImGui::TextDisabled("%s", id);
+                ImGui::TextDisabled("授予对象：%s", who[0] ? who : "(未抓到玩家)");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
             ImGui::PopID();
         }
     } else {

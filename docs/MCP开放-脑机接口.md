@@ -106,6 +106,7 @@
 | `POST /burst?hash=[&x=&y=&z=\|&place=][&delay=ms]` | **箱子即爆**：一次请求完成「创建箱子 → 下一帧击杀」，落点释放该箱子的死亡开火效果（冰冻/爆炸/真空…）。不依赖 `/aicall` |
 | `POST /action?name=&a1=&a2=&a3=` | 执行引擎脚本动作（`ExecuteAction`，RVA **`0x182C50`**）。参数只支持名字串，最多 3 个（URL 编码）。**2026-10-19 起可用**（设钱 / 设协议点 / 授予技能均实测） |
 | `POST /grant?power=SpecialPower_X[&who=]` | **按内部名授予协议技能**。`who` 缺省 `<This Player>`；也认 `<All Human Players>` / `<All Players>` / 裸玩家名（如 `Player_2`）⇒ **可跨阵营、可指定敌方**。仅当技能没有「可授予对象」（单位能力、被模组禁用的超武）时静默跳过 |
+| `GET /grant?list=1[&from=0&n=12]` | **协议目录**：`序号 / 官方中文名 / 阵营 / 内部名`，最多 60 条。中文名与描述取自游戏字符串表（`gamestrings.csf`），与游戏内提示框同源 |
 | `POST /lua?rva=0x..&a1=&a2=&a3=` | 按 RVA 直调引擎 Lua C 函数，同样只支持名字串 |
 | `GET /luatest` | Lua 栈自检：压一个串、报 tag/类型/取回内容。定位「参数到底进没进去」用 |
 

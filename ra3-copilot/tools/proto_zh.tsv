@@ -1,85 +1,86 @@
-﻿# 协议技能中文名（人工整理，供 tools/gen_protocols.py 生成 kProtoPicks[]）
-# 列：内部名 <TAB> 中文名 <TAB> 阵营
+# 协议技能中文名 —— 由 tools/extract_official.py 从日冕解包数据自动生成
+# 列：内部名 <TAB> 官方中文名 <TAB> 阵营 <TAB> 官方描述
+# 来源：gamestrings.csf（UTF-16LE ^ 0xFFFF）+ mod.relo；未命中的条目保留手写译名
 # 只收「协议/玩家技能」——单位能力不进这张表（引擎也会拒绝授予）。
-# 名字对照来源：RA3 原版技能名 + 日冕 mod.relo 里的 NAME: 条目 + 面板按钮名(ButtonPlayerPower*)。
-SpecialPower_Celestial_EMSuppressField_Lv1	电磁压制场 Lv1	神州
-SpecialPower_Celestial_EMSuppressField_Lv2	电磁压制场 Lv2	神州
-SpecialPower_Celestial_EMSuppressField_Lv3	电磁压制场 Lv3	神州
-SpecialPower_CelestiallightningTroopUpgrade_Lv1	闪电部队升级 Lv1	神州
-SpecialPower_CelestiallightningTroopUpgrade_Lv2	闪电部队升级 Lv2	神州
-SpecialPower_CelestiallightningTroopUpgrade_Lv3	闪电部队升级 Lv3	神州
-SpecialPowerCelestialSatelliteLaserSweep_Lv1	卫星激光扫射 Lv1	神州
-SpecialPowerCelestialSatelliteLaserSweep_Lv2	卫星激光扫射 Lv2	神州
-SpecialPowerCelestialSatelliteLaserSweep_Lv3	卫星激光扫射 Lv3	神州
-SpecialPower_CelestialQuantumLink	量子链接	神州
-SpecialPower_CelestialSpaceReinforce	太空增援	神州
-SpecialPower_CelestialPowerSealOff	能量封印	神州
-SpecialPower_CelestialCenturionUpgrade	百夫长升级	神州
-SpecialPowerCelestialEMTurretDrop	电磁炮塔空投	神州
-SpecialPowerCelestialCannon	天朝主炮	神州
-SpecialPower_CelestialOrbitalStrike	轨道打击	神州
-SpecialPower_CelestialMassiveOrbitalStrike	大规模轨道打击	神州
-SpecialPower_CelestialPantaOrbitalStrike	万式轨道打击	神州
-SpecialPower_CelestialPowerPlantDetection	电厂侦测	神州
-SpecialPower_Celestial_ElectromagneticGun	电磁炮	神州
-SpecialPowerDragonShipAttackDrones	龙船攻击无人机	神州
-SpecialPowerChronoRiftSelectLvl1	时空裂缝 Lv1	盟军
-SpecialPowerChronoRiftSelectLvl2	时空裂缝 Lv2	盟军
-SpecialPowerChronoRiftSelectLvl3	时空裂缝 Lv3	盟军
-SpecialPowerTimeBombLvl1	时间炸弹 Lv1	盟军
-SpecialPowerTimeBombLvl2	时间炸弹 Lv2	盟军
-SpecialPowerTimeBombLvl3	时间炸弹 Lv3	盟军
-SpecialPowerCryoSatelliteLvl1	冷冻卫星 Lv1	盟军
-SpecialPowerCryoSatelliteLvl2	冷冻卫星 Lv2	盟军
-SpecialPowerCryoSatelliteLvl3	冷冻卫星 Lv3	盟军
-SpecialPowerChronosphereObjectSelect	时空传送	盟军
-SpecialPowerChronoSwapSelect	时空交换	盟军
-SpecialPowerAlliedChronoAccelerate	超时空物流	盟军
-SpecialPowerPrecisionStrike	精确打击	盟军
-SpecialPowerAirPower	制空权	盟军
-SpecialPowerAlliedFreeTrade	自由贸易	盟军
-SpecialPowerAlliedMissileCrisis	导弹危机	盟军
-SpecialPowerAlliedRangerAirAssault	游骑兵空降突袭	盟军
-SpecialPowerAlliedShipboardWarplaneSquadron	舰载机中队	盟军
-SpecialPowerAlliedPrecisionAssault	精确突击	盟军
-SpecialPowerDesolatorBomb_Level1	辐射炸弹 Lv1	苏联
-SpecialPowerDesolatorBomb_Level2	辐射炸弹 Lv2	苏联
-SpecialPowerDesolatorBomb_Level3	辐射炸弹 Lv3	苏联
-SpecialPowerMagneticSatelliteLvl1	磁力卫星 Lv1	苏联
-SpecialPowerMagneticSatelliteLvl2	磁力卫星 Lv2	苏联
-SpecialPowerMagneticSatelliteLvl3	磁力卫星 Lv3	苏联
-SpecialPowerOrbitalRefuse_Rank1	轨道垃圾 I	苏联
-SpecialPowerOrbitalRefuse_Rank2	轨道垃圾 II	苏联
-SpecialPowerOrbitalRefuse_Rank3	轨道垃圾 III	苏联
-SpecialPowerIronCurtain	铁幕	苏联
-SpecialPowerMagneticSingularity	磁力奇点	苏联
-SpecialPowerVacuumBomb	真空炸弹	苏联
-SpecialPowerIrradiateTarget	辐射目标	苏联
-SpecialPowerSovietTeslaAirAssault	特斯拉空袭	苏联
-SpecialPowerSovietUnbreakableArmor	不破装甲	苏联
-SpecialPowerTerrorDroneEggs	恐怖机器人弹	苏联
-SpecialPowerCrushPuppies	碾压指令	苏联
-SpecialPowerJapanBalloonAttack_L1	气球轰炸 Lv1	帝国
-SpecialPowerJapanBalloonAttack_L2	气球轰炸 Lv2	帝国
-SpecialPowerJapanBalloonAttack_L3	气球轰炸 Lv3	帝国
-SpecialPowerJapanEmperorsResolve_L1	天皇决意 Lv1	帝国
-SpecialPowerJapanEmperorsResolve_L2	天皇决意 Lv2	帝国
-SpecialPowerJapanEmperorsResolve_L3	天皇决意 Lv3	帝国
-SpecialPowerFinalSquadron_L1	最终中队 Lv1	帝国
-SpecialPowerFinalSquadron_L2	最终中队 Lv2	帝国
-SpecialPowerFinalSquadron_L3	最终中队 Lv3	帝国
-SpecialPowerJapanAmbush	帝国伏击	帝国
-SpecialPowerNanoSwarmHive	纳米虫巢	帝国
-SpecialPowerJapanNanoMaintainHive	纳米维护巢	帝国
-SpecialPowerJapanAdvancedMissilePacks	高级导弹包	帝国
-SpecialPowerJapanNavalPower	海军强化	帝国
-SpecialPowerTelekineticProjectorDevice	念力投影仪	帝国
-SpecialPowerPause01	时间停止	帝国
-SpecialPower_LuckyUnitCrate	单抽！	通用
-SpecialPower_LuckyUnitCrateX10	十连！	通用
-SpecialPowerParticleCannon	粒子炮	通用
-SpecialPowerSatelliteSweep	卫星扫描	通用
-SpecialPowerPointDefenseDrones	点防御无人机	通用
-SpecialPowerProductionKickbacks	生产回扣	通用
-SpecialPowerHighTechnology	高科技	通用
-SpecialPower_GrantCelestialTech	授予天朝科技	通用
+# 手工改本文件会被下次生成覆盖；译名有误请改脚本里的 ALIASES 或数据源。
+SpecialPower_Celestial_EMSuppressField_Lv1	四方玉宇	神州	设置小型原子压制场，通过强制性的量子纠缠在较短时间内压制区域内所有的敌方单位，试图逃离的敌人将会被闪耀的边缘灼伤。
+SpecialPower_Celestial_EMSuppressField_Lv2	六面琼楼	神州	设置中型原子压制场，通过强制性的量子纠缠在一段时间内压制区域内所有的敌方单位，试图逃离的敌人将会被炽热的边缘焚烧。
+SpecialPower_Celestial_EMSuppressField_Lv3	八门金锁	神州	设置大型原子压制场，通过强制性的量子纠缠在较长时间内压制区域内所有的敌方单位，试图逃离的敌人将会被高能的边缘融化。
+SpecialPower_CelestiallightningTroopUpgrade_Lv1	雷铸天兵：百骑	神州	指定一片区域，要求在轨卫星聚集高空电荷并降下闪电，痛击普通步兵并为神州外骨骼步兵与载具进行短暂的过度充能；过度充能时提升作战能力所需的相应能耗由其所属基地负责补充。
+SpecialPower_CelestiallightningTroopUpgrade_Lv2	雷铸天兵：千军	神州	指定一片区域，要求在轨卫星聚集高空电荷并降下闪电，痛击普通步兵并为神州外骨骼步兵与载具进行短暂的过度充能；过度充能时提升作战能力所需的相应能耗由其所属基地负责补充。
+SpecialPower_CelestiallightningTroopUpgrade_Lv3	雷铸天兵：万乘	神州	指定一片区域，要求在轨卫星聚集高空电荷并降下闪电，痛击普通步兵并为神州外骨骼步兵与载具进行短暂的过度充能；过度充能时提升作战能力所需的相应能耗由其所属基地负责补充。
+SpecialPowerCelestialSatelliteLaserSweep_Lv1	羲和焚风	神州	先后设定两个坐标，搭载于轨道卫星上的天基武器系统将以常规功率由先到后扫射一道破坏力强大的高温光束。
+SpecialPowerCelestialSatelliteLaserSweep_Lv2	羲和阳炎	神州	先后设定两个坐标，搭载于轨道卫星上的天基武器系统将以更高功率由先到后扫射一道破坏力超强的高能光束。
+SpecialPowerCelestialSatelliteLaserSweep_Lv3	羲和十日煌	神州	先后设定两个坐标，搭载于轨道卫星上的天基武器系统将以最高功率由先到后扫射一道破坏力极强的聚能光束。
+SpecialPower_CelestialQuantumLink	元神互锁	神州	指定两台己方载具，运用量子纠缠及量子编程技术使二者耐久度半永久性关联。
+SpecialPower_CelestialSpaceReinforce	三子归边	神州	指定战区内任意地点，即刻在目标地点通过轨道空投部署一支机械化步兵部队。
+SpecialPower_CelestialPowerSealOff	电能纳贡	神州	以范围内敌方电力设施为目标，在一段时间内吸收其电力为己所用；实现电力转移的远程电磁感应锚点可以被敌方火力摧毁。
+SpecialPower_CelestialCenturionUpgrade	百夫长	神州	指定一名士兵，使其外骨骼获得升级，并成为团队士气鼓舞者与能量中继站。对同一步兵单位最多可累加升级三次。
+SpecialPowerCelestialEMTurretDrop	陨星天火	神州	指定战区内任意地点，即刻在目标地点通过轨道空投部署一座快速组装的光束高塔。
+SpecialPowerCelestialCannon	天朝主炮	神州	
+SpecialPower_CelestialOrbitalStrike	轨道打击	神州	
+SpecialPower_CelestialMassiveOrbitalStrike	大规模轨道打击	神州	
+SpecialPower_CelestialPantaOrbitalStrike	万式轨道打击	神州	
+SpecialPower_CelestialPowerPlantDetection	弧光破云	神州	消耗电力以短暂地启用广域电磁场探测，探测敌方电力建筑的位置并揭露其周围的战争迷雾。
+SpecialPower_Celestial_ElectromagneticGun	电磁炮	神州	
+SpecialPowerDragonShipAttackDrones	蜂群出击	神州	释放出无人机队列对目标发起精准打击
+SpecialPowerChronoRiftSelectLvl1	超时空裂隙	盟军	制造科学异常现象使目标附近的所有玩意儿全都暂时消失！
+SpecialPowerChronoRiftSelectLvl2	超时空裂口	盟军	制造科学异常现象使目标附近大范围内的所有玩意儿全都消失一阵子！
+SpecialPowerChronoRiftSelectLvl3	超时空裂缝	盟军	制造科学异常现象使目标附近广大范围内的所有玩意儿全部消失一阵子！
+SpecialPowerTimeBombLvl1	时空炸弹	盟军	在指定地点，瞬间冒出易爆炸的定时炸药包！
+SpecialPowerTimeBombLvl2	高级时空炸弹	盟军	在指定地点，瞬间冒出爆炸威力惊人的定时炸药包！
+SpecialPowerTimeBombLvl3	超级时空炸弹	盟军	在指定地点，瞬间冒出爆炸威力空前的定时炸药包！
+SpecialPowerCryoSatelliteLvl1	冰冻射击	盟军	让区域内的部队和建筑物结冰短暂时间，使他们变得异常脆弱！
+SpecialPowerCryoSatelliteLvl2	冰冻轰击	盟军	让广泛区域内的部队和建筑物结冰一阵子，使他们变得异常脆弱！
+SpecialPowerCryoSatelliteLvl3	冰冻暴击	盟军	让广泛区域内的部队和建筑物结冰一段时间，使他们变得异常脆弱！
+SpecialPowerChronosphereObjectSelect	超时空传送仪	盟军	利用物质传送将目标部队送至战场上的任何地方！警告：会让步兵致命。
+SpecialPowerChronoSwapSelect	超时空互换	盟军	能使你或盟友的两个单位立即调换位置！想想各种可能性！
+SpecialPowerAlliedChronoAccelerate	超时空物流	盟军	选定范围，向其中每一个生产建筑部署超时空装置，用超时空手段运输生产所需物资，使其在一段时间内的生产速度大幅提高！但是请注意，超时空加速也没法提高许可程序的会议审批进度\n>>生效期间无法进行盟军高级许可等科技升级
+SpecialPowerPrecisionStrike	精准攻击	盟军	呼叫女神精准轰炸机对你指定的目标区进行猛烈轰炸！
+SpecialPowerAirPower	先进航空学	盟军	增进盟军强大飞行器的耐久度、扫描范围、载弹量和装填弹药时间。
+SpecialPowerAlliedFreeTrade	自由贸易	盟军	每车矿石可得到更多资金，增进你的所有采矿车的效率！
+SpecialPowerAlliedMissileCrisis	战术打击	盟军	呼叫一支战术机队，向目标区域发射三枚威力巨大的巡航导弹，抹杀近乎一切目标
+SpecialPowerAlliedRangerAirAssault	突击行动	盟军	一架直升机将从航母起飞，向目标区域内投送一支精英游骑兵小队
+SpecialPowerAlliedShipboardWarplaneSquadron	区域轰炸	盟军	命令独行侠中队起飞，向目标区域投下大量航弹
+SpecialPowerAlliedPrecisionAssault	黑鸟行动	盟军	命令黑鸟编队立刻起飞，向目标区域内所有被标记的敌方载具发射反坦克导弹
+SpecialPowerDesolatorBomb_Level1	毁灭空袭	苏联	命令一架獾式轰炸机空投具有致命的剧毒液体，重创任何处于该区域的部队！
+SpecialPowerDesolatorBomb_Level2	毁灭双重空袭	苏联	命令两架獾式轰炸机空投具有致命的剧毒液体，重创任何处于该区域的部队！
+SpecialPowerDesolatorBomb_Level3	毁灭三角空袭	苏联	命令三架獾式轰炸机空投具有致命的剧毒液体，重创任何处于该区域的部队！
+SpecialPowerMagneticSatelliteLvl1	磁力卫星	苏联	利用可导向的牵引光束将装甲部队吸入太空！相当适合搭配轨道坠落使用！
+SpecialPowerMagneticSatelliteLvl2	超级磁力卫星	苏联	利用威力强大的牵引光束将某些装甲部队吸入太空！尝试搭配轨道坠落！
+SpecialPowerMagneticSatelliteLvl3	终极磁力卫星	苏联	利用快速、威力强大的牵引光束将装甲部队吸入太空！搭配轨道坠落试试！
+SpecialPowerOrbitalRefuse_Rank1	轨道坠落	苏联	一声令下，将一颗太空探测器除役，使之伴随其他轨道垃圾坠落！
+SpecialPowerOrbitalRefuse_Rank2	轨道抛掷	苏联	一声令下，将一颗卫星除役，使之伴随其他轨道垃圾坠落！
+SpecialPowerOrbitalRefuse_Rank3	轨道垃圾雨	苏联	一声令下，将一座太空站除役，使之伴随其他轨道垃圾坠落！
+SpecialPowerIronCurtain	铁幕 	苏联	以无法穿透（但时效短暂）的力场包围目标！会杀死步兵。
+SpecialPowerMagneticSingularity	磁力奇点	苏联	在区域内造成磁力干扰，导致机动单位只能无助地被拖向它！
+SpecialPowerVacuumBomb	真空内爆弹	苏联	引爆能将一切吸入然后炸毁的弹头，歼灭你的敌人！
+SpecialPowerIrradiateTarget	毒质腐蚀	苏联	污染一架目标机动单位，造成它的外壳完全熔解，并使它留下剧毒异常的路线！
+SpecialPowerSovietTeslaAirAssault	磁暴突袭	苏联	呼叫一支运输机小队，投放一支磁暴坦克小队，助力消灭难缠的敌人！
+SpecialPowerSovietUnbreakableArmor	牢不可破装甲	苏联	花费资金对指定范围内的苏联坦克安装可被消耗的额外护甲。\n>>指定苏联载具获得[牢不可破装甲]效果，获得50%高额减伤，6次后效果消失
+SpecialPowerTerrorDroneEggs	恐怖机器人袭击	苏联	致使恐怖机器人偶尔会从你的机动残骸中冲出来！
+SpecialPowerCrushPuppies	重机蹂躏	苏联	以特殊胎面强化拥有压敌能力的战车，能在碾压敌人的同时修补毁损的装甲！
+SpecialPowerJapanBalloonAttack_L1	气球炸弹	帝国	投掷一些慢速自由落体炸弹到你的敌人头上！可在半空中导向！
+SpecialPowerJapanBalloonAttack_L2	气球炸弹爆炸	帝国	投掷大量的慢速自由落体炸弹到你的敌人头上！可在半空中导向！
+SpecialPowerJapanBalloonAttack_L3	气球炸弹火力攻击	帝国	投掷大量的慢速自由落体炸弹到你的敌人头上！可在半空中导向！
+SpecialPowerJapanEmperorsResolve_L1	天皇之怒	帝国	激励部队暂时放慢步伐进行更猛烈地攻击！
+SpecialPowerJapanEmperorsResolve_L2	天皇复仇	帝国	激励部队放慢步伐一阵子，进行非常猛烈地攻击！
+SpecialPowerJapanEmperorsResolve_L3	天皇惩罚	帝国	激励部队放慢步伐一段时间，进行毫无拘束的猛烈攻击！
+SpecialPowerFinalSquadron_L1	决胜中队	帝国	呼叫一群日光无人战斗机对目标区域发动狂袭！
+SpecialPowerFinalSquadron_L2	决胜中队 X	帝国	呼叫大量日光无人战斗机对目标区域发动狂袭！
+SpecialPowerFinalSquadron_L3	决胜中队欧米伽	帝国	呼叫如洪流般蜂拥而至的日光无人战斗机对目标区域发动狂袭！
+SpecialPowerJapanAmbush	惊骇伏击	帝国	命令按兵不动的坦克杀手在必要时从地底冒出！
+SpecialPowerNanoSwarmHive	纳米虫群	帝国	在目标区域，由微小机器人构成一道无法穿透的半球体，完全封锁进出！
+SpecialPowerJapanNanoMaintainHive	纳米维修虫群	帝国	在目标区域部署大量纳米机器人，快速修复友方载具与建筑！
+SpecialPowerJapanAdvancedMissilePacks	先进导弹匣	帝国	使用更高速、更狂暴、更具杀伤力的弹头武装你的导弹发射部队！
+SpecialPowerJapanNavalPower	强化舰队	帝国	以更快的速度、更结实的船壳和更优异的扫描装置，强化你的海军战舰！
+SpecialPowerTelekineticProjectorDevice	超能波毁灭装置	帝国	对目标区域发射难以计量的强大超能波，造成浩劫性的破坏！
+SpecialPowerPause01	止戈力场	帝国	在目标处产生能停止实体武器的力场，并暂停与无害化区域内一切武器与高能反应。力场将在维持一段时间后失效。
+SpecialPower_LuckyUnitCrate	单抽！	通用	钱去！
+SpecialPower_LuckyUnitCrateX10	十连！	通用	箱来！
+SpecialPowerParticleCannon	质子撞击炮	通用	将目标区域笼罩在炽热的能量洪流之中，使原爆点附近的任何目标产生连锁反应！
+SpecialPowerSatelliteSweep	侦察扫描	通用	
+SpecialPowerPointDefenseDrones	单点防御纳米机器人	通用	立即派遣这些悬浮纳米机器人协助你珍贵的部队吸收敌方炮火！
+SpecialPowerProductionKickbacks	现金奖励	通用	指定部队被摧毁时可获得资金！这些补助金会逾期的，所以动作要快！
+SpecialPowerHighTechnology	高科技	通用	提升你的警犬、守护者坦克、冰冻直升机和航空母舰的特殊技能！
+SpecialPower_GrantCelestialTech	授予天朝科技	通用	

@@ -288,6 +288,8 @@ int ProtocolPickCount() { return kProtoPickCount; }
 const char* ProtocolPickId(int idx)      { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].id : ""; }
 const char* ProtocolPickZh(int idx)      { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].zh : ""; }
 const char* ProtocolPickFaction(int idx) { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].faction : ""; }
+// 官方描述串（来自日冕 gamestrings.csf 的 DESC:<名>，与游戏内提示框一致）；没有则为空串。
+const char* ProtocolPickDesc(int idx)    { return (idx >= 0 && idx < kProtoPickCount) ? kProtoPicks[idx].desc : ""; }
 
 int ProtoGrantPick(int idx, char* out, size_t outsz) {
     if (idx < 0 || idx >= kProtoPickCount) {

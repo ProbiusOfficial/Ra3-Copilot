@@ -70,7 +70,10 @@ def short(name):
 
 
 def load_picks(path):
-    """读人工维护的 proto_zh.tsv（内部名 / 中文名 / 阵营）。"""
+    """读 proto_zh.tsv（内部名 / 官方中文名 / 阵营 / 官方描述）。
+
+    TSV 由 tools/extract_official.py 从日冕 gamestrings.csf 生成，别手改。
+    """
     out = []
     if not os.path.isfile(path):
         return out
@@ -82,7 +85,8 @@ def load_picks(path):
             parts = ln.split("\t")
             if len(parts) < 3:
                 continue
-            out.append((parts[0].strip(), parts[1].strip(), parts[2].strip()))
+            desc = parts[3].strip() if len(parts) > 3 else ""
+            out.append((parts[0].strip(), parts[1].strip(), parts[2].strip(), desc))
     return out
 
 
@@ -114,11 +118,11 @@ def emit(path, powers, techs, picks):
     L.append("")
     L.append("// ---- 协议技能（人工整理中文名，见 tools/proto_zh.tsv）----")
     L.append("// 只有这批是「面板上能选、能授予」的协议；其余 SpecialPower 多为单位能力，引擎会拒绝。")
-    L.append("struct ProtoPick { const char* id; const char* zh; const char* faction; };")
+    L.append("struct ProtoPick { const char* id; const char* zh; const char* faction; const char* desc; };")
     L.append("")
     L.append("static const ProtoPick kProtoPicks[] = {")
-    for pid, zh, fac in picks:
-        L.append("    { %s, %s, %s }," % (cstr(pid), cstr(zh), cstr(fac)))
+    for pid, zh, fac, desc in picks:
+        L.append("    { %s, %s, %s, %s }," % (cstr(pid), cstr(zh), cstr(fac), cstr(desc)))
     L.append("};")
     L.append("static const int kProtoPickCount = %d;" % len(picks))
     L.append("")
@@ -143,7 +147,8 @@ def main(argv):
     print("powers=%d  techs=%d  -> %s" % (len(powers), len(techs), out))
     print("powers 阵营:", Counter(faction_of(p) for p in powers).most_common())
     print("techs  阵营:", Counter(faction_of(t) for t in techs).most_common())
-    print("picks 中文名: %d 条" % len(picks))
+    print("picks 中文名: %d 条（含官方描述 %d 条）"
+          % (len(picks), sum(1 for p in picks if p[3])))
     return 0
 
 

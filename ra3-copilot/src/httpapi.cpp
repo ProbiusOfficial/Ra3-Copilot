@@ -458,6 +458,25 @@ void ExecCmd(CmdSlot& c) {
         CmdReply("aidx %d %s", ia, o7);
         break;
     }
+    case 32: {  // grantlist: 协议目录分页（官方中文名 + 阵营 + 内部名）
+        const int total = ProtocolPickCount();
+        int from = atoi(g_scriptArgs[0][0] ? g_scriptArgs[0] : "0");
+        int want = atoi(g_scriptArgs[1][0] ? g_scriptArgs[1] : "40");
+        if (from < 0) from = 0;
+        if (want <= 0) want = 40;
+        if (want > 60) want = 60;
+        static char body[3500];
+        int w = 0, cnt = 0;
+        body[0] = 0;
+        for (int i = from; i < total && cnt < want; ++i, ++cnt) {
+            const int k = _snprintf_s(body + w, sizeof(body) - w, _TRUNCATE, "%d\t%s\t%s\t%s\n",
+                                      i, ProtocolPickZh(i), ProtocolPickFaction(i), ProtocolPickId(i));
+            if (k < 0) break;
+            w += k;
+        }
+        CmdReply("total=%d from=%d count=%d\n%s", total, from, cnt, body);
+        break;
+    }
     case 30: {  // grant: 按名字授予 SpecialPower（g_scriptArgs[0]=技能名 [1]=玩家过滤器）
         char o6[512] = { 0 };
         const int rg = ProtoGrantByName(g_scriptArgs[0],
@@ -686,6 +705,7 @@ void Handle(SOCKET c, char* req) {
             "POST /action?name=&a1=&a2=&a3= 执行引擎脚本动作（ExecuteAction），参数只支持名字串\n"
             "                               例：/action?name=PLAYER_GRANT_SPECIAL_POWER&a1=SpecialPower_X&a2=%3CThis%20Player%3E\n"
             "POST /grant?power=SpecialPower_X[&who=<This Player>|Player_2|<All Players>]  按内部名授予协议技能（可跨阵营/指向敌方）\n"
+            "GET  /grant?list=1[&from=0&n=40]            协议目录分页（官方中文名 + 阵营 + 内部名）\n"
             "POST /lua?rva=0x..&a1=&a2=&a3=  按 RVA 直调引擎 Lua C 函数（只支持名字串参数）\n"
             "POST /freebuild?on=0|1         免费建造\n"
             "POST /poke?addr=0x..&type=u32&val=0x..   写内存（RE 用）\n"
@@ -1203,14 +1223,21 @@ void Handle(SOCKET c, char* req) {
         na = 1;
     } else if (strcmp(path, "/grant") == 0) {
         // 按 SpecialPower 内部名授予协议技能：power=SpecialPower_X[&who=<This Player>]
-        fn = 30;
+        // 目录查询：?list=1[&from=0&n=40] → 官方中文名 + 内部名（来源于游戏字符串表）
         char tmp4[128];
         g_scriptArgs[0][0] = 0;
         g_scriptArgs[1][0] = 0;
-        if (GetParam(query, "power", tmp4, sizeof(tmp4)))
-            URLDecode(tmp4, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
-        if (GetParam(query, "who", tmp4, sizeof(tmp4)))
-            URLDecode(tmp4, g_scriptArgs[1], sizeof(g_scriptArgs[1]));
+        if (GetParam(query, "list", tmp4, sizeof(tmp4))) {
+            fn = 32;
+            if (GetParam(query, "from", tmp4, sizeof(tmp4))) lstrcpynA(g_scriptArgs[0], tmp4, (int)sizeof(g_scriptArgs[0]));
+            if (GetParam(query, "n", tmp4, sizeof(tmp4)))    lstrcpynA(g_scriptArgs[1], tmp4, (int)sizeof(g_scriptArgs[1]));
+        } else {
+            fn = 30;
+            if (GetParam(query, "power", tmp4, sizeof(tmp4)))
+                URLDecode(tmp4, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
+            if (GetParam(query, "who", tmp4, sizeof(tmp4)))
+                URLDecode(tmp4, g_scriptArgs[1], sizeof(g_scriptArgs[1]));
+        }
         na = 1;
     } else if (strcmp(path, "/scratch") == 0) {
         // Coord3D 传参缓冲：写 DLL 自有内存，回地址。仅 RE 实验用。
