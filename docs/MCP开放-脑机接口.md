@@ -160,7 +160,7 @@ return *(u32*)(*(u32*)(slot+8) + 0xC) ; 字符在 value+0xC
 `engine+0x17D88` —— 依据反汇编 `0x17FA80`：该字段为 0 时 `<This Player>` 直接解析失败
 （旧代码写的 `+0x17D68/+0x17D70` 偏移错 0x20）。设为本地玩家对象后，授予仍无效果；
 换 `Player_1`/`Player_2`/`LocalPlayer` 亦无效果（`/snapshot` 的 `player=2`）。原因未定位。
-`ret` 恒为 1，**不能当成功判据**；`ProtocolCount()` 是本地静态表长度（当前 294；67 是早期目录子集口径；`.lyi` 解包全量为 SpecialPower_* 300 / PlayerTech_* 81，见 `research/lyi/`），也不能当探针。
+`ret` 恒为 1，**不能当成功判据**；`ProtocolCount()` 是本地静态表长度（当前 294），也不能当探针。
 
 **下一步**：① 按 `engine+0xBC` 表取出描述符，直接调 `0x727140(描述符, 参数)` 绕开名字解析；
 ② 顺带确认数字参数的 tag（`PLAYER_SET_MONEY` 可当探针，钱在 `/snapshot` 可读）。
