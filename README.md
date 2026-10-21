@@ -13,13 +13,16 @@
 |---|---|
 | 渲染 | MinHook inline-hook d3d9 `Present/EndScene`，ImGui 直接画在游戏画面内（不抢焦点、切窗口不静默） |
 | 资源 | 加钱 / 设置资金、电力满、科技点满、全科技、快速建造、敌方无法建造 |
-| 战斗 | 玩家无敌、选中单位弹药满、超武就绪 / 禁用敌方超武、危险等级干预、全图去迷雾、秒杀模式、无限缩放 |
-| 单位 | 选中单位变速 / 改血 / 收编 / 摧毁 / 满级；根据单位代码（支援代码）召唤单位和建筑；空投箱子 |
-| 感知 | 全图活体对象枚举（单位 / 建筑 / AI / 坐标 / 血量，按归属分组，零人工点选）；`/objects` `/obj` 即席查询 |
-| 指挥 | AIUpdate 直调：移动 / 攻击 / 建造（`/aicall`） |
-| 接口 | MCP stdio 服务器（`ra3-copilot/mcp/`）：AI 看局势、查单位、召唤、空投、动单位、改全局；注入即常驻监听，只绑 `127.0.0.1` |
+| 战斗 | 玩家无敌、无限弹药（赋予后取消选中仍保持）、超武就绪 / 禁用敌方超武、危险等级干预、全图去迷雾、秒杀模式、无限缩放 |
+| 单位 | 选中单位变速 / 改血 / 收编 / 摧毁 / 满级；单位内部结构可整段复制留档 |
+| 协议 | 秘密协议技能与兵种升级直授（294 项 `SpecialPower_` / 81 项 `PlayerTech_`），按阵营列目录、门槛明示 |
+| 召唤 | 按单位代码（对象类型哈希）投放单位与建筑；海面折跃信标按兵种（海军 / 空军 / 两栖）抽取种子 |
+| 空投 | 现金 / 治疗 / 晋升箱、海陆投仓，支持周期自动空投 |
+| 感知 | 全图活体对象枚举（单位 / 建筑 / AI / 坐标 / 血量，按归属分组，零人工点选）；`/objects` `/obj` `/snapshot` 即席查询与页级差分 |
+| 指挥 | AIUpdate 直调：移动 / 攻击 / 建造（`/aicall`）；`/place` 按几何打分给建筑落点候选，引擎只做最终校验 |
+| 接口 | MCP stdio 服务器（`ra3-copilot/mcp/`，19 个工具）：AI 看局势、查单位、召唤、空投、动单位、改全局；注入即常驻监听，只绑 `127.0.0.1` |
 | 辅助 | 光标落点（真实世界坐标）、本地玩家追踪、实时资金显示、带时间戳的操作日志区 |
-| 调试 | 进程内 HTTP 接口 `127.0.0.1:17832`（`/state` `/read` `/peek` `/summon` `/poke` `/call` `/aicall` …） |
+| 调试 | 进程内 HTTP 接口 `127.0.0.1:17832`（55 条路由：`/state` `/read` `/peek` `/summon` `/poke` `/call` `/aicall` `/protocol` `/grant` `/upgrade` `/place` `/snapshot` …） |
 
 ## 快速开始
 
@@ -64,7 +67,8 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ├── ra3-copilot/            产品本体
 │   ├── src/               sdk.h（RVA/AOB 常量表）/ hook / features / overlay / actions
 │   │                      aicmd（AIUpdate 直调）/ battlefield（战场枚举）/ httpapi / symres（符号解析）
-│   │                      stubs.asm（MASM stub）/ units_corona.h（可召唤单位代码表）
+│   │                      protocol（秘密协议授予）/ stubs.asm（MASM stub）
+│   │                      units_corona.h（可召唤单位代码表）/ protocols_corona.h（技能名与门槛表）
 │   ├── imgui/             Dear ImGui v1.91.4（MIT）
 │   ├── third_party/       MinHook 1.3.3（BSD-2-Clause）
 │   ├── tools/             AOB 预检 / 注入诊断 / 渲染探针等脚本
@@ -77,7 +81,8 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 │   ├── data/              派生清单（.tsv / .h）
 │   └── tools/             提取逻辑：哈希算法 / 图鉴拉取 / 清单生成 / 建站
 └── docs/                  局内渲染 / 单位操作与召唤 / 召唤状态字根因 / HTTP 调试接口
-                           MCP 脑机接口 / AIUpdate 直调指挥方案 / 美术资源清单
+                           秘密协议授予 / AI 建筑摆放 / 无限缩放 / MCP 脑机接口
+                           AIUpdate 直调指挥 / 开发铁律 / 美术资源清单
 ```
 
 官网源码不在这棵树上 —— 它单独占 `gh-pages` 分支（`index.html` / `units.html` / `assets/`），
@@ -91,7 +96,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 代码 = StringHasher.Hash( 对象模板名.lower() )     // SAGE 引擎的 SuperFastHash 变体
 ```
 
-本项目把日冕全量 **5461 条**对象代码整理成表并可离线复算，其中「可召唤且能用」**410 条**。
+本项目把日冕全量 **5461 条**对象代码整理成表并可离线复算，其中「可召唤且能用」**411 条**。
 
 - 在线查询 → <https://probiusofficial.github.io/Ra3-Copilot/units.html>
 - 离线查询 → `gh-pages` 分支的 `units.html`（纯静态，支持按名字离线算代码）
