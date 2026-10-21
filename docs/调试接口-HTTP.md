@@ -59,7 +59,8 @@
 | POST | `/speed?mode=0..3` 或 `/speed?value=0..1000` | `mode`：0 超速 / 1 慢速 / 2 定住 / 3 恢复；`value`：按绝对速度值设置（0 = 定住） |
 | POST | `/health?mode=0..2` | 0 无敌 / 1 残血 / 2 恢复血量 |
 | POST | `/summon?hash=0x..&count=N[&owner=idx][&place=view\|selection\|cursor][&x=&y=&z=]` | 按哈希召唤单位。落点：`place` 指定来源；或给 `x/y/z` 指定坐标；都不给则按「落点来源」设置。回执带**实际落点与来源**（`at=.. via=..`） |
-| POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`）：`54` 空投仓·海 = 投种子，引擎生成一排带海面外观的箱子、捡出海军；`55` 空投仓·陆 = 成品箱原地叠放、捡出地面单位 |
+| POST | `/crate?idx=N&count=N` | 空投箱（idx 对应 `kCrates[]`）：`54` 海面折跃信标 = 投下即播折跃动画、2~5 秒后落成随机**海军/空军/两栖**单位（13 选 1，DLL 侧虚拟条目，哈希 `0x38C0BC4A`；可加 `&kind=naval|air|amph` 限定兵种）；`55` 地面折跃信标 = 落地即随机出地面单位；`56` 空投仓·海·成品箱 = 直接投海面成品箱；`57` 空投仓 = 两栖仓，按 `OVER_WATER` 自动分套，需同层单位靠近才结算 |
+| POST | `/summon?pool=naval\|vehicle\|infantry\|air\|structure\|any&count=N` | 按兵种随机召唤：忽略 `hash`，从单位表基准形态里抽一个。回执 `hash=` 是实际抽中的模板。等价于「地面折跃信标」的投下即出，但兵种可控 —— 海面随机单位用 `pool=naval`（落点须在水面，否则海军单位沉底自毁） |
 | POST | `/toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h` 的 `FeatureIdx`） |
 | POST | `/freebuild?on=0\|1` | 免费建造 |
 | POST | `/poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |
@@ -136,6 +137,7 @@ curl -X POST "http://127.0.0.1:17832/call?rva=0x3E4230&cc=fc&a0=0x8E6C58&a1=0x0"
 | GET | `/ai/status` | AI 通道遥测计数 |
 | GET | `/scratch` | 临时草稿区 |
 | GET | `/buildable?x=&y=&z=&hash=&opts=` | 建筑落点可建性：直调 `TheBuildAssistant::isLocationLegalToBuild`（RVA `0x1535F0`）。回 `code`：0 可建 / 2 对象阻挡 / 3 无通路 / 6 地形类 / 8 通用失败；`opts` 默认 `0x1A20`（同游戏 AI 找位）。只判范围与边界，不判重叠 |
+| POST | `/place?hash=0x..` | 自动落点推荐（不召唤）：按我方建筑质心与建造圈选点，几何打分后用 `BuildableAt` 校验。回 `x/y/z`、`verified`（1=引擎认可）、`pick`/`scan`（依据）。`/summon?...&place=auto` 走同一条链并直接召唤 |
 | POST | `/order?unit=..&act=attack\|move`（`idle` 未实现） | 指挥单位（AI 控制层）：`attack` 需 `target=<Thing>`，`move` 需 `x=&y=&z=` |
 | POST | `/aicall?fn=0x..&this=..&a0=..&na=N` | 按 **VA**（绝对地址，非 RVA）调任意方法：正统 `thiscall`，`fn=0xVA` / `this=0x..` / `a0..a2` 栈参 / `na` 栈参个数（RE 用） |
 | POST | `/postproc?on=0\|1` | 后处理开关 |

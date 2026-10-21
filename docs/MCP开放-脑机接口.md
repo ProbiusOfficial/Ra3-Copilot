@@ -206,9 +206,9 @@ curl "http://127.0.0.1:17832/snapshot"
 | `selected_action` | 复制/增援/基地车/收编/摧毁/满级 | 中 |
 | `set_units` | 调速 / 改血 | 中 |
 | `toggle_feature` / `set_freebuild` | 功能开关 | 中 |
-| `raw`（🎛️默认关） | 任意内存读写 / 按 RVA 调函数 | **危险** |
+| `raw` | 通用透传：`op=get/post` 调任意 HTTP 路由；另含 `peek/read/poke`（内存读写）与 `call`（按 RVA 调函数） | **危险（等同上机操作）** |
 
-> `raw` 需要客户端环境变量 `RA3_MCP_ALLOW_RAW=1` 才注册；不设就根本看不到这个工具。
+> `raw` 默认注册，与直连 HTTP 等价；设 `RA3_MCP_ALLOW_RAW=0` 可关掉。
 
 ---
 

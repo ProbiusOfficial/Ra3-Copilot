@@ -22,7 +22,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 
 | 路径 | 适合 | 特点 |
 |---|---|---|
-| **MCP（推荐）** | 支持 MCP 协议的客户端 | 配一个 `mcpServers` 条目即可，得到 18 个高层工具（含参数校验、中文名检索；另有个 `raw` 需设 `RA3_MCP_ALLOW_RAW=1` 才注册） |
+| **MCP（推荐）** | 支持 MCP 协议的客户端 | 配一个 `mcpServers` 条目即可，得到 19 个工具（含参数校验、中文名检索）；其中 `raw` 与 HTTP 直连等价，`op=get/post` 可调任意路由，另有内存读写与按 RVA 调函数 |
 | **HTTP 直连** | 任意语言 / 脚本 / Agent 框架 | 直接 `GET/POST 127.0.0.1:17832`，最灵活、无中间层 |
 
 两条路径**等价**：MCP 服务器 `mcp/ra3_mcp.py` 就是一个零依赖的 Python 包装，内部全是对该 HTTP 接口的调用。
@@ -83,7 +83,8 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 | `POST /capture` / `/kill` / `/rank` | 收编 / 摧毁选中 / 满级 |
 | `POST /speed?mode=0..3` | 超速 / 慢速 / 定住 / 恢复 |
 | `POST /health?mode=0..2` | 无敌 / 残血 / 恢复 |
-| `POST /crate?idx=N&count=N` | 空投箱：`idx=54` 空投仓·海（投种子，捡出海军）/ `idx=55` ·陆（成品箱，地面单位） |
+| `POST /crate?idx=N&count=N` | 空投：`idx=54` 海面折跃信标（投下即播折跃动画，2~5 秒后落成随机海军/空军/两栖单位，13 选 1；可加 `&kind=naval|air|amph` 限定兵种）/ `idx=55` 地面折跃信标（落地即出地面随机单位）/ `idx=56` 空投仓·海·成品箱 / `idx=57` 空投仓（两栖仓） |
+| `POST /summon?pool=naval&count=N` | 按兵种随机召唤（`naval`/`vehicle`/`infantry`/`air`/`structure`/`any`），回执 `hash=` 是抽中的模板 |
 | `POST /toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h`） |
 | `POST /freebuild?on=0\|1` | 免费建造 |
 | `POST /poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |
