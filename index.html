@@ -255,8 +255,8 @@ footer .fbase b{color:var(--dim);font-weight:600}
         <a class="btn" href="https://github.com/ProbiusOfficial/Ra3-Copilot">◇ GitHub</a>
       </div>
       <div class="herostats">
-        <div><b>20</b><span>挂载点</span></div>
-        <div><b>410</b><span>可召唤单位</span></div>
+        <div><b>25</b><span>挂载点</span></div>
+        <div><b>411</b><span>可召唤单位</span></div>
         <div><b>5461</b><span>对象代码</span></div>
         <div><b>MCP</b><span>脑机接口</span></div>
       </div>
@@ -315,17 +315,17 @@ footer .fbase b{color:var(--dim);font-weight:600}
     <div class="fcard"><div class="ic"><img src="assets/icon_build.png" alt=""></div>
       <h3>建造</h3><p>快速建造、免费建造、封锁敌方建造队列。</p></div>
     <div class="fcard"><div class="ic"><img src="assets/icon_combat.png" alt=""></div>
-      <h3>战斗</h3><p>己方无敌、弹药满、超武就绪 / 压制敌方超武。</p></div>
+      <h3>战斗</h3><p>己方无敌、无限弹药、超武就绪 / 压制敌方超武、秒杀模式、无限缩放。</p></div>
     <div class="fcard"><div class="ic"><img src="assets/icon_unit.png" alt=""></div>
       <h3>单位</h3><p>选中单位变速 / 改血 / 收编 / 摧毁 / 满级。</p></div>
+    <div class="fcard"><div class="ic"><img src="assets/emblem.png" alt=""></div>
+      <h3>协议</h3><p>秘密协议与兵种升级直授，按阵营列目录、门槛明示。</p></div>
     <div class="fcard"><div class="ic"><img src="assets/icon_summon.png" alt=""></div>
-      <h3>召唤</h3><p>按代码投放单位与基地车，落点可控。</p></div>
+      <h3>召唤</h3><p>按代码投放单位与基地车；海面折跃信标按兵种抽取。</p></div>
     <div class="fcard"><div class="ic"><img src="assets/icon_crate.png" alt=""></div>
-      <h3>空投</h3><p>现金 / 治疗 / 晋升箱，支持周期自动空投。</p></div>
+      <h3>空投</h3><p>现金 / 治疗 / 晋升箱与海陆投仓，支持周期自动空投。</p></div>
     <div class="fcard"><div class="ic"><img src="assets/icon_mcp.png" alt=""></div>
-      <h3>脑机接口</h3><p>把战局开放给 AI：读态势、下指令、投部队。</p></div>
-    <div class="fcard"><div class="ic"><img src="assets/icon_http.png" alt=""></div>
-      <h3>调试接口</h3><p>进程内 HTTP，只读端点可高频查询。</p></div>
+      <h3>副官接口</h3><p>MCP 工具与进程内 HTTP，把战局开放给 AI。</p></div>
   </div>
 </section>
 
@@ -352,7 +352,7 @@ footer .fbase b{color:var(--dim);font-weight:600}
   <div class="steps">
     <div class="step"><div class="n">STEP 01</div><h3>启动游戏</h3><p>通过启动器进入对局（遭遇战 / 战役均可）。</p></div>
     <div class="step"><div class="n">STEP 02</div><h3>注入</h3><p>运行 <code>ra3-copilot\deploy.bat</code>，自动提权并注入，随后打印诊断。</p></div>
-    <div class="step"><div class="n">STEP 03</div><h3>呼出面板</h3><p>游戏内按 <code>INSERT</code> 显示菜单，<code>F7</code> 加钱。</p></div>
+    <div class="step"><div class="n">STEP 03</div><h3>呼出面板</h3><p>游戏内按 <code>INSERT</code> 显示菜单，<code>Ctrl+F1</code> 加钱。</p></div>
   </div>
 </section>
 
@@ -360,18 +360,22 @@ footer .fbase b{color:var(--dim);font-weight:600}
 <section id="mcp">
   <div class="seclayer" style="background-image:url('assets/bg_mcp.jpg')"></div>
   <div class="sec-h"><span class="no">/ 05</span><h2>脑机接口</h2><span class="line"></span></div>
-  <p class="sec-sub">把进程内能力包装成标准 MCP 工具，让 AI 客户端成为你的副官。</p>
+  <p class="sec-sub">19 个标准 MCP 工具，把进程内能力开放给 AI 客户端，让它成为你的副官。</p>
   <div class="grid2">
     <div>
       <div class="tblpanel">
       <table>
         <tr><th>工具</th><th>作用</th></tr>
         <tr><td><code>get_battle_state</code></td><td>我方 / 敌方兵力、资金、选中单位</td></tr>
+        <tr><td><code>list_objects</code> <code>object_detail</code></td><td>全图对象枚举 / 单对象内部结构</td></tr>
         <tr><td><code>search_units</code></td><td>单位检索（中文名 / 模板名 / 哈希）</td></tr>
-        <tr><td><code>summon_unit</code></td><td>投放单位</td></tr>
-        <tr><td><code>drop_crate</code></td><td>空投补给箱</td></tr>
+        <tr><td><code>summon_unit</code> <code>get_spawn_point</code></td><td>投放单位 / 落点探测</td></tr>
+        <tr><td><code>drop_crate</code> <code>burst_crate</code></td><td>空投补给箱 / 连续投放</td></tr>
         <tr><td><code>selected_action</code></td><td>复制 / 增援 / 基地车 / 收编 / 摧毁 / 满级</td></tr>
-        <tr><td><code>toggle_feature</code></td><td>资源 / 战斗 / 地图类开关</td></tr>
+        <tr><td><code>set_units</code> <code>unit_status</code></td><td>变速改血 / 单位状态施加与解除</td></tr>
+        <tr><td><code>command_unit</code> <code>build_structure</code></td><td>移动 / 攻击 / 建造</td></tr>
+        <tr><td><code>toggle_feature</code> <code>set_freebuild</code></td><td>资源 / 战斗 / 地图类开关</td></tr>
+        <tr><td><code>raw</code></td><td>任意路由透传，直接读写内存、按 RVA 调函数</td></tr>
       </table>
       </div>
     </div>
@@ -385,7 +389,8 @@ footer .fbase b{color:var(--dim);font-weight:600}
   }
 }</pre></div>
       <p style="color:var(--dim);font-size:13.5px;margin-top:14px">
-        默认总闸关闭时 AI 只能观战；在游戏内面板开启后，AI 才被允许下达变更指令。</p>
+        注入即常驻监听 <code>127.0.0.1:17832</code>，不需要额外开关；<code>raw</code> 可用环境变量
+        <code>RA3_MCP_ALLOW_RAW=0</code> 关闭。</p>
     </div>
   </div>
 </section>
@@ -398,7 +403,7 @@ footer .fbase b{color:var(--dim);font-weight:600}
     <div class="pc">
       <h3>全量对象代码 · 可离线复算</h3>
       <p>创建单位用的是 32 位对象类型哈希：<code>StringHasher.Hash(模板名.lower())</code>。
-         我们把日冕全量 <b>5461</b> 条代码整理成可检索的清单，其中「可召唤且能用」<b>410</b> 条。</p>
+         我们把日冕全量 <b>5461</b> 条代码整理成可检索的清单，其中「可召唤且能用」<b>411</b> 条。</p>
       <a class="btn primary" href="units.html">▸ 打开查询器</a>
     </div>
     <div class="art"><img src="assets/character_bust.png" alt=""
