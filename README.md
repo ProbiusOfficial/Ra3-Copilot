@@ -63,6 +63,7 @@ git push origin v1.0.0
 - 版本号取自 `ra3-copilot/res/launcher.rc` 的 `FILEVERSION`；与 tag 不符时 CI 只告警，exe 属性里的版本会对不上
 - `workflow_dispatch` 手动触发只构建、不发布
 - CI **不跑 AOB 字节级校验**（游戏 exe 不入库），兼容性以本地 `tools/precheck_aob.py` 的 25/25 为准
+- CI 工具链跟随 runner（当前 MSVC 14.51），本机 `build.bat` 固定在 14.44 ⇒ **两侧产出的二进制不是同一个**（节数、体积都不同）。代码同源，但 CI 产物不等于本地实测过的那一份，对外前建议本地抽验一次
 
 ## 使用
 
