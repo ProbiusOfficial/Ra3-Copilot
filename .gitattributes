@@ -21,6 +21,8 @@
 *.html text eol=lf
 *.css text eol=lf
 *.js text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 
 # 其余文本（无扩展名 / IDE 工程 / 构建脚本）显式 LF，
 # 否则 text=auto 在 Windows 上会按 native 检出成 CRLF

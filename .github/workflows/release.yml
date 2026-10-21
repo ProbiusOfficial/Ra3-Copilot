@@ -1,0 +1,129 @@
+name: Release
+
+# 打 tag 触发完整发版；手动触发只做构建验证，不创建 Release。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build x86 release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 游戏是 32 位进程，注入器与 DLL 必须同为 x86。
+      - name: Set up MSVC (x86)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      # build.bat 在本机绕开 vcvars 是因为 reg.exe 被安全策略拦；
+      # 这里工具链已由 vcvars 备好，用该变量跳过它自己的硬编码路径。
+      - name: Build
+        working-directory: ra3-copilot
+        env:
+          RA3_TOOLCHAIN_READY: "1"
+        shell: cmd
+        run: build.bat
+
+      - name: Check artifacts
+        shell: pwsh
+        run: |
+          $files = @(
+            'ra3-copilot/build_out/Ra3Copilot.exe',
+            'ra3-copilot/build_out/ra3copilot.dll',
+            'ra3-copilot/injector.exe'
+          )
+          $bad = $false
+          foreach ($f in $files) {
+            if (-not (Test-Path $f)) { Write-Error "缺少产物: $f"; $bad = $true; continue }
+            $len = (Get-Item $f).Length
+            if ($len -lt 10000) { Write-Error "产物异常偏小: $f ($len bytes)"; $bad = $true }
+            Write-Host ("  {0}  {1:N0} bytes" -f $f, $len)
+          }
+          if ($bad) { exit 1 }
+
+      - name: Check MCP server syntax
+        shell: pwsh
+        run: python -m py_compile ra3-copilot/mcp/ra3_mcp.py
+
+      - name: Check version matches tag
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $rc = Get-Content ra3-copilot/res/launcher.rc -Raw
+          $m = [regex]::Match($rc, 'FILEVERSION\s+(\d+),(\d+),(\d+)')
+          if (-not $m.Success) { Write-Error "launcher.rc 里读不到 FILEVERSION"; exit 1 }
+          $ver = "$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)"
+          if ($ver -ne $tag) {
+            Write-Warning "tag 是 $tag，但 launcher.rc 的 FILEVERSION 是 $ver —— exe 属性里的版本号会对不上"
+          } else {
+            Write-Host "版本一致: $ver"
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force stage | Out-Null
+          Copy-Item ra3-copilot/build_out/Ra3Copilot.exe stage/
+          Copy-Item ra3-copilot/build_out/ra3copilot.dll stage/
+          Copy-Item ra3-copilot/injector.exe stage/
+          @(
+            'Ra3-Copilot —— 红色警戒 3 日冕 Mod 作战辅助系统',
+            '',
+            'Ra3Copilot.exe   双击运行，自动识别游戏进程；面板内「注入修改器」',
+            'ra3copilot.dll   注入模块（热重载 / 开发用）',
+            'injector.exe     命令行注入器（开发用）',
+            '',
+            '要求：ra3_1.12.game v1.12.3444.25830（32 位）。hook 点硬编码于该版本，',
+            '      注入前做 AOB 字节级校验，不符拒绝挂载。',
+            '接口：注入后常驻监听 127.0.0.1:17832；INSERT 呼出面板。',
+            '',
+            '仅用于单机学习与研究。'
+          ) -join "`r`n" | Set-Content -Path stage/RELEASE.txt -Encoding UTF8
+          $zip = "Ra3Copilot-${{ github.ref_name }}-win-x86.zip"
+          Compress-Archive -Path stage/* -DestinationPath $zip -Force
+          Get-FileHash $zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $zip" } |
+            Set-Content -Path SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ra3-Copilot ${{ github.ref_name }}
+          files: |
+            Ra3Copilot-${{ github.ref_name }}-win-x86.zip
+            ra3-copilot/build_out/Ra3Copilot.exe
+            SHA256SUMS.txt
+          generate_release_notes: true
+          body: |
+            **适配基线**：`ra3_1.12.game` v1.12.3444.25830（32 位，日冕 Mod）。hook 点硬编码于该版本，
+            注入前执行 AOB 字节级校验，不符拒绝挂载。
+
+            **使用**：进入对局 → 双击 `Ra3Copilot.exe` → 「注入修改器」→ 游戏内 `INSERT` 呼出面板，
+            `Ctrl+F1` 加钱。注入即常驻监听 `127.0.0.1:17832`。
+
+            **CI 只验证可构建**：字节级兼容性以本地 `tools/precheck_aob.py` 对真实 exe 的预检为准
+            （当前基线 25/25 通过）。
+
+            仅用于单机学习与研究。
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-artifacts
+          path: |
+            ra3-copilot/build_out/*.map
+            ra3-copilot/build_log.txt
+          if-no-files-found: ignore

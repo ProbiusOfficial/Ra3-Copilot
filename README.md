@@ -49,6 +49,21 @@ python ra3-copilot\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
 rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ```
 
+## 发版
+
+打 tag 即由 GitHub Actions（`windows-latest`，vcvars x86 工具链）构建并发布：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+产物：`Ra3Copilot-<tag>-win-x86.zip`（启动器 + DLL + 注入器 + 说明）、单文件 `Ra3Copilot.exe`、`SHA256SUMS.txt`。
+
+- 版本号取自 `ra3-copilot/res/launcher.rc` 的 `FILEVERSION`；与 tag 不符时 CI 只告警，exe 属性里的版本会对不上
+- `workflow_dispatch` 手动触发只构建、不发布
+- CI **不跑 AOB 字节级校验**（游戏 exe 不入库），兼容性以本地 `tools/precheck_aob.py` 的 25/25 为准
+
 ## 使用
 
 1. 启动游戏并进入对局（遭遇战 / 战役均可）
@@ -108,7 +123,7 @@ rem 也可用环境变量 RA3_GAME_EXE 指定路径
 
 ## 仓库边界
 
-`main` 分支收录 **产品本体（`ra3-copilot/`）、单位代码研究（`unit-codes/`）与文档（`docs/`）**；
+`main` 分支收录 **产品本体（`ra3-copilot/`）、单位代码研究（`unit-codes/`）、文档（`docs/`）与发版工作流（`.github/`）**；
 官网源码在 `gh-pages` 分支，站点地址见上。
 
 游戏原始数据抽取物与第三方图鉴数据（`unit-codes/data/source/`）不随仓库分发，可由 `unit-codes/tools/` 自行重新生成。

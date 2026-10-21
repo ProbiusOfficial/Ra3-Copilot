@@ -13,6 +13,9 @@ rem ============================================================
 setlocal
 cd /d "%~dp0"
 
+rem CI sets RA3_TOOLCHAIN_READY=1 after vcvars; then the pinned paths below are skipped.
+if "%RA3_TOOLCHAIN_READY%"=="1" goto toolchain_ok
+
 set "MSVC=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207"
 set "SDK=C:\Program Files (x86)\Windows Kits\10"
 set "SDKV=10.0.22621.0"
@@ -29,6 +32,8 @@ if not exist "%SDK%\bin\%SDKV%\x86\rc.exe" (
 set "PATH=%SDK%\bin\%SDKV%\x86;%MSVC%\bin\Hostx86\x86;%PATH%"
 set "INCLUDE=%MSVC%\include;%SDK%\Include\%SDKV%\um;%SDK%\Include\%SDKV%\shared;%SDK%\Include\%SDKV%\ucrt;%SDK%\Include\%SDKV%\winrt"
 set "LIB=%MSVC%\lib\x86;%SDK%\Lib\%SDKV%\um\x86;%SDK%\Lib\%SDKV%\ucrt\x86"
+
+:toolchain_ok
 
 del /q *.obj >nul 2>&1
 if exist obj_mh rmdir /s /q obj_mh >nul 2>&1
