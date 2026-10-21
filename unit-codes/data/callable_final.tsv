@@ -409,3 +409,4 @@ faction	chinese_name	id	code_hex	primary	replaced_from
 帝国	机甲工厂核心	JapanWarFactoryEgg_Enhanced	0xDDCBCCF9	0	
 帝国	高阶机甲工厂核心	JapanWarFactoryEgg_T3_Enhanced	0xD173F397	0	
 未分类	莲灯	CelestialSonarBuoy	0xC4B86091	1	
+帝国	处刑大将军	JapanMechaKing	0x450BD734	1	

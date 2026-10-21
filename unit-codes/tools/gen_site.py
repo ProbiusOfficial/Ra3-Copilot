@@ -17,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVE = os.path.abspath(os.path.join(HERE, '..'))
 SRC = os.path.join(ARCHIVE, 'data', 'unit_codes_all.tsv')
 FINAL = os.path.join(ARCHIVE, 'data', 'callable_final.tsv')
+DROPPED = os.path.join(ARCHIVE, 'data', 'callable_dropped.tsv')
 OUTDIR = os.path.abspath(os.path.join(ARCHIVE, '..', 'site'))
 
 FAC_ORDER = {'神州': 0, '盟军': 1, '苏联': 2, '帝国': 3, '中立': 4, '平民': 5, '特殊': 6, '': 9}
@@ -48,16 +49,24 @@ def build_data_json(rows):
 
 
 def stats(rows):
+    # 可召唤清单与剔除清单都由 tools/filter_usable.py 产出，
+    # 页面上的「实测 N 条 → 剔除 M 条 → 剩 K 条」全部按当前数据现算，避免数据更新后正文对不上。
     n_final = 0
     if os.path.exists(FINAL):
         with io.open(FINAL, encoding='utf-8') as f:
             n_final = max(0, sum(1 for _ in f) - 1)
+    n_drop = 0
+    if os.path.exists(DROPPED):
+        with io.open(DROPPED, encoding='utf-8') as f:
+            n_drop = max(0, sum(1 for _ in f) - 1)
     return dict(
         n=len(rows),
         n_sum=sum(1 for r in rows if r['summonable'] == 'yes'),
         n_play=sum(1 for r in rows if r['kind_cn'] == '可玩对象(单位/建筑)'),
         n_cn=sum(1 for r in rows if r['chinese_name']),
         n_final=n_final,
+        n_drop=n_drop,
+        n_probe=n_final + n_drop,
     )
 
 
@@ -303,7 +312,7 @@ footer b{color:var(--dim)}
         <tr><td><code>SUMMONED</code>+<code>UNATTACKABLE</code></td><td>技能召唤的临时装置</td></tr>
         <tr><td>（无标志）</td><td>自杀 / 俯冲类特攻机</td></tr>
       </table>
-      <p>本次据此从 441 条实测清单里剔除 31 条，剩 <b>410 条</b>。</p>
+      <p>本次据此从 __PROBE__ 条实测清单里剔除 __DROP__ 条，剩 <b>__FINAL__ 条</b>。</p>
     </div>
   </div>
 </section>
@@ -521,6 +530,8 @@ def main():
 
     s = stats(rows)
     doc = (TEMPLATE
+           .replace('__PROBE__', str(s['n_probe']))
+           .replace('__DROP__', str(s['n_drop']))
            .replace('__N__', str(s['n']))
            .replace('__FINAL__', str(s['n_final']))
            .replace('__SUM__', str(s['n_sum']))
