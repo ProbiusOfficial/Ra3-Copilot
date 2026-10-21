@@ -20,6 +20,31 @@ int ActSetOwner();         // 收编敌方 / 复制到己方（归属改成本�
 int ActKillSelected();     // 摧毁选中
 int ActRank();             // 满级（调游戏 +0x35C200 单位升级）
 
+// ---- 无限弹药（真弹药字段，2026-10-20 实测定案）----
+// 结构（RA3 1.12.3444.25830，第三方 ra3-base 偏移 + 本机实测双向确认）：
+//   Thing + 0x37C        -> 武器模块（模块对象：+0x00 vtable / +0x04 ModuleData / +0x08 宿主 Thing）
+//   模块 + 0x24 / + 0x28 -> 武器槽指针数组 begin / end（每项 4 字节）
+//   槽   + 0xA4 (byte)   -> 该槽是否激活
+//   槽   + 0x94          -> 武器条目指针数组（固定 6 项）
+//   条目 + 0x1C (int)    -> 当前弹药：实测 3→2→1→0 后换弹回 3
+//   条目 + 0x08          -> 所属槽（回指校验用）
+// 写 0x7FFFFFFF 后单位持续开火、永不换弹（实测每发 -1、无崩溃）。
+// ⚠ 旧实现写 [Thing+0x1C]（那是 float 1.0），与弹药无关，且会写坏非武器对象。
+// 每帧由 UI 在开关打开时调用；返回本次真正写入的条目数。
+int AmmoFillSelected();
+// ---- 「赋予」语义（2026-10-20 探宝要求）----
+//   打开开关时把**当前选中**登记为常驻目标；之后即使取消选中，也一直给它补弹。
+//   目标靠 (Thing, 模板哈希) 双重识别：地址被回收给别的单位时哈希对不上 → 自动剔除。
+int  AmmoAddSelected();     // 把当前选中登记进常驻列表（幂等），返回新增个数
+int  AmmoAddThing(uintptr_t thing);  // 直接登记单个 Thing（幂等），1=新增 0=已存在/不合格
+int  AmmoTick();            // 维护常驻列表：补弹 + 剔除失效目标，返回仍存活的目标数
+void AmmoClearTargets();    // 清空常驻列表（单位未淘汰时无需调用）
+int  AmmoTargetCount();     // 常驻目标个数（UI 显示用）
+// 单个 Thing（内部含全套指针/结构校验）；entryOut 可空，返回写入条目数，-1=对象不合格
+int AmmoFill(uintptr_t thing, uintptr_t* entryOut, int maxOut);
+// 只读：读出该 Thing 的弹药条目数与当前值（诊断/自测用），返回条目数
+int AmmoQuery(uintptr_t thing, uintptr_t* entryOut, uint32_t* ammoOut, int maxOut);
+
 // ---- 单位状态（表驱动；作用于选中单位）----
 // 每个状态 =「若干 modifier」+「若干引擎 ObjectStatus」+ 可选的定身 / 易碎联动，
 //   全部经引擎函数施加与解除；**不写 Thing+0x0CC/0x26C/0x274**（引擎槽位内部字段，每帧自查自写）。
@@ -42,6 +67,8 @@ const char* UnitStatusTip(int kind);    // UI 悬浮说明
 // 召唤：按对象类型哈希在落点生成单位（落点=首个选中单位处，否则鼠标光标处）
 // owner：0=己方（本地玩家）
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name);
+// 海面折跃信标的兵种过滤（一次性，下一单生效后清除）：naval / air / amph；空或 "all" = 不过滤
+void SetSeaBeaconKind(const char* kind);
 // 带归属覆盖：teamOverride != 0 时用它当归属（可给敌方/任意玩家召唤），0 = 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name);
 // 最近一次召唤创建的对象（Thing 地址），返回个数（≤ max）—— 供"召唤后立刻对它操作"免去猜地址
@@ -126,6 +153,33 @@ uintptr_t ResolveTemplate(uint32_t hash);
 // 返回 LegalBuildCode：0 = 可建；-1 = 前置检查失败（看 last error）；-99 = 调用抛异常
 int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint32_t options);
 const char* BuildableLastError();
+
+// ---- 自动建筑摆放（A 路线：读样本 + 几何打分，引擎判定只做最终校验）----
+struct AutoPlaceCand {
+    float x, y, z;      // 世界坐标（z = 邻近建筑反距离加权插值）
+    float score;        // 综合得分 0..1
+    float dist;         // 到锚点（我方建筑质心）的平面距离
+    float gap;          // 到最近已有建筑的地面间距
+    float angleGap;     // 到最近同类建筑的方位角差（度）
+    char  note[56];     // 依据摘要
+};
+
+// 生成候选点（按得分降序，彼此互不重叠）。纯几何 —— 只用 battlefield 缓存，不调游戏函数，
+// HTTP 线程可安全调用。返回条数；0 = 无候选（原因写入 diag）。
+int AutoPlaceCandidates(uint32_t tmplHash, AutoPlaceCand* out, int max, char* diag, int cap);
+
+// 从候选里挑第一个通过引擎判定的点。⚠️ 内部调 BuildableAt → 只能渲染线程。
+// 返回 1 = 引擎认可；0 = 全部未通过（仍写出几何最优，diag 说明）；-1 = 无候选。
+int AutoPlacePick(const AutoPlaceCand* cands, int n, uint32_t tmplHash,
+                  float angle, float out[3], char* diag, int cap);
+
+// 建筑占地半径估算（米）。按模板名关键词查表，查不到用默认值。
+float BuildingFootprint(uint32_t hash);
+
+// 从单位表里按兵种随机取一个模板哈希。pool: naval|vehicle|infantry|air|structure|any
+// 用途：`/summon?pool=naval` —— 等价于「地面折跃信标」的投下即出，但兵种可控。
+// 返回 0 = 该兵种没有可召唤条目。
+uint32_t RandomUnitHash(const char* pool);
 
 // 最近一次召唤失败的具体原因（供 UI 显示）
 const char* SummonLastError();

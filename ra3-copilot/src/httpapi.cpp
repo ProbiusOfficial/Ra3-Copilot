@@ -188,6 +188,12 @@ static char g_scriptArgs[4][96];
 // 引擎里大量接口收的是 interned name key / const char*，没有这块就没法按名字查模板。
 static char g_strScratch[8][128];
 
+// 自动落点候选：几何在 HTTP 线程算（只读样本），引擎校验与召唤在渲染线程。
+// PostAndWaitN 串行化 → 两个线程不会同时碰这份缓冲。
+static ra3::AutoPlaceCand g_autoCand[4];
+static int  g_autoCandN = 0;
+static char g_autoDiag[256];
+
 // 在渲染线程里执行（由 HttpApiPump 调用）
 void ExecCmd(CmdSlot& c) {
     switch (c.fn) {
@@ -242,8 +248,8 @@ void ExecCmd(CmdSlot& c) {
                              "%s%08X", i ? "," : "", (unsigned)objs[i]);
         float lp[4] = { 0, 0, 0, 1 }; const char* lsrc = "?";
         LastSpawnPos(lp, &lsrc);
-        CmdReply("summon=%d objs=[%s] at=%.0f,%.0f,%.0f via=%s %s",
-                 ok ? 1 : 0, list, lp[0], lp[1], lp[2], lsrc, SummonLastError());
+        CmdReply("summon=%d hash=%08X objs=[%s] at=%.0f,%.0f,%.0f via=%s %s",
+                 ok ? 1 : 0, (unsigned)(uint32_t)c.a1, list, lp[0], lp[1], lp[2], lsrc, SummonLastError());
         break;
     }
     case 13: {   // 空投 idx count
@@ -484,6 +490,32 @@ void ExecCmd(CmdSlot& c) {
                                           g_scriptArgs[2][0] ? g_scriptArgs[2] : "<This Player>",
                                           o10, sizeof(o10));
         CmdReply("power r=%d %s", rs, o10);
+        break;
+    }
+    case 36: {  // 自动落点 + 召唤：a1=hash a2=count a3=teamOverride（候选已由 HTTP 线程算好）
+        const uint32_t h = (uint32_t)c.a1;
+        float p[3] = { 0.f, 0.f, 0.f };
+        char pd[256] = { 0 };
+        const int pick = AutoPlacePick(g_autoCand, g_autoCandN, h, 0.f, p, pd, sizeof(pd));
+        if (pick < 0) { CmdReply("fail auto-place: 无候选"); break; }
+        SetSummonPosOverride(true, p[0], p[1], p[2]);
+        const bool ok = SummonByHashFor(h, c.a2 > 0 ? c.a2 : 1,
+                                        (uintptr_t)(uint32_t)c.a3, false, "auto-place");
+        float lp[4] = { 0, 0, 0, 1 }; const char* lsrc = "?";
+        LastSpawnPos(lp, &lsrc);
+        CmdReply("summon=%d at=%.0f,%.0f,%.0f verified=%d | %s | scan: %s %s",
+                 ok ? 1 : 0, lp[0], lp[1], lp[2], pick, pd, g_autoDiag, SummonLastError());
+        break;
+    }
+    case 37: {  // 自动落点推荐（只给点，不召唤）：a1=hash
+        const uint32_t h = (uint32_t)c.a1;
+        float p[3] = { 0.f, 0.f, 0.f };
+        char pd[256] = { 0 };
+        const int pick = AutoPlacePick(g_autoCand, g_autoCandN, h, 0.f, p, pd, sizeof(pd));
+        if (pick < 0) { CmdReply("{\"ok\":0,\"why\":\"no-candidate\"}"); break; }
+        CmdReply("{\"ok\":1,\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"verified\":%d,"
+                 "\"candidates\":%d,\"pick\":\"%s\",\"scan\":\"%s\"}",
+                 p[0], p[1], p[2], pick, g_autoCandN, pd, g_autoDiag);
         break;
     }
     case 33: {  // upgrade: g_scriptArgs[0]=名字，a1=mode(2=Upgrade 1=PlayerTech)
@@ -729,12 +761,19 @@ void Handle(SOCKET c, char* req) {
             "POST /status?kind=&on=&sec=    单位状态：kind=ironcurtain(缺省)|invulnerable|speedup|slow|brittle|damageup\n"
             "                               （也认 0..5 数字；kind=reset 撤销全部状态+速度/血量还原）\n"
             "                               on=1 施加(默认) / 0 解除；sec=时长秒（默认 60）\n"
-            "POST /summon?hash=0x..&count=N[&owner=索引][&place=view|selection|cursor][&x=&y=&z=]\n"
+            "POST /summon?hash=0x..&count=N[&owner=索引][&place=view|selection|cursor|auto][&x=&y=&z=]\n"
             "                                按哈希召唤（owner 见 /snapshot）。落点：place 指定来源，\n"
-            "                                或给 x/y/z 指定坐标；都不给则按「落点来源」设置。回执带实际落点\n"
+            "                                auto = 按我方建筑自动选点（建造圈内、不重叠、不落水、\n"
+            "                                引擎判定通过）；或给 x/y/z 指定坐标；都不给则按「落点来源」设置。\n"
+            "                                回执带实际落点\n"
+            "POST /summon?pool=naval|vehicle|infantry|air|structure|any[&count=N]  按兵种随机召唤\n"
+            "                                忽略 hash；回执的 hash= 是实际抽中的模板\n"
             "POST /crate?idx=N&count=N      空投箱（idx 见「箱子」页签）\n"
-            "                                idx=54 空投仓·海：投种子，落地生成一排带海面外观的箱子，捡出海军\n"
-            "                                idx=55 空投仓·陆：投成品箱，原地叠放，捡出地面单位\n"
+            "                                idx=54 海面折跃信标：投下即播折跃动画，2~5 秒后落成随机海军/空军/两栖单位（13 选 1）\n"
+            "                                    可加 &kind=naval|air|amph 限定这一单的兵种（不给=全随机）\n"
+            "                                idx=55 地面折跃信标：落地即随机出地面单位（2~5 秒完成）\n"
+            "                                idx=56 空投仓·海·成品箱：直接投海面成品箱，不判地形\n"
+            "                                idx=57 空投仓：两栖仓，按地形分套，需同层单位靠近才结算\n"
             "POST /burst?hash=0x..[&x=&y=&z=|&place=view|selection|cursor][&delay=ms]\n"
             "                                箱子即爆：创建后下一帧自动击杀（效果=死亡开火）\n"
             "POST /toggle?f=N&on=0|1        功能开关（索引见 features.h）\n"
@@ -756,6 +795,7 @@ void Handle(SOCKET c, char* req) {
             "GET  /probe                      技能按钮锁定探针（hook 0xA7E9AB，只读）\n"
             "GET  /unlock?on=0|1              协议技能免「该阵营基地」前置（0x83B740 恒真）\n"
             "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
+            "GET  /place?hash=0x..           自动落点推荐（几何打分 + 引擎校验，不召唤）\n"
             "GET  /postproc?on=0|1          创建后处理链开关（让召唤物登记进玩家体系）\n"
             "POST /postproc?obj=0x..[&team=0x..&a=1&b=1]  对单个对象手动跑后处理（验证用）\n"
             "  ↳ 变更类请求可加 &ai=1：仅作遥测计数；接口恒开放（无闸门）\n"
@@ -791,6 +831,39 @@ void Handle(SOCKET c, char* req) {
         return;
     }
     // ---- 只读 RE：/peek ----
+    // 真弹药（WeaponContainer → 武器槽 → 武器条目）读/写。
+    //   GET|POST /ammo?addr=<Thing 地址>[&fill=1]
+    //   返回激活槽的条目地址与当前弹药；fill=1 按"见过的满值"立即补一次，
+    //   grant=1 把该 Thing 登记为常驻目标（开关打开时由 overlay 持续补弹，取消选中也保持）。
+    //   结构与偏移见 actions.h「无限弹药」段（2026-10-20 实测）。
+    if (strcmp(path, "/ammo") == 0) {
+        char ab[32] = { 0 };
+        GetParam(query, "addr", ab, sizeof(ab));
+        const uintptr_t th = (uintptr_t)strtoul(ab, nullptr, 0);
+        uintptr_t ents[12] = { 0 };
+        uint32_t ammo[12] = { 0 };
+        int n = AmmoQuery(th, ents, ammo, 12);
+        int filled = 0;
+        const int granted = GetParamInt(query, "grant", 0) > 0 ? AmmoAddThing(th) : 0;
+        if (GetParamInt(query, "fill", 0) > 0 && n > 0) {
+            filled = AmmoFill(th, nullptr, 0);
+            if (filled > 0) n = AmmoQuery(th, ents, ammo, 12);
+        }
+        char line[640];
+        _snprintf_s(line, sizeof(line), _TRUNCATE,
+                    "thing=%08X entries=%d filled=%d granted=%d targets=%d",
+                    (unsigned)th, n, filled, granted, AmmoTargetCount());
+        for (int i = 0; i < n && i < 12; ++i) {
+            const size_t used = strlen(line);
+            if (used + 40 >= sizeof(line)) break;
+            _snprintf_s(line + used, sizeof(line) - used, _TRUNCATE,
+                        " e%d=%08X:%u", i, (unsigned)ents[i], ammo[i]);
+        }
+        // ⚠ 这里必须用 HttpSend 直接回：CmdReply 是渲染线程命令回执（写 g_cmd.out，
+        //   由 PostAndWaitN 取走），在 Handle 里调它会静默落到末尾 404。
+        HttpSend(c, line, (int)strlen(line));
+        return;
+    }
     if (strcmp(path, "/peek") == 0) {
         char ab[32] = { 0 }, tb[16] = { 0 };
         GetParam(query, "addr", ab, sizeof(ab));
@@ -1036,6 +1109,24 @@ void Handle(SOCKET c, char* req) {
         GetParam(query, "hash", hb, sizeof(hb));
         args[0] = (int)strtoul(hb, nullptr, 0);
         args[1] = GetParamInt(query, "count", 1);
+        // pool=<兵种>：忽略 hash，从单位表按兵种随机抽一个（naval|vehicle|infantry|air|structure|any）。
+        // 与「地面折跃信标」同为投下即出，但兵种可控 —— 海面随机单位就用 pool=naval。
+        char poolb[24] = { 0 };
+        if (GetParam(query, "pool", poolb, sizeof(poolb))) {
+            const uint32_t ph = ra3::RandomUnitHash(poolb);
+            if (!ph) {
+                const char* m = "400 pool 无可用条目或名字不认识"
+                                "（naval|vehicle|infantry|air|structure|any）";
+                HttpSend(c, m, (int)strlen(m));
+                return;
+            }
+            args[0] = (int)ph;
+        }
+        // kind=naval|air|amph：只对海面折跃信标（0x38C0BC4A）生效 —— 限定这一单的兵种，取用即清
+        char kindb[16] = { 0 };
+        if (GetParam(query, "kind", kindb, sizeof(kindb)) &&
+            (uint32_t)args[0] == 0x38C0BC4Au)
+            SetSeaBeaconKind(kindb);
         // owner=<玩家索引> → 给该方召唤（缺省/0 = 本地玩家）。索引见 /snapshot 的 owners[].idx
         int teamOv = 0;
         if (GetParam(query, "owner", ob, sizeof(ob))) {
@@ -1051,18 +1142,33 @@ void Handle(SOCKET c, char* req) {
         }
         args[2] = teamOv;
         na = 3;
-        // 落点来源：?place=view|selection|cursor（一次性，下一单生效后清除）。
+        // 落点来源：?place=view|selection|cursor|auto（一次性，下一单生效后清除）。
         //   不给则按 UI 的「落点来源」设置（默认视野中心）。
         char plb[16] = { 0 };
+        bool autoPlace = false;
         if (GetParam(query, "place", plb, sizeof(plb))) {
-            const int m = (strcmp(plb, "view") == 0) ? 0
-                        : (strcmp(plb, "selection") == 0 || strcmp(plb, "selected") == 0) ? 1
-                        : (strcmp(plb, "cursor") == 0 || strcmp(plb, "mouse") == 0) ? 2 : -1;
-            if (m >= 0) SetSummonPlace(m);
+            if (strcmp(plb, "auto") == 0) {
+                // 自动落点：几何在 HTTP 线程算（只读样本），引擎校验与召唤一并投渲染线程。
+                g_autoCandN = ra3::AutoPlaceCandidates((uint32_t)args[0], g_autoCand, 4,
+                                                       g_autoDiag, sizeof(g_autoDiag));
+                if (g_autoCandN <= 0) {
+                    char m[352];
+                    _snprintf_s(m, sizeof(m), _TRUNCATE, "409 自动落点无候选：%s", g_autoDiag);
+                    HttpSend(c, m, (int)strlen(m));
+                    return;
+                }
+                fn = 36;
+                autoPlace = true;
+            } else {
+                const int m = (strcmp(plb, "view") == 0) ? 0
+                            : (strcmp(plb, "selection") == 0 || strcmp(plb, "selected") == 0) ? 1
+                            : (strcmp(plb, "cursor") == 0 || strcmp(plb, "mouse") == 0) ? 2 : -1;
+                if (m >= 0) SetSummonPlace(m);
+            }
         }
-        // 指定落点：?x=&y=&z=（给了 x 与 y 即以坐标为准）
+        // 指定落点：?x=&y=&z=（给了 x 与 y 即以坐标为准；place=auto 时忽略）
         char xb[32] = { 0 }, yb[32] = { 0 }, zb[32] = { 0 };
-        if (GetParam(query, "x", xb, sizeof(xb)) && GetParam(query, "y", yb, sizeof(yb))) {
+        if (!autoPlace && GetParam(query, "x", xb, sizeof(xb)) && GetParam(query, "y", yb, sizeof(yb))) {
             float px = strtof(xb, nullptr), py = strtof(yb, nullptr), pz = 0.0f;
             if (GetParam(query, "z", zb, sizeof(zb))) pz = strtof(zb, nullptr);
             SetSummonPosOverride(true, px, py, pz);
@@ -1095,6 +1201,10 @@ void Handle(SOCKET c, char* req) {
     }
     else if (strcmp(path, "/crate") == 0) {
         fn = 13; args[0] = GetParamInt(query, "idx", 0); args[1] = GetParamInt(query, "count", 1); na = 2;
+        // kind=naval|air|amph：仅 idx=54（海面折跃信标）有意义
+        char kb[16] = { 0 };
+        if (GetParam(query, "kind", kb, sizeof(kb)) && args[0] == 54)
+            SetSeaBeaconKind(kb);
     }
     else if (strcmp(path, "/toggle") == 0) {
         fn = 14; args[0] = GetParamInt(query, "f", -1); args[1] = GetParamInt(query, "on", 1); na = 2;
@@ -1257,6 +1367,26 @@ void Handle(SOCKET c, char* req) {
         args[4] = (int)*(uint32_t*)&ang;
         args[5] = (int)opts;
         na = 6;
+    } else if (strcmp(path, "/place") == 0) {
+        // 自动落点推荐（只选点，不召唤）：hash=0x..（目标建筑模板哈希）
+        fn = 37;
+        char hb3[24] = { 0 };
+        GetParam(query, "hash", hb3, sizeof(hb3));
+        args[0] = (int)strtoul(hb3, nullptr, 0);
+        if (!args[0]) {
+            const char* m = "400 需要 hash=（目标建筑模板哈希，见 /units）";
+            HttpSend(c, m, (int)strlen(m));
+            return;
+        }
+        g_autoCandN = ra3::AutoPlaceCandidates((uint32_t)args[0], g_autoCand, 4,
+                                               g_autoDiag, sizeof(g_autoDiag));
+        if (g_autoCandN <= 0) {
+            char m[352];
+            _snprintf_s(m, sizeof(m), _TRUNCATE, "409 自动落点无候选：%s", g_autoDiag);
+            HttpSend(c, m, (int)strlen(m));
+            return;
+        }
+        na = 1;
     } else if (strcmp(path, "/aidx") == 0) {
         // 脚本动作表按名字查 id：?name=PLAYER_GRANT_SPECIAL_POWER
         fn = 31;

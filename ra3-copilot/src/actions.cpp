@@ -19,6 +19,7 @@
 #include "symres.h"
 #include "units_corona.h"
 #include "aicmd.h"        // OrderAttack / OrderMoveTo / OrderIdle（/order 指挥单位）
+#include "battlefield.h"  // ScanLiveObjects（自动摆放的样本来源）
 #include <windows.h>
 #include <cstdio>
 #include <cmath>
@@ -989,6 +990,200 @@ int ActRank() {
     return n;
 }
 
+// ===================== 无限弹药（真弹药字段，2026-10-20 实测定案） =====================
+// 结构（RA3 1.12.3444.25830；用龙炎军 CelestialAntiInfantryInfantry / 0x51A8FBE1 实测）：
+//   Thing + 0x37C            = 武器模块（模块对象：+0x00 vtable / +0x04 ModuleData / +0x08 宿主 Thing）
+//   模块 + 0x24 / + 0x28     = 武器槽指针数组 begin / end（每项 4 字节；本机实测 3 槽）
+//   槽   + 0xA4 (byte)       = 激活标志（1 = 该槽在用）
+//   槽   + 0x94              = 武器条目指针数组（固定 6 项，空位为 0）
+//   条目 + 0x08              = 所属槽指针（回指校验，能排除认错结构）
+//   条目 + 0x1C (int)        = 当前弹药：实测开火 3→2→1→0，随即换弹回 3
+// 写回"见过的满值"后：单位持续开火、永不换弹（poke 0x7FFFFFFF 时实测每发 -1、无崩溃；
+//   改用满值是为了让选中面板的弹药比例正常，避免巨值在 UI 侧出事）。
+// 偏移来源：第三方开源 base 工程的符号表，本机逐层读内存确认全部成立。
+// ⚠ 旧实现写 [Thing+0x1C] —— 那是一个 float 1.0，与弹药无关，且对非武器对象会写坏结构。
+constexpr uint32_t OFF_WCONTAINER = 0x37C;
+constexpr uint32_t OFF_WS_BEGIN   = 0x24;
+constexpr uint32_t OFF_WS_END     = 0x28;
+constexpr uint32_t OFF_WS_HOST    = 0x08;
+constexpr uint32_t OFF_WS_ENTRIES = 0x94;
+constexpr uint32_t OFF_WS_ACTIVE  = 0xA4;
+constexpr uint32_t OFF_WE_SLOT    = 0x08;
+constexpr uint32_t OFF_WE_AMMO    = 0x1C;
+constexpr int      WE_COUNT       = 6;
+constexpr uint32_t AMMO_FULL      = 0x7FFFFFFFu;
+constexpr uint32_t AMMO_ALREADY   = 0x40000000u;   // 现值 >= 这个 ⇒ 已是巨值（不碰，也不当满值学）
+constexpr uint32_t AMMO_PLAUSIBLE = 0x00100000u;   // 现值 <= 这个才算"像弹药计数"
+
+// 每个弹药条目"见过的最满值"。
+//   为什么不直接写 0x7FFFFFFF：选中面板会拿弹药算比例，巨值容易在 UI 侧出事
+//   （2026-10-20 11:10 那次崩溃点正是选中面板绘制链，ESI 被传成 0x20）。
+//   写回"见过的满值"则显示/比例全正常，效果一样是永不空弹、永不换弹。
+//   条目地址可能被回收复用，但缓存里存的是个小整数，即使串了也只是"补到某个小值"，无害。
+struct AmmoBak { uintptr_t entry; uint32_t max; };
+constexpr int kAmmoBakMax = 256;
+AmmoBak g_ammoBak[kAmmoBakMax] = {};
+int     g_ammoBakNext = 0;
+
+uint32_t* AmmoBakFind(uintptr_t e) {
+    if (!e) return nullptr;
+    for (int i = 0; i < kAmmoBakMax; ++i)
+        if (g_ammoBak[i].entry == e) return &g_ammoBak[i].max;
+    return nullptr;
+}
+uint32_t AmmoBakMax(uintptr_t e, uint32_t seen) {
+    if (uint32_t* p = AmmoBakFind(e)) { if (seen > *p) *p = seen; return *p; }
+    g_ammoBak[g_ammoBakNext].entry = e;
+    g_ammoBak[g_ammoBakNext].max = seen;
+    g_ammoBakNext = (g_ammoBakNext + 1) % kAmmoBakMax;
+    return seen;
+}
+
+// 只读遍历：把该 Thing 的激活槽条目地址与弹药值读出来（诊断/自测）
+int AmmoQuery(uintptr_t thing, uintptr_t* entryOut, uint32_t* ammoOut, int maxOut) {
+    if (!thing || !LooksLikeGameObject(thing)) return -1;
+    uint32_t cont = 0;
+    if (!SafeRead32(thing + OFF_WCONTAINER, cont) || !cont) return 0;
+    if (!IsMemOk(cont, 0x30, false)) return 0;
+    uint32_t host = 0;
+    if (!SafeRead32(cont + OFF_WS_HOST, host) || host != static_cast<uint32_t>(thing)) return 0;
+    uint32_t b = 0, e = 0;
+    if (!SafeRead32(cont + OFF_WS_BEGIN, b) || !SafeRead32(cont + OFF_WS_END, e)) return 0;
+    if (!b || !e || e <= b) return 0;
+    const uint32_t span = e - b;
+    if ((span & 3) || span > 0x100 || !IsMemOk(b, span, false)) return 0;
+    int found = 0;
+    for (uint32_t i = 0; i < span / 4; ++i) {
+        uint32_t slot = 0;
+        if (!SafeRead32(b + i * 4, slot) || !slot) continue;
+        if (!IsMemOk(slot, OFF_WS_ACTIVE + 1, false)) continue;
+        uint8_t active = 0;
+        if (!SafeReadBytes(slot + OFF_WS_ACTIVE, &active, 1) || !active) continue;
+        uint32_t ents = 0;
+        if (!SafeRead32(slot + OFF_WS_ENTRIES, ents) || !ents) continue;
+        if (!IsMemOk(ents, WE_COUNT * 4, false)) continue;
+        for (int k = 0; k < WE_COUNT; ++k) {
+            uint32_t ent = 0;
+            if (!SafeRead32(ents + k * 4, ent) || !ent) continue;
+            if (!IsMemOk(ent, OFF_WE_AMMO + 4, false)) continue;
+            uint32_t back = 0;
+            if (!SafeRead32(ent + OFF_WE_SLOT, back) || back != slot) continue;
+            uint32_t ammo = 0;
+            if (!SafeRead32(ent + OFF_WE_AMMO, ammo)) continue;
+            if (found < maxOut) {
+                if (entryOut) entryOut[found] = ent;
+                if (ammoOut) ammoOut[found] = ammo;
+            }
+            ++found;
+        }
+    }
+    return found;
+}
+
+int AmmoFill(uintptr_t thing, uintptr_t* entryOut, int maxOut) {
+    uintptr_t ents[WE_COUNT * 8];
+    uint32_t ammo[WE_COUNT * 8];
+    const int n = AmmoQuery(thing, ents, ammo, WE_COUNT * 8);
+    if (n <= 0) return n;                 // -1 对象不合格 / 0 没有激活武器
+    int filled = 0;
+    for (int i = 0; i < n && i < WE_COUNT * 8; ++i) {
+        // 现值必须是"像弹药的小计数"。巨值（曾经被写成 0x7FFFFFFF 的）不碰：
+        //   既不能当满值学，也不重复写 —— 让它自己打空换弹后回到正常计数再接管。
+        if (ammo[i] >= AMMO_ALREADY) continue;
+        if (ammo[i] > AMMO_PLAUSIBLE) { ++g_guardSkip; continue; }
+        const uint32_t full = AmmoBakMax(ents[i], ammo[i]);
+        if (ammo[i] >= full) continue;    // 还满着，不用写
+        if (!SafeWrite32(ents[i] + OFF_WE_AMMO, full)) continue;
+        if (entryOut && filled < maxOut) entryOut[filled] = ents[i];
+        ++filled;
+    }
+    return filled;
+}
+
+int AmmoFillSelected() {
+    SelIter it;
+    if (!SelBegin(it)) return 0;
+    int total = 0;
+    uintptr_t obj;
+    int guard = 0;
+    while ((obj = SelNext(it)) != 0 && guard++ < 64) {
+        uintptr_t th = BodyOf(obj);
+        if (!th) th = obj;
+        int r = AmmoFill(th, nullptr, 0);
+        if (r > 0) total += r;
+    }
+    return total;
+}
+
+// ---- 「赋予」语义：常驻目标列表 ----
+// 开关打开 → 当前选中登记；之后取消选中也继续补弹（探宝 2026-10-20 明确要求）。
+// 识别用 (Thing, 模板哈希)：Thing 地址被回收给别的单位时哈希对不上，直接剔除。
+struct AmmoTarget { uint32_t thing; uint32_t hash; };
+constexpr int kAmmoTargetMax = 256;
+AmmoTarget g_ammoTargets[kAmmoTargetMax] = {};
+int         g_ammoTargetN = 0;
+
+uint32_t ThingHashOf(uintptr_t th) {
+    uint32_t tmpl = 0, h = 0;
+    if (!SafeRead32(th + 0x04, tmpl) || !tmpl) return 0;
+    if (!SafeRead32(tmpl + 0x08, h)) return 0;
+    return h;
+}
+
+int AmmoAddThing(uintptr_t th) {
+    if (!th || !LooksLikeGameObject(th)) return 0;
+    const uint32_t h = ThingHashOf(th);
+    if (!h) return 0;
+    for (int i = 0; i < g_ammoTargetN; ++i)
+        if (g_ammoTargets[i].thing == static_cast<uint32_t>(th)) return 0;
+    if (g_ammoTargetN >= kAmmoTargetMax) return 0;
+    g_ammoTargets[g_ammoTargetN].thing = static_cast<uint32_t>(th);
+    g_ammoTargets[g_ammoTargetN].hash = h;
+    ++g_ammoTargetN;
+    R3_LOG(0, "[弹药] 赋予 0x%08X（模板 %08X），目标数=%d", (unsigned)th, h, g_ammoTargetN);
+    return 1;
+}
+
+int AmmoAddSelected() {
+    SelIter it;
+    if (!SelBegin(it)) return 0;
+    int added = 0, guard = 0;
+    uintptr_t obj;
+    while ((obj = SelNext(it)) != 0 && guard++ < 64) {
+        uintptr_t th = BodyOf(obj);
+        if (!th) th = obj;
+        added += AmmoAddThing(th);
+        if (g_ammoTargetN >= kAmmoTargetMax) break;
+    }
+    return added;
+}
+
+int AmmoTick() {
+    int alive = 0;
+    for (int i = 0; i < g_ammoTargetN; ) {
+        AmmoTarget& t = g_ammoTargets[i];
+        const uintptr_t th = t.thing;
+        bool ok = false;
+        if (LooksLikeGameObject(th) && ThingHashOf(th) == t.hash) {
+            AmmoFill(th, nullptr, 0);      // 内部自带结构校验与满值缓存
+            ok = true;
+        }
+        if (ok) { ++alive; ++i; }
+        else {
+            R3_LOG(0, "[弹药] 剔除失效目标 0x%08X", (unsigned)th);
+            g_ammoTargets[i] = g_ammoTargets[--g_ammoTargetN];
+        }
+    }
+    return alive;
+}
+
+void AmmoClearTargets() {
+    if (g_ammoTargetN) R3_LOG(0, "[弹药] 清空目标（原 %d 个）", g_ammoTargetN);
+    g_ammoTargetN = 0;
+}
+
+int AmmoTargetCount() { return g_ammoTargetN; }
+
 // ===================== 创建后处理链（2026-10-15） =====================
 // 背景（探宝实测）：召唤出来的单位**小地图图标是空心的**（= 没登记进玩家体系），
 //   交战一会儿之后图标会自己变成实心（= 游戏在别的路径上把它补登记了）。
@@ -1120,6 +1315,76 @@ void SetSummonPosOverride(bool on, float x, float y, float z) {
     InterlockedExchange(&g_summonOvSet, on ? 1 : 0);
 }
 
+// ===================== 海面折跃信标（DLL 侧补的海面版）=====================
+// 地面「折跃信标」= 原生模板 UnitCrateDummy：引擎把它替换成一个随机 XXXDummySeed，
+//   种子自己播折跃动画（那道蓝色光柱/烟雾）并在 2~5 s 后变成实际单位。
+// 海面侧没有「投下即结算」的仓模板（OnSeaUnitCrateDummySeed 要等同层单位进入半径，见 research/crates/07 §四），
+//   但海军的 XXXDummySeed **本身走的就是同一条原生链**（实测 2.5~4 s 自行变单位）⇒
+//   海面版直接投种子即可：动画、节奏、结算全部由引擎完成，不再另设延迟队列。
+// 哨兵哈希：kCrates 的「海面折跃信标」用 0x38C0BC4A —— /resolve 实测返回 0，不与任何真实模板冲突。
+constexpr uint32_t H_NAVAL_BEACON = 0x38C0BC4Au;
+
+// 海面折跃信标池 = 海军 + 空军 + 两栖载具（投下即播折跃动画，2~5 s 后自行落成单位）。
+// 只收「投到海面仍然成立」的兵种：纯陆地载具/步兵投水面会浮着，看着就是穿帮，一律不收。
+// 依据：全服只有 40 个 *DummySeed 模板，逐个实测后以下 13 个可用（每投 me.units +1）。
+// 剔除：巨舰容不下、Gull 无产物；BMPT（载具）与勘察飞轮（步兵）是纯陆地单位，已踢出。
+static const struct { uint32_t hash; const char* name; const char* kind; } kSeaSeeds[] = {
+    // ---- naval：海军 ----
+    { 0x616C5D56u, "AlliedThetisBattleShipDummySeed",                  "naval" },  // 忒提斯战列舰
+    { 0xB6E90AB2u, "AlliedLandingCraftAirCushionDummySeed",            "naval" },  // 气垫登陆舰
+    { 0xD7C6DF0Fu, "CelestialSeized_JapanAntiNavyShipTech3DummySeed",  "naval" },  // 一式磁轨炮重巡
+    { 0x842EE444u, "JapanYumiAircraftCarrierDummySeed",                "naval" },  // 千鸟特攻母舰
+    // ---- air：空军（投哪都成立）----
+    { 0x5E60D63Bu, "AlliedAvengerAttackAircraftDummySeed",             "air" },    // 复仇者攻击机
+    { 0x4E0CB30Bu, "AlliedNightinaleHelicopterDummySeed",              "air" },    // 夜莺直升机
+    { 0x6EC3B42Du, "AlliedSupportAircraftDummySeed",                   "air" },    // 冰冻直升机
+    { 0x40B77127u, "CelestialSupportAircraftDummySeed",                "air" },    // 毕方支援机
+    { 0x5053914Bu, "WinterArmyKoelAttackUAVDummySeed",                 "air" },    // 蜂鸟侦查无人机
+    // ---- amph：两栖载具（水陆都能跑）----
+    { 0x6D8F9A73u, "CelestialWaveriderIFV_WaterDummySeed",             "amph" },   // 凌波护卫战车
+    { 0x3D7CD359u, "CelestialWaveriderIFV_ATGMDummySeed",              "amph" },   // 青锋两栖导弹战车
+    { 0xD7C548C2u, "CelestialWaveriderIFV_DragonBreatheDummySeed",     "amph" },   // 凌波龙息炮重型战车
+    { 0x5833F7EEu, "CelestialWaveriderIFV_MortarDummySeed",            "amph" },   // 凌波火力支援战车
+};
+static const int kSeaSeedCount = (int)(sizeof(kSeaSeeds) / sizeof(kSeaSeeds[0]));
+
+// kind 过滤（一次性：设了之后下一单生效，取用即清）。空/"all" = 不过滤。
+static char            g_seaKind[10] = { 0 };
+static volatile LONG   g_seaKindSet = 0;
+
+void SetSeaBeaconKind(const char* k) {
+    if (!k || !k[0] || _stricmp(k, "all") == 0) {
+        InterlockedExchange(&g_seaKindSet, 0);
+        return;
+    }
+    strncpy_s(g_seaKind, k, _TRUNCATE);
+    InterlockedExchange(&g_seaKindSet, 1);
+}
+
+// 抽一个种子并直接创建 —— 折跃动画与结算全部由引擎完成
+static bool SummonNavalBeacon(int count, bool atMouse) {
+    char want[10] = { 0 };
+    if (InterlockedCompareExchange(&g_seaKindSet, 0, 1) == 1)
+        strncpy_s(want, g_seaKind, _TRUNCATE);
+
+    int pick[16];
+    int n = 0;
+    for (int i = 0; i < kSeaSeedCount && n < 16; ++i) {
+        if (want[0] && _stricmp(want, kSeaSeeds[i].kind) != 0) continue;
+        pick[n++] = i;
+    }
+    if (n <= 0) {
+        SetErr("kind 没有匹配的种子（naval / air / amph / all）");
+        return false;
+    }
+
+    static uint32_t ctr = 0;
+    uint32_t seed = GetTickCount() ^ (++ctr * 2654435761u);
+    seed ^= seed >> 13; seed *= 0x5bd1e995u; seed ^= seed >> 15;
+    const auto& s = kSeaSeeds[pick[seed % (uint32_t)n]];
+    return SummonByHashFor(s.hash, count, 0, atMouse, s.name);
+}
+
 // 最近一次召唤/复制**实际用到的**落点与来源。供 /summon 回执 ——
 // 调用方（尤其 AI）能立刻看出"这一单投到哪了"，而不是拿到一个 ok 却不知道落点。
 void LastSpawnPos(float out[4], const char** src) {
@@ -1154,6 +1419,8 @@ int SpawnPointJson(char* buf, int n, int kind) {
 
 bool SummonByHash(uint32_t hash, int count, int owner, bool atMouse, const char* name) {
     (void)owner;
+    // 海面折跃信标：虚拟条目，没有真实模板 —— 抽一个海军 DummySeed 直接投，引擎自己播折跃动画后变单位
+    if (hash == H_NAVAL_BEACON) return SummonNavalBeacon(count, atMouse);
     return SummonByHashFor(hash, count, 0, atMouse, name);
 }
 
@@ -1167,6 +1434,8 @@ int LastCreatedObjs(uintptr_t* out, int max) {
 // teamOverride != 0 → 用指定"队伍对象"当归属（可给敌方/任意玩家召唤）；0 → 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name) {
     (void)name;
+    // 海面折跃信标：虚拟条目，没有真实模板 —— 抽海军 DummySeed 直接投（归属固定本地玩家）
+    if (hash == H_NAVAL_BEACON) return SummonNavalBeacon(count, atMouse);
     SetErr("");
     if (g_noGameCall) { SetErr("已开启「禁用游戏函数调用」，召唤被跳过（更安全）"); return false; }
     if (count < 1) count = 1;
@@ -1561,6 +1830,273 @@ int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint3
     return r;
 }
 
+// ===================== 自动建筑摆放（A 路线：读样本 + 几何打分）=====================
+// 依据 docs/AI建筑摆放-研究方向.md §四。分工：
+//   几何全在 AutoPlaceCandidates（只用 battlefield 缓存，HTTP 线程可跑）；
+//   引擎判定只在 AutoPlacePick（调 BuildableAt → 必须渲染线程）。
+// 为什么自己插值 z：地形高度没有稳定可调的接口，同区域建筑高度接近，
+//   反距离加权足够让落点不浮空/不埋地；真值由 BuildableAt 与实机放置收敛。
+namespace {
+
+const char* TemplateIdForHash(uint32_t hash) {
+    for (int i = 0; i < kSupportUnitCount; ++i)
+        if (kSupportUnits[i].hash == hash) return kSupportUnits[i].id;
+    for (int i = 0; i < kCrateCount; ++i)
+        if (kCrates[i].hash == hash) return kCrates[i].id;
+    return nullptr;
+}
+
+const char* DisplayNameForHash(uint32_t hash) {
+    for (int i = 0; i < kSupportUnitCount; ++i)
+        if (kSupportUnits[i].hash == hash) return kSupportUnits[i].name;
+    for (int i = 0; i < kCrateCount; ++i)
+        if (kCrates[i].hash == hash) return kCrates[i].name;
+    return nullptr;
+}
+
+// 模板名关键词 → 占地半径（米）。查不到再按中文名猜，最后落到默认值。
+float FootprintFromNames(const char* id, const char* name) {
+    static const struct { const char* key; float r; } kTab[] = {
+        { "ConstructionYard", 46.f }, { "CommandCenter", 46.f },
+        { "NavalYard", 48.f },        { "Shipyard", 48.f },
+        { "Airfield", 44.f },
+        { "Refinery", 34.f },
+        { "SuperWeapon", 30.f },
+        { "PowerPlant", 26.f },
+        { "OutPost", 20.f },
+        { "Tower", 15.f }, { "Turret", 15.f }, { "Defense", 17.f },
+        { "Barrier", 12.f },
+    };
+    if (id) {
+        for (const auto& e : kTab)
+            if (strstr(id, e.key)) return e.r;
+    }
+    if (name) {
+        if (strstr(name, u8"殿") || strstr(name, u8"基地") || strstr(name, u8"总部")) return 46.f;
+        if (strstr(name, u8"机场") || strstr(name, u8"航台")) return 44.f;
+        if (strstr(name, u8"船坞") || strstr(name, u8"码头")) return 48.f;
+        if (strstr(name, u8"矿") || strstr(name, u8"精炼")) return 34.f;
+        if (strstr(name, u8"电厂") || strstr(name, u8"电站") || strstr(name, u8"亭")) return 26.f;
+        if (strstr(name, u8"塔") || strstr(name, u8"炮") || strstr(name, u8"铳台")) return 15.f;
+    }
+    return 25.f;
+}
+
+// 反距离加权插值地形高度（1/d²，最近点主导）
+float InterpZ(const BattleLiveObj* o, int n, float x, float y) {
+    float wsum = 0.f, zsum = 0.f;
+    for (int i = 0; i < n; ++i) {
+        const float dx = o[i].x - x, dy = o[i].y - y;
+        const float d2 = dx * dx + dy * dy + 1.f;
+        const float w = 1.f / d2;
+        wsum += w;
+        zsum += w * o[i].z;
+    }
+    return (wsum > 0.f) ? (zsum / wsum) : 0.f;
+}
+
+} // namespace
+
+float BuildingFootprint(uint32_t hash) {
+    return FootprintFromNames(TemplateIdForHash(hash), DisplayNameForHash(hash));
+}
+
+// 兵种池随机：只取基准形态（primary=1），避免抽到 _Water / _EMC 这类形态变体。
+// 种子不用 rand()：DLL 没调 srand，rand() 每次进程启动序列相同，连续抽会重复。
+uint32_t RandomUnitHash(const char* pool) {
+    static const struct { const char* key; const char* type; } kPool[] = {
+        { "naval", u8"海军" }, { "sea", u8"海军" }, { "ship", u8"海军" },
+        { "vehicle", u8"载具" }, { "tank", u8"载具" },
+        { "infantry", u8"步兵" },
+        { "air", u8"空军" }, { "aircraft", u8"空军" },
+        { "structure", u8"建筑" }, { "building", u8"建筑" },
+    };
+    const char* want = nullptr;
+    if (pool && pool[0] && _stricmp(pool, "any") != 0) {
+        for (const auto& p : kPool)
+            if (_stricmp(pool, p.key) == 0) { want = p.type; break; }
+        if (!want) return 0;      // 池名不认识就明确失败，别静默退化成全随机
+    }
+
+    uint32_t picks[512];
+    int n = 0;
+    for (int i = 0; i < kSupportUnitCount && n < 512; ++i) {
+        if (!kSupportUnits[i].primary) continue;
+        if (want && strcmp(kSupportUnits[i].type, want) != 0) continue;
+        picks[n++] = kSupportUnits[i].hash;
+    }
+    if (n <= 0) return 0;
+
+    static uint32_t ctr = 0;
+    uint32_t seed = GetTickCount() ^ (++ctr * 2654435761u);
+    seed ^= seed >> 13; seed *= 0x5bd1e995u; seed ^= seed >> 15;
+    return picks[seed % (uint32_t)n];
+}
+
+int AutoPlaceCandidates(uint32_t tmplHash, AutoPlaceCand* out, int max, char* diag, int cap) {
+    if (diag && cap > 0) diag[0] = 0;
+    if (!out || max <= 0) return 0;
+
+    static BattleLiveObj objs[480];
+    const int nObj = ScanLiveObjects(objs, 480, nullptr, -1, -1, 1 /*cat=建筑*/, false);
+    if (nObj <= 0) {
+        if (diag) _snprintf_s(diag, cap, _TRUNCATE, "没有建筑样本（对局未就绪？先 GET /objects?fresh=1）");
+        return 0;
+    }
+
+    // 锚点 = 我方建筑质心；我方一个建筑都没有则退回全部建筑质心
+    float ax = 0.f, ay = 0.f; int nLocal = 0;
+    float allX = 0.f, allY = 0.f;
+    float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f;
+    for (int i = 0; i < nObj; ++i) {
+        allX += objs[i].x; allY += objs[i].y;
+        if (objs[i].x < minX) minX = objs[i].x;
+        if (objs[i].x > maxX) maxX = objs[i].x;
+        if (objs[i].y < minY) minY = objs[i].y;
+        if (objs[i].y > maxY) maxY = objs[i].y;
+        if (objs[i].isLocal) { ax += objs[i].x; ay += objs[i].y; ++nLocal; }
+    }
+    if (nLocal > 0) { ax /= nLocal; ay /= nLocal; }
+    else { ax = allX / nObj; ay = allY / nObj; }
+
+    // 建造圈半径 = 我方建筑到锚点距离的 P90（样本 <3 用默认 300，夹在 [180, 620]）
+    float radius = 300.f;
+    {
+        float d[480]; int k = 0;
+        for (int i = 0; i < nObj && k < 480; ++i) {
+            if (!objs[i].isLocal) continue;
+            const float dx = objs[i].x - ax, dy = objs[i].y - ay;
+            const float dd = sqrtf(dx * dx + dy * dy);
+            if (dd > 40.f) d[k++] = dd;
+        }
+        if (k >= 3) {
+            for (int i = 1; i < k; ++i) {          // 插入排序（样本量小）
+                const float v = d[i]; int j = i - 1;
+                while (j >= 0 && d[j] > v) { d[j + 1] = d[j]; --j; }
+                d[j + 1] = v;
+            }
+            radius = d[(int)(k * 0.9f) - 1];
+        }
+        if (radius < 180.f) radius = 180.f;
+        if (radius > 620.f) radius = 620.f;
+    }
+
+    const float fpT = BuildingFootprint(tmplHash);
+    static AutoPlaceCand cand[400];
+    int nc = 0, rejGap = 0, rejWater = 0;
+    static const float kFrac[] = { 0.42f, 0.58f, 0.72f, 0.86f, 0.95f };
+
+    for (int ri = 0; ri < 5; ++ri) {
+        const float rr = radius * kFrac[ri];
+        for (int ai = 0; ai < 24; ++ai) {
+            const float ang = (float)ai * 6.2831853f / 24.f;
+            const float x = ax + cosf(ang) * rr;
+            const float y = ay + sinf(ang) * rr;
+
+            // 硬过滤 1：与已有建筑的地面间距（两个外接半径之和即不重叠下限）
+            float nearGap = 1e9f;
+            for (int i = 0; i < nObj; ++i) {
+                const float dx = objs[i].x - x, dy = objs[i].y - y;
+                const float d = sqrtf(dx * dx + dy * dy);
+                const float g = d - (fpT + BuildingFootprint(objs[i].hash));
+                if (g < nearGap) nearGap = g;
+            }
+            if (nearGap < 0.f) { ++rejGap; continue; }
+
+            // 硬过滤 2：插值地形高度（< 1.0 = 水面）
+            const float z = InterpZ(objs, nObj, x, y);
+            if (z < 1.0f) { ++rejWater; continue; }
+
+            // 打分：方位均分 > 环带 > 间距富余 > 边缘留白
+            float bestAng = 3.1415927f;
+            bool sameType = false;
+            for (int i = 0; i < nObj; ++i) {
+                if (objs[i].hash != tmplHash) continue;
+                const float dx = objs[i].x - ax, dy = objs[i].y - ay;
+                if (dx * dx + dy * dy < 1.f) continue;
+                sameType = true;
+                float diff = fabsf(atan2f(dy, dx) - ang);
+                if (diff > 3.1415927f) diff = 6.2831853f - diff;
+                if (diff < bestAng) bestAng = diff;
+            }
+            const float sAngle = sameType ? ((bestAng / 1.5707963f > 1.f) ? 1.f : bestAng / 1.5707963f) : 0.5f;
+            const float dev = (rr / radius - 0.72f) / 0.16f;
+            const float sRing = expf(-0.5f * dev * dev);
+            float sGap = nearGap / (fpT + 30.f);
+            if (sGap > 1.f) sGap = 1.f;
+            const float e1 = (x - minX < maxX - x) ? (x - minX) : (maxX - x);
+            const float e2 = (y - minY < maxY - y) ? (y - minY) : (maxY - y);
+            const float edge = (e1 < e2) ? e1 : e2;
+            float sEdge = edge / 160.f;
+            if (sEdge > 1.f) sEdge = 1.f;
+
+            AutoPlaceCand c;
+            c.x = x; c.y = y; c.z = z;
+            c.score = 0.35f * sAngle + 0.25f * sRing + 0.25f * sGap + 0.15f * sEdge;
+            c.dist = rr;
+            c.gap = nearGap;
+            c.angleGap = bestAng * 57.29578f;
+            _snprintf_s(c.note, sizeof(c.note), _TRUNCATE,
+                        "%.2fR/角隙%.0f°/间距+%.0f", rr / radius, c.angleGap, nearGap);
+            if (nc < 400) cand[nc++] = c;
+        }
+    }
+
+    if (nc <= 0) {
+        if (diag) _snprintf_s(diag, cap, _TRUNCATE,
+                              "无候选（间距淘汰 %d / 水面淘汰 %d，半径 %.0f）", rejGap, rejWater, radius);
+        return 0;
+    }
+
+    // 按分数降序（插入排序）
+    for (int i = 1; i < nc; ++i) {
+        const AutoPlaceCand v = cand[i]; int j = i - 1;
+        while (j >= 0 && cand[j].score < v.score) { cand[j + 1] = cand[j]; --j; }
+        cand[j + 1] = v;
+    }
+
+    // 取前 max 个，且彼此仍要留出间距（否则 top3 会挤在同一块空地上）
+    int nOut = 0;
+    for (int i = 0; i < nc && nOut < max; ++i) {
+        bool clash = false;
+        for (int j = 0; j < nOut; ++j) {
+            const float dx = cand[i].x - out[j].x, dy = cand[i].y - out[j].y;
+            if (sqrtf(dx * dx + dy * dy) < fpT * 2.f) { clash = true; break; }
+        }
+        if (clash) continue;
+        out[nOut++] = cand[i];
+    }
+
+    if (diag) _snprintf_s(diag, cap, _TRUNCATE,
+                          "锚点 %.0f,%.0f 半径 %.0f 样本 %d(我方 %d) 候选 %d 入选 %d 淘汰[间距%d 水面%d]",
+                          ax, ay, radius, nObj, nLocal, nc, nOut, rejGap, rejWater);
+    return nOut;
+}
+
+int AutoPlacePick(const AutoPlaceCand* cands, int n, uint32_t tmplHash,
+                  float angle, float out[3], char* diag, int cap) {
+    if (diag && cap > 0) diag[0] = 0;
+    if (!cands || n <= 0 || !out) return -1;
+
+    int lastCode = 0;
+    for (int i = 0; i < n && i < 4; ++i) {
+        const int r = BuildableAt(cands[i].x, cands[i].y, cands[i].z, tmplHash, angle, 0x1A20);
+        lastCode = r;
+        if (r == 0) {
+            out[0] = cands[i].x; out[1] = cands[i].y; out[2] = cands[i].z;
+            if (diag) _snprintf_s(diag, cap, _TRUNCATE,
+                                  "候选#%d 引擎认可（%s）", i + 1, cands[i].note);
+            return 1;
+        }
+    }
+    // 引擎判定全部不通过：仍交付几何最优，但明确标注未验证
+    out[0] = cands[0].x; out[1] = cands[0].y; out[2] = cands[0].z;
+    if (diag) _snprintf_s(diag, cap, _TRUNCATE,
+                          "%d 个候选均未通过引擎判定（末次 code=%d %s），退回几何最优（%s）",
+                          n, lastCode, BuildableLastError(), cands[0].note);
+    return 0;
+}
+
 // 文本版：把同样内容拼进缓冲区（供 HTTP /diag 直接返回），返回写入长度
 int DiagText(char* buf, int n) {
     if (!buf || n <= 0) return 0;
@@ -1616,6 +2152,67 @@ static void DiagAdd(char* buf, size_t n, int& w, const char* fmt, ...) {
     if (k > 0) w += k;
 }
 
+// 模板 Identifier：tmpl+0x1C → 名字记录，首字段是 char name[16]。只收可见 ASCII。
+static void DiagTemplateIdent(char* out, size_t cap, uint32_t tmpl) {
+    if (!out || !cap) return;
+    out[0] = 0;
+    uint32_t rec = 0;
+    if (!tmpl || !SafeRead32(tmpl + 0x1C, rec) || !rec) return;
+    if (!IsMemOk(rec, 16, false)) return;
+    size_t w = 0;
+    for (int i = 0; i < 31 && w + 1 < cap; ++i) {
+        uint32_t d = 0;
+        if (!SafeRead32(rec + static_cast<uint32_t>(i & ~3), d)) break;
+        const char c = static_cast<char>((d >> ((i & 3) * 8)) & 0xFF);
+        if (!c) break;
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (u < 0x20 || u > 0x7E) break;
+        out[w++] = c;
+    }
+    out[w] = 0;
+}
+
+// 模块名：Thing+0x310 是 0 结尾的模块指针数组，模块 vtable 槽 2 = getName()。
+// 调虚函数要 SEH 兜底 —— 模块可能是别的构建/半初始化状态。
+static int DiagModuleNames(uint32_t thing, char* out, size_t cap) {
+    if (!out || !cap) return 0;
+    out[0] = 0;
+    uint32_t arr = 0;
+    if (!SafeRead32(thing + 0x310, arr) || !arr || !IsMemOk(arr, 8, false)) return 0;
+    size_t w = 0;
+    int n = 0;
+    for (int i = 0; i < 8; ++i) {
+        uint32_t mod = 0;
+        if (!SafeRead32(arr + static_cast<uint32_t>(i * 4), mod) || !mod) break;
+        if (!IsMemOk(mod, 8, false)) break;
+        ++n;
+        const char* nm = nullptr;
+        __try {
+            uint32_t vt = 0, fn = 0;
+            if (SafeRead32(mod, vt) && SafeRead32(vt + 0x08, fn) && fn) {
+                typedef const char* (__thiscall* GetName_t)(void*);
+                nm = reinterpret_cast<GetName_t>(fn)(reinterpret_cast<void*>(static_cast<uintptr_t>(mod)));
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            nm = nullptr;
+        }
+        if (!nm || !nm[0]) continue;
+        if (w && w + 2 < cap) { out[w++] = ','; out[w++] = ' '; }
+        for (const char* p = nm; *p && w + 1 < cap; ++p) out[w++] = *p;
+    }
+    out[w < cap ? w : cap - 1] = 0;
+    return n;
+}
+
+// 选中链表给的是 Drawable（vtable 0x00BED890）。归一化到 Thing：
+//   Drawable+0x138 → Thing，Thing+0xF4 → Drawable（互指）。双向对上才认，避免把普通字段当指针。
+static uintptr_t DiagAsThing(uintptr_t obj) {
+    uint32_t cand = 0, back = 0;
+    if (!SafeRead32(obj + 0x138, cand) || !cand) return obj;
+    if (!SafeRead32(static_cast<uintptr_t>(cand) + 0xF4, back)) return obj;
+    return (back == static_cast<uint32_t>(obj)) ? static_cast<uintptr_t>(cand) : obj;
+}
+
 int SelectedDiagText(char* buf, int n) {
     if (!buf || n < 64) return 0;
     int w = 0;
@@ -1634,54 +2231,69 @@ int SelectedDiagText(char* buf, int n) {
     int idx = 0;
     while ((obj = SelNext(it)) != 0 && idx < 4) {
         ++idx;
-        uint32_t vt = 0, tmpl = 0, hash = 0, body = 0;
-        SafeRead32(obj, vt);                       // vtable
-        SafeRead32(obj + 4, tmpl);                 // +0x04 = 对象模板指针
+        const uintptr_t thing = DiagAsThing(obj);
+        const bool isDrawable = (thing != obj);
+
+        uint32_t vt = 0, tmpl = 0, hash = 0;
+        SafeRead32(thing, vt);                     // Thing 的 vtable
+        SafeRead32(thing + 4, tmpl);               // +0x04 = 对象模板指针
         if (tmpl) SafeRead32(tmpl + 8, hash);      // 模板 +0x08 = 类型哈希
-        body = static_cast<uint32_t>(BodyOf(obj)); // 归一化到 Thing（原生走 +0x138，召唤物自身）
 
         const bool vtOk = (vt >= base && vt < base + 0x940000);
         DiagAdd(buf, static_cast<size_t>(n), w,
-                "\n#%d  obj %08X   vtable %08X %s",
-                idx, (unsigned)obj, (unsigned)vt, vtOk ? "(模块内)" : "(模块外!)");
+                "\n#%d  thing %08X   vtable %08X %s",
+                idx, (unsigned)thing, (unsigned)vt, vtOk ? "(模块内)" : "(模块外!)");
+        if (isDrawable)
+            DiagAdd(buf, static_cast<size_t>(n), w, "   drawable %08X", (unsigned)obj);
 
-        const char* nm = UnitNameByHash(hash);
-        DiagAdd(buf, static_cast<size_t>(n), w,
-                "\n     tmpl %08X   hash %08X   %s",
-                (unsigned)tmpl, (unsigned)hash, nm ? nm : "(表里没有这个哈希)");
-
-        const bool bodyOk = body && IsMemOk(body, 0x44, false);
-        DiagAdd(buf, static_cast<size_t>(n), w, "\n     body %08X   %s",
-                (unsigned)body,
-                bodyOk ? "OK" : "✗ 取不到 body（既非 Drawable 也非 Thing）");
-
-        if (bodyOk) {
-            uint32_t hp = 0, own = 0;
-            SafeRead32(body + OFF_HPBODY, hp);
-            SafeRead32(body + OFF_OWNER, own);
-            float px = 0, py = 0, pz = 0;
-            SafeReadFloat(body + 0x38, px);
-            SafeReadFloat(body + 0x3C, py);
-            SafeReadFloat(body + 0x40, pz);
+        BattleLiveObj live;
+        const bool haveLive = ObjectDetail(thing, &live);
+        if (haveLive) {
             DiagAdd(buf, static_cast<size_t>(n), w,
-                    "\n     owner %08X   pos %.1f, %.1f, %.1f",
-                    (unsigned)own, px, py, pz);
-            if (hp && IsMemOk(hp, 0x14, false)) {
-                float cur = 0, mx = 0, bk = 0;
-                SafeReadFloat(hp + 4, cur);
-                SafeReadFloat(hp + 0xC, mx);
-                SafeReadFloat(hp + 0x10, bk);
-                DiagAdd(buf, static_cast<size_t>(n), w,
-                        "   hp %.0f/%.0f (备份 %.0f)", cur, mx, bk);
-            }
+                    "\n     %s   [%s / %s / %s]%s",
+                    live.name ? live.name : "?",
+                    (live.side >= 0 && live.side < B_SIDE_COUNT) ? kBattleSideNames[live.side] : "?",
+                    (live.cls >= 0 && live.cls < B_CLS_COUNT) ? kBattleClassNames[live.cls] : "?",
+                    (live.cat == 0) ? "单位" : (live.cat == 1) ? "建筑" : "其他",
+                    live.isLocal ? "   本地" : "");
+        } else {
+            const char* nm = UnitNameByHash(hash);
+            DiagAdd(buf, static_cast<size_t>(n), w, "\n     %s",
+                    nm ? nm : "(目录里没有这个哈希)");
         }
+
+        char ident[40];
+        DiagTemplateIdent(ident, sizeof(ident), tmpl);
+        DiagAdd(buf, static_cast<size_t>(n), w,
+                "\n     tmpl %08X   hash %08X   id \"%s\"",
+                (unsigned)tmpl, (unsigned)hash, ident);
+
+        const uintptr_t body = haveLive && live.body ? live.body : BodyOf(thing);
+        const bool bodyOk = body && IsMemOk(body, 0x44, false);
+        DiagAdd(buf, static_cast<size_t>(n), w,
+                "\n     body %08X %s   ai %08X   owner %08X",
+                (unsigned)body, bodyOk ? "OK" : "✗ 取不到（既非 Drawable 也非 Thing）",
+                haveLive ? (unsigned)live.ai : 0u,
+                haveLive ? (unsigned)live.owner : 0u);
+        if (haveLive) {
+            DiagAdd(buf, static_cast<size_t>(n), w, " (#%d)", live.ownerIdx);
+            DiagAdd(buf, static_cast<size_t>(n), w,
+                    "\n     pos %.1f, %.1f, %.1f     hp %.0f/%.0f",
+                    live.x, live.y, live.z, live.hp, live.hpMax);
+        }
+
+        char mods[220];
+        const int mcount = DiagModuleNames(static_cast<uint32_t>(thing), mods, sizeof(mods));
+        DiagAdd(buf, static_cast<size_t>(n), w, "\n     模块 %d 个：%s",
+                mcount, mods[0] ? mods : "-");
+
         uint32_t s390 = 0, s394 = 0, s3a0 = 0, s3ac = 0, bc = 0, c8 = 0;
-        SafeRead32(obj + 0x390, s390);
-        SafeRead32(obj + 0x394, s394);
-        SafeRead32(obj + 0x3A0, s3a0);
-        SafeRead32(obj + 0x3AC, s3ac);
-        SafeRead32(obj + 0xBC, bc);
-        SafeRead32(obj + 0xC8, c8);
+        SafeRead32(thing + 0x390, s390);
+        SafeRead32(thing + 0x394, s394);
+        SafeRead32(thing + 0x3A0, s3a0);
+        SafeRead32(thing + 0x3AC, s3ac);
+        SafeRead32(thing + 0xBC, bc);
+        SafeRead32(thing + 0xC8, c8);
         DiagAdd(buf, static_cast<size_t>(n), w,
                 "\n     state 390=%08X 394=%08X 3A0=%08X 3AC=%08X  BC=%08X C8=%08X",
                 s390, s394, s3a0, s3ac, bc, c8);

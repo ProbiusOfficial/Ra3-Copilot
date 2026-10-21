@@ -330,7 +330,8 @@ bool ObjectDetail(uintptr_t t, BattleLiveObj* out) {
 
     uint32_t vt = 0, owner = 0, tmpl = 0, hash = 0;
     if (!Rd32(t, vt) || !InModule(vt)) return false;          // 必须是主模块内的对象
-    if (!Rd32(t + 0x418, owner) || owner < 0x10000) return false;
+    // owner 允许为 0：中立箱/装饰物本来就没有归属，之前把它当非法会把这类对象整条拒掉
+    if (!Rd32(t + 0x418, owner)) return false;
     if (!Rd32(t + 0x04, tmpl) || tmpl < 0x10000) return false;
     if (!Rd32(tmpl + 0x08, hash)) return false;
 
@@ -338,7 +339,7 @@ bool ObjectDetail(uintptr_t t, BattleLiveObj* out) {
     out->owner = owner;
     out->hash  = hash;
     uint32_t ix = 0;
-    out->ownerIdx = (Rd32(owner + 0x20, ix) && ix < 64) ? static_cast<int>(ix) : -1;
+    out->ownerIdx = (owner && Rd32(owner + 0x20, ix) && ix < 64) ? static_cast<int>(ix) : -1;
 
     const BattleObj* o = BattleLookup(hash);
     out->name = o ? o->name : "?";
@@ -348,15 +349,15 @@ bool ObjectDetail(uintptr_t t, BattleLiveObj* out) {
 
     uint32_t p = 0;
     if (Rd32(t + 0x374, p)) out->ai = p;                       // AIUpdate：命令入口 this
-    if (Rd32(t + 0x33c, p)) {                                  // 血量体
+    if (Rd32(t + 0x33c, p) && p) {                             // 血量体
         out->body = p;
-        if (p) { Rdf(p + 0x04, out->hp); Rdf(p + 0x0c, out->hpMax); }
+        Rdf(p + 0x04, out->hp); Rdf(p + 0x0c, out->hpMax);
     }
     Rdf(t + 0x38, out->x);
     Rdf(t + 0x3c, out->y);
     Rdf(t + 0x40, out->z);
 
-    out->isLocal = (owner == LocalPlayerObj());
+    out->isLocal = owner && (owner == LocalPlayerObj());
     return true;
 }
 

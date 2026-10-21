@@ -397,7 +397,15 @@ OKData2CaveStub ENDP
 
 ; ===========================================================================
 ; UnitAmmoCaveStub <- base+0x128735  AOB 8B0CBA85C9 (5B)
-;   需存在选中单位（[ebp+0x3ac]!=0）；[ecx+0x1c]=0x7FFFFFFF
+;   这个位置在"选中面板条状 UI"遍历选中对象向量的循环里：
+;     lea eax,[esp+0x20] / push eax / call 0x79a940   ; 取选中对象向量 begin/end
+;     mov edx,[esp+0x20] ... mov ecx,[edx+edi*4]      ; 逐项取出，元素 = 选中对象 Thing
+;   本 stub 只做一件事：把遍历到的选中对象抓进 g_selUnit（选中动作的兜底来源）。
+;
+;   ⚠ 不写 [ecx+0x1C]：那是 Thing 上的 float 1.0，不是弹药字段（弹药在
+;     WeaponEntry+0x1C，走 Thing+0x37C → 槽数组 → 条目，见 actions.cpp AmmoFill）。
+;     旧实现无条件写 0x7FFFFFFF ⇒ 对护盾发生器这类对象写坏结构，
+;     2026-10-19 / 10-20 两次崩在 RVA 0x359DFA（eip 落在指令中段）。
 ; ===========================================================================
 UnitAmmoCaveStub PROC
     pushad
@@ -411,14 +419,6 @@ UnitAmmoCaveStub PROC
     mov   eax, g_tickNow
     mov   g_selTick, eax
 ua_nosel:
-    cmp   byte ptr [g_flags+12h], 0
-    je    ua_skip
-    cmp   dword ptr [ebp+000003ACh], 0
-    je    ua_skip
-    cmp   ecx, 00010000h            ; 护栏：不像堆指针就别写（防闪退）
-    jb    ua_skip
-    mov   dword ptr [ecx+01Ch], 07FFFFFFFh
-ua_skip:
     popfd
     popad
     mov   ecx, dword ptr [edx+edi*4]    ; 8B 0C BA     原指令 1 重放

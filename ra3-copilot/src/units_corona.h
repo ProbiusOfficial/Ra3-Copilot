@@ -276,6 +276,7 @@ static const SupportUnit kSupportUnits[] = {
     { u8"帝国", u8"载具", u8"基地车", "JapanMCV_Enhanced_Naval", "jdc jidiche", 0x16EAABFDu, 0 },
     { u8"帝国", u8"载具", u8"基地车", "JapanMCV_Naval", "jdc jidiche", 0xD2ECDA2Cu, 0 },
     { u8"帝国", u8"载具", u8"塔楼核心", "JapanBaseDefenseAdvancedEgg", "tlhx talouhexin", 0x2412FB82u, 1 },
+    { u8"帝国", u8"载具", u8"处刑大将军", "JapanMechaKing", "cxdjj chuxingdajiangjun", 0x450BD734u, 1 },
     { u8"帝国", u8"载具", u8"天狗机器人", "JapanAntiInfantryVehicle", "tgjqr tiangoujiqiren", 0xC3986ED4u, 1 },
     { u8"帝国", u8"载具", u8"天狗机器人", "JapanAntiInfantryVehicle_Enhanced", "tgjqr tiangoujiqiren", 0x3F06C283u, 0 },
     { u8"帝国", u8"载具", u8"天狗机器人", "JapanAntiInfantryVehicle_Enhanced_Water", "tgjqr tiangoujiqiren", 0xC1BDDB5Cu, 0 },
@@ -440,7 +441,7 @@ static const SupportUnit kSupportUnits[] = {
     { u8"苏联", u8"其他", u8"终极磁力卫星", "MagneticSatelliteEffectLvl3", "zjclwx zhongjiciliweixing", 0x2408DA8Bu, 1 },
     { u8"苏联", u8"其他", u8"超级磁力卫星", "MagneticSatelliteEffectLvl2", "cjclwx chaojiciliweixing", 0x5D6DEC69u, 1 },
 };
-static const int kSupportUnitCount = 408;
+static const int kSupportUnitCount = 409;
 
 // 箱子（拾取类奖励物，全部按基准形态处理）
 static const SupportUnit kCrates[] = {
@@ -498,9 +499,11 @@ static const SupportUnit kCrates[] = {
     { u8"中立", u8"箱子", u8"晋升箱", "VeterancyCrate", "jsx jinshengxiang", 0x71ED78EEu, 1 },
     { u8"中立", u8"箱子", u8"部队箱", "UnitCrate", "bdx buduixiang", 0x3FA3F32Cu, 1 },
     { u8"中立", u8"箱子", u8"部队箱·新版", "UnitCrateNew", "bdxxb buduixiangxinban", 0xDC56666Au, 1 },
-    { u8"中立", u8"箱子", u8"空投仓·海", "OnSeaUnitCrateDummySeed", "ktch kongtoucanghai", 0xA0508911u, 1 },
-    { u8"中立", u8"箱子", u8"空投仓·陆", "OnSeaUnitCrate", "ktcl kongtoucanglu", 0x13145F3Du, 1 },
+    { u8"中立", u8"箱子", u8"海面折跃信标", "CoronaNavalBeacon", "hmzyb haimianzheyuexinbiao", 0x38C0BC4Au, 1 },
+    { u8"中立", u8"箱子", u8"地面折跃信标", "UnitCrateDummy", "dmzyb dimianzheyuexinbiao", 0x18DEEDB5u, 1 },
+    { u8"中立", u8"箱子", u8"空投仓·海·成品箱", "OnSeaUnitCrate", "ktch wangchengxiang", 0x13145F3Du, 1 },
+    { u8"中立", u8"箱子", u8"空投仓", "OnSeaUnitCrateDummySeedB", "ktc kongtoucang", 0x487F4406u, 1 },
 };
-static const int kCrateCount = 56;
+static const int kCrateCount = 58;
 
 } // namespace ra3

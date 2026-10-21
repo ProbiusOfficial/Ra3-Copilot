@@ -20,7 +20,8 @@
 
 环境变量：
   RA3_API        调试接口地址（默认 http://127.0.0.1:17832）
-  RA3_MCP_ALLOW_RAW=1   开放 raw（任意内存读写 / 按 RVA 调函数）—— 默认关闭，属危险操作
+  RA3_MCP_ALLOW_RAW=0   关闭 raw（默认开放：raw 里 op=get/post 可调任意 HTTP 路由，
+                        另有 peek/read/poke/call 直接读写内存、按 RVA 调函数）
 """
 import json
 import os
@@ -35,7 +36,7 @@ _CLS_NAME2IDX = {"其他": 0, "步兵": 1, "载具": 2, "空军": 3, "海军": 4
 _CAT_NAME2IDX = {"unit": 0, "struct": 1, "other": 2, "单位": 0, "建筑": 1, "其他": 2}
 
 API = os.environ.get("RA3_API", "http://127.0.0.1:17832").rstrip("/")
-ALLOW_RAW = os.environ.get("RA3_MCP_ALLOW_RAW", "0") == "1"
+ALLOW_RAW = os.environ.get("RA3_MCP_ALLOW_RAW", "1") != "0"
 SERVER_NAME = "ra3-copilot"
 SERVER_VERSION = "0.1.0"
 DEFAULT_PROTOCOL = "2024-11-05"
@@ -542,11 +543,26 @@ def t_help(_):
     return api_get("/help")
 
 
+def _with_query(path, query):
+    if not query:
+        return path
+    return path + ("&" if "?" in path else "?") + query
+
+
 def t_raw(a):
     if not ALLOW_RAW:
-        return ("raw 已禁用。任意内存读写/按 RVA 调函数属危险操作 —— "
-                "需要时在客户端配置里设 RA3_MCP_ALLOW_RAW=1 再重连。")
+        return "raw 已关闭（RA3_MCP_ALLOW_RAW=0）—— 默认是开放的，去掉这个环境变量即恢复。"
     op = str(a.get("op", "")).lower()
+    path = str(a.get("path", "") or "")
+    query = str(a.get("query", "") or "")
+    if op == "get":
+        if not path.startswith("/"):
+            return "path 需以 / 开头，例如 path=/objects query=limit=5"
+        return api_get(_with_query(path, query))
+    if op == "post":
+        if not path.startswith("/"):
+            return "path 需以 / 开头，例如 path=/toggle query=f=12&on=1"
+        return api_post(_with_query(path, query))
     if op == "peek":
         return api_get("/peek?addr=%s&type=%s" % (a.get("addr"), a.get("type", "u32")))
     if op == "read":
@@ -558,7 +574,7 @@ def t_raw(a):
         return api_post("/call?rva=%s&cc=%s&a0=%s&a1=%s&a2=%s"
                         % (a.get("rva"), a.get("cc", "cdecl"), a.get("a0", 0),
                            a.get("a1", 0), a.get("a2", 0)))
-    return "op 需为 peek/read/poke/call"
+    return "op 需为 get/post/peek/read/poke/call"
 
 
 # ============================ MCP 工具表 ============================
@@ -840,11 +856,15 @@ HANDLERS = {
 if ALLOW_RAW:
     TOOLS.append({
         "name": "raw",
-        "description": "【危险】直接读/写游戏内存、按 RVA 调函数。op=peek/read/poke/call。",
+        "description": ("通用透传：op=get/post 可调调试接口的任意路由（等同直连 HTTP，含 /grant /upgrade /power /protocol "
+                        "/buildable /aicall /action /lua /diag /snapshot /read /resolve /poke 等）；"
+                        "op=peek/read/poke/call 直接读写内存、按 RVA 调函数。"),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "op": {"type": "string", "enum": ["peek", "read", "poke", "call"]},
+                "op": {"type": "string", "enum": ["get", "post", "peek", "read", "poke", "call"]},
+                "path": {"type": "string", "description": "以 / 开头，如 /objects 或 /grant?power=SpecialPower_X"},
+                "query": {"type": "string", "description": "追加查询串，如 f=12&on=1"},
                 "addr": {"type": "string"}, "type": {"type": "string"},
                 "val": {"type": "string"}, "n": {"type": "integer"},
                 "rva": {"type": "string"}, "cc": {"type": "string"},

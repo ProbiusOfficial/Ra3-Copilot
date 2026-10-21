@@ -275,10 +275,14 @@ CRATE_CN = {
     'VeterancyCrate': '晋升箱',
     'UnitCrate': '部队箱',
     'UnitCrateNew': '部队箱·新版',
-    'OnSeaUnitCrate': '空投仓·陆',
-    # 海面箱要投放种子而非成品箱：种子落地时由引擎脚本判 OVER_WATER 并选 Navy 套 OCL，
-    # 直接建成品箱会跳过这条链，掉出来的是陆地单位且生成在水底。
-    'OnSeaUnitCrateDummySeed': '空投仓·海',
+    'OnSeaUnitCrate': '空投仓·海·成品箱',
+    # 三个种子的差别只在「创建钩子」与「生成钩子」的判定（见 data/scripts/ra3luabridge.json）：
+    #   UnitCrateDummy             → CoronaSpecialUnitCrateSeed：只走陆地 OCL 套，固定出地面单位
+    #   OnSeaUnitCrateDummySeed   → Created 里非 OVER_WATER 直接 NAMED_DELETE：只在水面存活
+    #   OnSeaUnitCrateDummySeedB  → CreatedB 不判地形，生成钩子再按 OVER_WATER 选套：两栖通用
+    'UnitCrateDummy': '地面折跃信标',
+    'OnSeaUnitCrateDummySeed': '海面空投仓',
+    'OnSeaUnitCrateDummySeedB': '空投仓',
 }
 
 # 兼容箱子行的两种写法：

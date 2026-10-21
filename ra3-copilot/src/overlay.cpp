@@ -1037,23 +1037,50 @@ void LogAct(const char* what, int n) {
     AddLog(LOG_WARN, "[单位] %s：%s", what, (e && e[0]) ? e : "没有可操作的单位（先在游戏里选中）");
 }
 
+// 把 UTF-8 文本放进 Windows 剪贴板（CF_UNICODETEXT，中文不会乱码）
+static void CopyUtf8ToClipboard(const char* s) {
+    if (!s || !s[0]) return;
+    const int wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
+    if (wlen <= 0) return;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, static_cast<SIZE_T>(wlen) * sizeof(wchar_t));
+    if (!h) return;
+    wchar_t* p = static_cast<wchar_t*>(GlobalLock(h));
+    if (!p) { GlobalFree(h); return; }
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, p, wlen);
+    GlobalUnlock(h);
+    if (!OpenClipboard(nullptr)) { GlobalFree(h); return; }
+    EmptyClipboard();
+    if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);   // 成功后所有权归系统，不能再释放
+    CloseClipboard();
+}
+
 void DrawLogPanel() {
+    static char diagBuf[4096];
+    static float lastUpd = -1.f;
+
     // ---- 选中单位调试详情（可选；默认关）----
     ImGui::Checkbox("显示选中单位调试详情", &g_cfg.showSelDiag);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("把当前选中对象的内部结构摊开：对象 / vtable / 模板指针 /\n"
-                          "模板哈希（会反查成名字）/ body / 血量 / 归属 / 坐标 / 状态位。\n"
+        ImGui::SetTooltip("把当前选中对象的内部结构摊开：名称与分类、vtable、模板指针与 Identifier、\n"
+                          "body、AI、归属、坐标、血量、模块列表、状态位。\n"
                           "排查「召唤出来的单位不能被操作」这类问题最有用 ——\n"
                           "看 body 那行是不是「不是合法指针 → 未入世」。");
+    ImGui::SameLine();
+    if (ImGui::Button("复制")) {
+        if (SelectedDiagText(diagBuf, sizeof(diagBuf)) <= 0) strcpy_s(diagBuf, "(读取失败)");
+        CopyUtf8ToClipboard(diagBuf);
+        AddLog(LOG_OK, "[调试详情] 已复制到剪贴板（%d 字符）", static_cast<int>(strlen(diagBuf)));
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("把这段详情整段复制走，方便贴给别人或留档（不必先勾选上面的显示开关）");
+
     if (g_cfg.showSelDiag) {
-        static char diagBuf[3072];
-        static float lastUpd = -1.f;
         if (g_logClock - lastUpd >= 0.2f) {        // 每 0.2 秒刷新一次，不必每帧读内存
             lastUpd = g_logClock;
             if (SelectedDiagText(diagBuf, sizeof(diagBuf)) <= 0)
                 strcpy_s(diagBuf, "(读取失败)");
         }
-        ImGui::BeginChild("##seldiag", ImVec2(0, 170), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("##seldiag", ImVec2(0, 260), true, ImGuiWindowFlags_HorizontalScrollbar);
         ImGui::TextUnformatted(diagBuf);
         ImGui::EndChild();
     }
@@ -1149,8 +1176,11 @@ void PanelUnitOps() {
         AddLog(!am ? LOG_OK : LOG_INFO, "[弹药] 无限弹药 %s", !am ? "开" : "关");
     }
     if (am) PopBtnOn();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("开关：选中单位的弹药保持满弹（亮色=已开启）");
+    if (ImGui::IsItemHovered()) {
+        if (am) ImGui::SetTooltip("已开启：%d 个单位被赋予满弹（取消选中也保持）\n关掉 = 解除全部",
+                                  AmmoTargetCount());
+        else    ImGui::SetTooltip("打开后把当前选中单位设为无限弹药；之后取消选中仍然保持");
+    }
     ImGui::SameLine();
     if (ImGui::Button("复制单位", ImVec2(-1, 0))) {
         int r = ActCopySelected();
@@ -1953,6 +1983,18 @@ void OverlayTick() {
     if (g_moneyLock && LocalPlayerReady()) MoneySet(g_moneyLockVal);
     // 血量锁定：每帧把选中单位血量回写到其上限
     if (g_hpLock) LockSelectedHealth();
+    // 无限弹药：开关打开时把当前选中"赋予"为常驻目标（登记 Thing + 模板哈希），
+    //   之后取消选中也一直补弹（探宝要求：对单位生效，而不是靠选中维持）。
+    //   目标失效（被摧毁 / 地址回收给别的单位）时自动剔除；关掉开关 = 解除全部。
+    if (GetFeature(FID_UNITAMMO)) {
+        static unsigned s_ammoFrame = 0;
+        if ((s_ammoFrame++ % 6u) == 0u) {
+            AmmoAddSelected();   // 新选中的登记（幂等）
+            AmmoTick();          // 常驻目标补弹 + 剔除失效
+        }
+    } else if (AmmoTargetCount()) {
+        AmmoClearTargets();
+    }
 }
 
 // ---- 各面板显隐（多浮动面板，2026-10-15 UI 改版）----
