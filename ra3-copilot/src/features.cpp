@@ -78,7 +78,7 @@ const uint8_t AOB_SUPERPOWER[6] = { 0x8B, 0x98, 0x18, 0x04, 0x00, 0x00 };
 const uint8_t AOB_DISABLEALLSP[6] = { 0x8B, 0x51, 0x50, 0x3B, 0x50, 0x0C };
 // 0x43C3A0 前置条件检查：mov eax,[esp+4]/mov edx,[eax]/mov eax,[eax]/mov edx,[ecx+48h]/push esi/mov esi,[eax+4]
 // ⚠ 以下两条语义**未经复核**：其依据是 0x69A990 起的反汇编，而该地址并非指令边界（2026-10-19 发现）。
-//    字节本身能对上（AOB 命中），但"它在做什么"存疑，见 docs/old/作废-协议格前置判定.md。
+//    字节本身能对上（AOB 命中），但"它在做什么"存疑（见内部《作废-协议格前置判定》）。
 // 0x686920 协议格锁定判定（待复核，含 cond==NULL 与依赖递归）
 // 0x69A9B3 写控件状态：mov [esi+0x18],al / mov edx,[ecx]（待复核）
 const uint8_t AOB_PROTOALL[6] = { 0x88,0x46,0x18, 0x8B,0x11, 0x8B };

@@ -1831,7 +1831,7 @@ int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint3
 }
 
 // ===================== 自动建筑摆放（A 路线：读样本 + 几何打分）=====================
-// 依据 docs/AI建筑摆放-研究方向.md §四。分工：
+// 依据内部研究文档《AI 建筑摆放》§四。分工：
 //   几何全在 AutoPlaceCandidates（只用 battlefield 缓存，HTTP 线程可跑）；
 //   引擎判定只在 AutoPlacePick（调 BuildableAt → 必须渲染线程）。
 // 为什么自己插值 z：地形高度没有稳定可调的接口，同区域建筑高度接近，
