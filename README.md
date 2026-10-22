@@ -4,6 +4,9 @@
 
 > 仅用于单机学习与研究。**版本强绑定**：hook RVA 硬编码于 v1.12.3444.25830，注入前执行 AOB 字节级校验（fail-closed，不符绝不 patch）。
 > 适配基线：日冕 Mod v1.12；其他版本需重新定位 RVA / AOB。
+> **不支持也不提供联机用途**：本工具直接改写游戏内存，联机下会导致数据不同步。
+>
+> 本项目与 Electronic Arts Inc. 无关联，未获其认可。Command & Conquer 是 Electronic Arts 的商标。本项目不包含任何游戏素材，所需游戏副本请自行合法获取。
 
 **官网** → <https://probiusofficial.github.io/Ra3-Copilot/>　|　**更新说明** → [CHANGELOG.md](CHANGELOG.md)
 
@@ -122,6 +125,14 @@ git push origin v1.0.0
 
 - [MinHook](https://github.com/TsudaKageyu/minhook) 1.3.3 —— BSD-2-Clause（`ra3-copilot/third_party/`）
 - [Dear ImGui](https://github.com/ocornut/imgui) v1.91.4 —— MIT（`ra3-copilot/imgui/`）
+
+## 致谢
+
+本项目的地址定位与协议相关能力，受益于以下第三方单机修改器的工作。本项目未复用其中任何源代码，实现均为独立完成。
+
+- **RA3 +31 Trainer**（Ken22265，2009，Cheat Engine 5.5 脚本）—— 早期 RVA 与钩子偏移的交叉验证来源。
+- **[RayaTrainer](https://github.com/Abgetrennter/raya-trainer)**（Apache-2.0）—— 协议目录的早期对照，以及部分地址线索。
+- **日冕「相机桥」CameraBridge**（原作者 RC）—— 游戏内 ImGui 覆盖层的接入方式参考。
 
 ## 仓库边界
 
