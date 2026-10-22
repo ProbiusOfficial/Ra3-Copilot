@@ -523,6 +523,19 @@ extern "C" uint32_t Ra3IsExtTpl(uint32_t hash) {
     return 0;
 }
 
+// 诊断用：对内存里所有「建造者类但还没含扩展建筑」的 CommandSet 跑一次修正。
+// 用途是验证「配对数据本身能否被选中」，不依赖建造页构建器是否跑过。
+uint32_t BuildExtFixAll() {
+    if (!s_fullScanned) ScanAllMemory();
+    const uint32_t sn = s_nodeN;
+    uint32_t changed = 0;
+    for (uint32_t i = 0; i < sn; i++) {
+        if (!s_nodes[i].builder || s_nodes[i].hasExt) continue;
+        if (Ra3BuildExtFix(s_nodes[i].cs)) changed++;
+    }
+    return changed;
+}
+
 extern "C" uint32_t Ra3BuildExtFix(uint32_t cs) {
     if (!g_flags[FID_BUILDEXT]) return 0;
     if (!cs || cs < 0x00010000) return 0;
@@ -533,6 +546,14 @@ extern "C" uint32_t Ra3BuildExtFix(uint32_t cs) {
         if (!s_fullScanned) ScanAllMemory();
         idx = FindNode(cs);
     }
+    if (idx < 0) return 0;
+
+    // cs 与它的 inner 分属两个不同的堆簇，这很常见（实测 2026-10-22 战役局：
+    //   战役版 cs=0x0CCC71E0，inner=0x08E21280；完整版 cs=0x08E21270 就在 inner 旁边）。
+    // 只扫 cs 邻域会一路扫到 0CCC 簇里的变体，永远看不到完整版 ⇒ best 恒为空、修正失败。
+    // 所以再按 inner 邻域补扫一次（毫秒级，且已收录的会去重）。
+    ScanNear(s_nodes[idx].inner);
+    idx = FindNode(cs);
     if (idx < 0) return 0;
     const CsNode* x = &s_nodes[idx];
     if (x->hasExt) return 0;          // 已经是完整版，不动

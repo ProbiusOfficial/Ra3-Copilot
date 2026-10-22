@@ -1553,6 +1553,14 @@ void Handle(SOCKET c, char* req) {
         static char pb[4096];
         static uint32_t dump[512];
         size_t w = 0;
+        // ?fixall=1：立刻对内存里所有建造者 cs 跑一次修正（诊断用，不依赖建造页构建时机）
+        if (GetParamInt(query, "fixall", 0)) {
+            uint32_t ch = BuildExtFixAll();
+            w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "fixall changed=%u | 生效=%u 最近 cs=%08X -> inner=%08X\n",
+                             ch, g_extFixCount, g_extLastCs, g_extLastDst);
+            HttpSend(c, pb, (int)strlen(pb));
+            return;
+        }
         uint32_t n = BuildExtDump(dump, 512);
         w += _snprintf_s(pb, sizeof(pb), _TRUNCATE,
                          "buildext on=%d | cs=%u 建造者=%u 含扩展=%u 扫描=%ums | 生效=%u 最近 cs=%08X -> inner=%08X\n",

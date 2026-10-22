@@ -127,6 +127,9 @@ void BtnEnableCaveStub();       // 建造按钮强制可用（g_flags[0x1E] 打�
 extern "C" uint32_t Ra3BuildExtFix(uint32_t cs);
 // 供 HTTP /buildext 查询用：导出扫描统计与建造者类 CommandSet 摘要。
 uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries);
+// 诊断：对所有「建造者类但缺扩展建筑」的 CommandSet 跑一次修正，返回改了几个。
+// 不依赖建造页构建器时机，只用于验证配对数据能否被选中（GET /buildext?fixall=1）。
+uint32_t BuildExtFixAll();
 
 // ---- 功能开关索引（对齐 CE 的 FLAGS 偏移）----
 enum FeatureIdx {
