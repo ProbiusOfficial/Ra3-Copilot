@@ -96,6 +96,43 @@ jobs:
             Set-Content -Path SHA256SUMS.txt -Encoding ascii
           Get-Content SHA256SUMS.txt
 
+      # 更新说明取 CHANGELOG.md 里对应 tag 的那一节，避免每次发版都手改 yml。
+      - name: Extract release notes
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $lines = Get-Content CHANGELOG.md
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^##\s+$([regex]::Escape($tag))\s*$") { $start = $i; break }
+          }
+          if ($start -lt 0) {
+            Write-Warning "CHANGELOG.md 里没有 $tag 这一节，退回通用说明"
+            "（本版未单独撰写更新说明，详见仓库 CHANGELOG.md）" | Set-Content RELEASE_NOTES.md -Encoding utf8
+            exit 0
+          }
+          $out = @()
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^##\s+v") { break }
+            $out += $lines[$i]
+          }
+          $body = ($out -join "`n").Trim()
+          @(
+            $body,
+            '',
+            '---',
+            '',
+            '**适配基线**：`ra3_1.12.game` v1.12.3444.25830（32 位，日冕 Mod）。hook 点硬编码于该版本，注入前执行 AOB 字节级校验，不符拒绝挂载。',
+            '',
+            '**使用**：进入对局 → 双击 `Ra3Copilot.exe` → 「注入修改器」→ 游戏内 `INSERT` 呼出面板。功能按资源 / 战斗 / 建造 / 单位 / 召唤 / 协议 / 战场感知分组，快捷键在「设置 → 快捷键」里查看与改键。注入即常驻监听 `127.0.0.1:17832`。',
+            '',
+            '**CI 只验证可构建**：字节级兼容性以本地 `tools/precheck_aob.py` 对真实 exe 的预检为准（当前基线 30/30 通过）。',
+            '',
+            '仅用于单机学习与研究。'
+          ) -join "`n" | Set-Content RELEASE_NOTES.md -Encoding utf8
+          Get-Content RELEASE_NOTES.md | Select-Object -First 12
+
       - name: Publish release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -105,19 +142,8 @@ jobs:
             Ra3Copilot-${{ github.ref_name }}-win-x86.zip
             ra3-copilot/build_out/Ra3Copilot.exe
             SHA256SUMS.txt
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true
-          body: |
-            **适配基线**：`ra3_1.12.game` v1.12.3444.25830（32 位，日冕 Mod）。hook 点硬编码于该版本，
-            注入前执行 AOB 字节级校验，不符拒绝挂载。
-
-            **使用**：进入对局 → 双击 `Ra3Copilot.exe` → 「注入修改器」→ 游戏内 `INSERT` 呼出面板。
-            功能按资源 / 战斗 / 单位 / 召唤 / 协议 / 战场感知分组，快捷键在「设置 → 快捷键」里查看与改键。
-            注入即常驻监听 `127.0.0.1:17832`。
-
-            **CI 只验证可构建**：字节级兼容性以本地 `tools/precheck_aob.py` 对真实 exe 的预检为准
-            （当前基线 25/25 通过）。
-
-            仅用于单机学习与研究。
 
       - name: Upload build log on failure
         if: failure()

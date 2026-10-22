@@ -15,7 +15,7 @@
 | 协议 | 秘密协议与兵种升级直授（`/protocol` `/grant` `/upgrade`）；目录带授予门槛，不可授予项灰显 |
 | 感知 | 全图活体对象枚举（单位 / 建筑 / AI / 坐标 / 血量，按归属分组）；`/objects` `/obj` `/snapshot` 即席查询与页级差分 |
 | 指挥 | AIUpdate 直调：移动 / 攻击 / 建造（`/aicall`）；`/place` 建筑落点候选打分，引擎判定只做校验 |
-| 接口 | 进程内 HTTP `127.0.0.1:17832`（55 条路由，`/state` `/read` `/peek` `/summon` `/protocol` `/place` `/snapshot` …）；MCP stdio 服务器（`mcp/`，19 个工具）把上述能力开放给任意 AI 客户端 |
+| 接口 | 进程内 HTTP `127.0.0.1:17832`（57 条路由，`/state` `/read` `/peek` `/summon` `/protocol` `/place` `/snapshot` …）；MCP stdio 服务器（`mcp/`，19 个工具）把上述能力开放给任意 AI 客户端 |
 
 ## 架构
 
@@ -106,6 +106,10 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | | 全科技 | `0x6CFEB5` | `[edi+0x2c]=400.0f` |
 | | 快速建造 | `0x30F42E` `0x30F38C` `0x2F6CFF` | `[esi+0x1c]=100.0f`（3 hook） |
 | 建造 | 敌方无法建造 | `0x30F530` | 敌方 `[eax+4]` 压到 5000 / 1 |
+| | 移除科技锁定 | `0x43EA70` | 本机玩家 → `al=0`（可用对象集合判定恒过，黑锁变正常） |
+| | 补全扩展建筑 | `0x6CB352` | 构建器取到 cs 后，把 `cs+4` 指向同族「扩展完整版」inner（四阵营） |
+| | 扩展建筑解除灰色 | `0x6BB6F0` | 模板哈希命中 `EXT_BLD` → 直接 `setEnabled`，绕开前置科技链 |
+| | 建造页探针 | `0x6B7070` | 只记录按钮对象（默认关） |
 | 战斗 | 玩家无敌 | `0x12EEDF` | 己方 `[esi+4]=[esi+0xc]=9999999.0f` |
 | | 抓取选中对象 | `0x128735` | 只记录 `g_selUnit`，不写任何字段（弹药见下） |
 | | 矿厂复原 | `0x2D4933` | `[ecx+0x14]=0`（一次性） |
@@ -118,7 +122,7 @@ python tools/precheck_aob.py --game "<ra3_1.12.game 路径>"
 | 协议 | 秘密协议格解锁 | `0x69A9B3` | `g_flags+0x18` 开 → `al=0`（跳过前置检查），同时记录原始 / 强制后标志 |
 | | 协议格点击 / 锁定探测 | `0x69AB03` `0x67E9AB` | 只记录，不改任何行为 |
 
-**共 25 个 hook 点（`kHooks[]` 25 条）**，每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 25/25）。
+**共 30 个 hook 点（`kHooks[]` 30 条）**，每个都在安装前做 AOB 字节级校验；交付前用 `tools/precheck_aob.py` 对真实 exe 预检（应 30/30）。
 
 **无限弹药不走 hook**：`UnitAmmo` 那一站现在只负责抓选中对象。真弹药在 `Thing+0x37C`（武器模块）→ 槽数组 `+0x24/+0x28` → 槽 `+0x94` 的条目数组 → 条目 `+0x1C`（int，实测 3→2→1→0 后换弹）。`actions.cpp AmmoFill` 逐条写 `0x7FFFFFFF`，并由常驻列表每帧补弹。⚠ 不要写 `Thing+0x1C` —— 那是 float 1.0，对它写值会崩（`eip=0x359DFA`）。
 

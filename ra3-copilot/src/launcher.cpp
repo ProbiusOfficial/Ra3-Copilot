@@ -39,7 +39,7 @@ namespace {
 
 const wchar_t* const kWindowClass = L"Ra3CopilotLauncher";
 const wchar_t* const kAppName = L"Ra3-Copilot";
-const wchar_t* const kVersion = L"1.0.0";
+const wchar_t* const kVersion = L"1.1.0";
 
 enum { WM_APP_WORK_DONE = WM_APP + 1 };
 enum { LOG_INFO = 0, LOG_OK, LOG_WARN, LOG_ERR };
@@ -719,7 +719,7 @@ void BuildUi() {
     ImGui::TextUnformatted("Ra3-Copilot");
     ImGui::PopStyleColor();
     ImGui::SameLine(0, 8 * s);
-    ImGui::TextDisabled("v1.0.0");
+    ImGui::TextDisabled("v1.1.0");
     ImGui::TextDisabled("红色警戒 3 · 日冕 Mod 局内修改器");
 
     ImGui::Separator();
