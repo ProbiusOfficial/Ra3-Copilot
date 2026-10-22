@@ -118,6 +118,7 @@ jobs:
             $out += $lines[$i]
           }
           $body = ($out -join "`n").Trim()
+          $body = ($body -replace "(\r?\n-{3,}\s*)+$", "").Trim()   # 去掉小节末尾的分隔线，避免与尾注前的 --- 重复
           @(
             $body,
             '',
