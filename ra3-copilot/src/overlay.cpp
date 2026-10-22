@@ -1312,6 +1312,47 @@ void PanelMisc() {
             AddLog(zi ? LOG_OK : LOG_INFO, "[缩放] 无限缩放 %s", zi ? "开" : "关");
         }
     }
+    {
+        // hook 0x43EA70（可用对象集合判定）：开启后对本机玩家恒返回「可用」，
+        // 建造页里被剧情锁住的格子恢复正常图标、可直接建造（详见 docs/建造页科技锁定-破除.md）
+        bool bu = GetFeature(FID_CLANGATE);
+        if (ImGui::Checkbox("移除科技锁定", &bu)) {
+            SetFeature(FID_CLANGATE, bu);
+            AddLog(bu ? LOG_OK : LOG_INFO, "[建造] 科技锁定 %s", bu ? "已解除" : "已恢复");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("战役剧情会给部分科技上黑锁（建造页显示锁图标）\n"
+                              "开启后这些格子恢复正常图标，可直接建造\n"
+                              "只对本机玩家生效，不影响电脑");
+    }
+    {
+        // hook 0xACB352（建造页列表构建器内）：构建时把「战役版建造者 CommandSet」
+        // 换成引擎里常驻的「扩展完整版」→ 支援建筑物页多出胡杨防空 / 礁石岸防。
+        // 需在进入对局前就是开的状态，否则本局建造页已构建完，重开一局才生效。
+        bool be = GetFeature(FID_BUILDEXT);
+        if (ImGui::Checkbox("补全扩展建筑", &be)) {
+            SetFeature(FID_BUILDEXT, be);
+            AddLog(be ? LOG_OK : LOG_INFO, "[建造] 扩展建筑 %s", be ? "已补全" : "已还原");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("战役模式的建造页比扩展模式少两栋特殊防御建筑\n"
+                              "开启后补上：胡杨防空导弹系统、礁石岸防导弹要塞\n"
+                              "在建造页构建时生效 —— 若本局已进过建造页，需重开一局");
+    }
+    {
+        // hook 0xABB6F0（建造页按钮可用性刷新）：扩展建筑在战役局的前置建筑 / 科技不满足，
+        // 0x845250(Buildability) 恒返回 0 → 0xAB7040(setDisabled) 把按钮画成灰。
+        // 开这个后对这两栋建筑直接 setEnabled(true)，绕开整条判定链。
+        bool bn = GetFeature(FID_BTNENABLE);
+        if (ImGui::Checkbox("扩展建筑可点（解除灰色）", &bn)) {
+            SetFeature(FID_BTNENABLE, bn);
+            AddLog(bn ? LOG_OK : LOG_INFO, "[建造] 扩展建筑按钮 %s", bn ? "已启用" : "已恢复");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("「补全扩展建筑」后按钮会出现在建造页，但可能显示为灰色不可点\n"
+                              "原因是战役局缺它们的前置建筑 / 科技\n"
+                              "开启后这两栋建筑按钮恒为可点，可直接建造");
+    }
 }
 
 // ===== 面板：协议技能 =====

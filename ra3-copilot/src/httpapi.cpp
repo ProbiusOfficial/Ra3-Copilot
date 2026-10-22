@@ -793,6 +793,13 @@ void Handle(SOCKET c, char* req) {
             "GET  /scratch?x=&y=&z=[&idx=0|1]  Coord3D 传参缓冲，回地址\n"
             "GET  /sbuf?s=文本[&idx=0..7]      C 字符串传参缓冲（intern 用），回地址\n"
             "GET  /probe                      技能按钮锁定探针（hook 0xA7E9AB，只读）\n"
+            "GET  /buildprobe[?reset=1]       建造页询问记录（0x43EA70 桩遥测：UI 问过哪些模板 → 「当前列表」快照）\n"
+            "GET  /buildext                   战役建造页补全扩展建筑：状态 + 建造者类 CommandSet 摘要\n"
+            "                                 开关 f=0x1D；打开后构建建造页时自动把战役版换成扩展完整版\n"
+            "GET  /toggle?f=0x1B&on=0|1        f=0x1B 移除科技锁定（0x43EA70 对本机玩家恒「可用」→ 建造页黑锁解锁）\n"
+            "                                  f=0x1A 忽略建造前置科技（0x4451F0 恒真；对 0x445250 的灰按钮同样有效）\n"
+            "                                  f=0x1D 补全扩展建筑（构建建造页时换成扩展完整版 CommandSet）\n"
+            "                                  f=0x1E 扩展建筑可点（0xABB6F0 对胡杨防空/礁石岸防强制 setEnabled）\n"
             "GET  /unlock?on=0|1              协议技能免「该阵营基地」前置（0x83B740 恒真）\n"
             "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
             "GET  /place?hash=0x..           自动落点推荐（几何打分 + 引擎校验，不召唤）\n"
@@ -1472,6 +1479,92 @@ void Handle(SOCKET c, char* req) {
                              "  [%u] this=%08X sub=%08X p4=%08X %s%s%s\n",
                              i, g_lpBuf[i*3], g_lpBuf[i*3+1], g_lpBuf[i*3+2],
                              "", "", "");
+        }
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
+    } else if (strcmp(path, "/buildprobe") == 0) {
+        // ClanGate 询问记录（遥测）：UI 每画一个建造按钮都会调 0x43EA70 问
+        // 「这个模板对本机玩家可不可用」，桩把 Template 指针去重记进 g_clanBuf。
+        // ⇒ 这份表就是「建造页实际问过哪些模板」的快照。
+        // 战役 / 扩展模式各跑一遍（先 reset）对比，就能看出扩展模式多出哪些建筑。
+        if (GetParamInt(query, "reset", 0)) {
+            g_clanCount = 0;
+            for (int i = 0; i < 128 * 3; ++i) g_clanBuf[i] = 0;
+            g_bpCount = 0;
+            for (int i = 0; i < 64; ++i) g_bpBuf[i] = 0;
+            g_csCount = 0;
+            for (int i = 0; i < 16; ++i) g_csBuf[i] = 0;
+        }
+        static char pb[8192];
+        size_t w = 0;
+        w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "clangate n=%u | btn n=%u | cmdset n=%u\n",
+                         g_clanCount, g_bpCount, g_csCount);
+        // CommandSet 探针：建造页列表源头（vt+0=数量, vt+0xC(i)=第 i 个按钮定义）
+        for (uint32_t i = 0; i < g_csCount && i < 16 && w + 64 < sizeof(pb); ++i) {
+            const uintptr_t cs = (uintptr_t)g_csBuf[i];
+            uint32_t vt = 0, f00 = 0, f04 = 0, f08 = 0, f0c = 0;
+            RdBytes(cs, &vt, 4);
+            RdBytes(cs + 4, &f04, 4);
+            RdBytes(cs + 8, &f08, 4);
+            RdBytes(cs + 12, &f0c, 4);
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  S[%u] cs=%08X vt=%08X +4=%08X +8=%08X +C=%08X\n",
+                             i, (unsigned)cs, vt, f04, f08, f0c);
+        }
+        // 按钮对象探针（0xAB7070 入口 ecx），必须开 g_flags[0x1C] 才记录
+        for (uint32_t i = 0; i < g_bpCount && i < 64 && w + 64 < sizeof(pb); ++i) {
+            const uintptr_t bo = (uintptr_t)g_bpBuf[i];
+            uint32_t vtpl = 0, vp = 0, b18 = 0, b10 = 0;
+            RdBytes(bo, &vtpl, 4);
+            RdBytes(bo + 0x10, &b10, 4);
+            RdBytes(bo + 0x18, &b18, 4);
+            uint32_t th = 0;
+            if (b18) {
+                uint32_t tag2 = 0;
+                RdBytes((uintptr_t)b18 + 4, &tag2, 4);
+                if (tag2 == 0x942FFF2D) RdBytes((uintptr_t)b18 + 8, &th, 4);
+            }
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  B[%u] obj=%08X vt=%08X h10=%08X tpl=%08X hash=%08X prev=%08X\n",
+                             i, (unsigned)bo, vtpl, b10, b18, th, vp);
+        }
+        for (uint32_t i = 0; i < g_clanCount && i < 128 && w + 128 < sizeof(pb); ++i) {
+            const uint32_t* e = &g_clanBuf[i * 3];
+            const uintptr_t tpl = (uintptr_t)e[0];
+            uint32_t hash = 0, tag = 0;
+            RdBytes(tpl + 4, &tag, 4);
+            if (tag == 0x942FFF2D) RdBytes(tpl + 8, &hash, 4);
+            char nm[64] = { 0 };
+            uint32_t np = 0;
+            if (RdBytes(tpl + 0x1C, &np, 4) && np) RdBytes((uintptr_t)np, nm, 40);
+            for (int k = 0; k < 40 && nm[k]; ++k) {
+                const unsigned char ch = (unsigned char)nm[k];
+                if (ch < 32 || ch > 126) { nm[k] = 0; break; }
+            }
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  C[%u] tpl=%08X hash=%08X hits=%u name=%s\n",
+                             i, (unsigned)tpl, hash, e[2], nm);
+        }
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
+    } else if (strcmp(path, "/buildext") == 0) {
+        // 战役建造页补全扩展建筑（g_flags[0x1D]）状态 + 建造者类 CommandSet 摘要。
+        // 首次调用会触发一次全内存扫描（数百 ms），结果按局缓存。
+        static char pb[4096];
+        static uint32_t dump[512];
+        size_t w = 0;
+        uint32_t n = BuildExtDump(dump, 512);
+        w += _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                         "buildext on=%d | cs=%u 建造者=%u 含扩展=%u 扫描=%ums | 生效=%u 最近 cs=%08X -> inner=%08X\n",
+                         GetFeature(FID_BUILDEXT) ? 1 : 0,
+                         n >= 4 ? dump[0] : 0, n >= 4 ? dump[1] : 0,
+                         n >= 4 ? dump[2] : 0, n >= 4 ? dump[3] : 0,
+                         g_extFixCount, g_extLastCs, g_extLastDst);
+        for (uint32_t i = 4; i + 3 <= n && w + 96 < sizeof(pb); i += 3) {
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  cs=%08X inner=%08X count=%u%s\n",
+                             dump[i], dump[i + 1], dump[i + 2] & 0xFFFFu,
+                             (dump[i + 2] & 0x80000000u) ? "  含扩展" : "");
         }
         HttpSend(c, pb, (int)strlen(pb));
         return;

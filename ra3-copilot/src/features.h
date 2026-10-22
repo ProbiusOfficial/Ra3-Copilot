@@ -37,12 +37,45 @@ extern uint32_t g_pcBuf[64 * 6];
 // 每条 3 DWORD = { this(=body+8), esi(子对象), [this+4](标志所在的容器指针) }
 extern uint32_t g_lpCount;
 extern uint32_t g_lpBuf[64 * 3];
+// 建造按钮「禁用态」探针：0x6B7440（画禁用 tooltip 的入口，push 0x207 = 禁用原因串）
+// 进入时记录 { template([btn+0x18]), thing([btn+0x10]), hits } —— 只有被引擎判禁用的按钮才会来。
+extern uint32_t g_blCount;
+extern uint32_t g_blBuf[128 * 3];
+// 禁用原因 tooltip 构造探针：0x6C5D90（内部硬编码 push 0xC814EC = GUI:BuildabilityDisabled）
+// 只在「画禁用原因」时被调用。记录 { tooltipObj(ecx), arg0, arg1, hits }
+extern uint32_t g_tipCount;
+extern uint32_t g_tipBuf[128 * 4];
+// ClanGate 询问记录（0x43EA70 每次被 UI 调用时记下 Template 指针）：
+// 用途 = 「建造页当前询问过哪些模板」的快照，战役 / 扩展模式各跑一遍即可对比列表差异。
+// 每条 3 DWORD = { template 指针, 模板哈希(C++ 侧补), 命中次数 }
+extern uint32_t g_clanCount;
+extern uint32_t g_clanBuf[128 * 3];
+// 建造页按钮对象探针（0xAB7070 入口记录 ecx = 按钮对象自身指针）：
+// 用途 = 拿到真实的按钮对象地址，再反查「持有它们的数组」→ 定位建造页列表本体（CommandSet）。
+// 一条 4 字节，上限 64 个（一个页签最多十来个按钮）。默认关闭，开 g_flags[0x1C] 才记录。
+extern uint32_t g_bpCount;
+extern uint32_t g_bpBuf[64];
+// CommandSet 探针（0xACB330 内 0xACB352 处 ebx = 查表得到的 CommandSet 对象）：
+// 建造页列表的真正源头 —— 循环用 vt+0 取数量、vt+0xC 取第 i 个按钮定义。
+extern uint32_t g_csCount;
+extern uint32_t g_csBuf[16];
 
 // 各 hook 返回地址（C++ 侧填充）
 extern uint32_t g_retMoney, g_retPlayerId, g_retPower, g_retSCPoint, g_retHaveAllSC;
 extern uint32_t g_retProtoAll;
 extern uint32_t g_retProtoClick;
 extern uint32_t g_retLockProbe;
+extern uint32_t g_retBuildLock;
+extern uint32_t g_retBuildTip;
+extern uint32_t g_retScience;
+extern uint32_t g_retClanGate;   // 可用对象集合判定桩返回地址（0x43EA70 + 10）
+extern uint32_t g_retBtnProbe;   // 建造页按钮对象探针返回地址（0xAB7070 + 5）
+extern uint32_t g_retCsProbe;    // CommandSet 探针返回地址（0xACB352 + 8）
+extern uint32_t g_retBtnEnable;  // 建造按钮强制可用桩返回地址（0xABB6F0 + 6）
+extern uint32_t g_extFixCount;   // 建造页补全扩展建筑：生效次数
+extern uint32_t g_extLastCs;     // 最近一次被修正的 CommandSet（0 = 从未）
+extern uint32_t g_extLastDst;    // 换到的 inner（= 扩展完整版）
+extern uint32_t g_extScanMs;     // 全内存扫描耗时（ms）
 extern uint32_t g_scPointObj, g_scPointVal;
 extern uint32_t g_retFastBuild1, g_retFastBuild2, g_retFastBuild3, g_retMap;
 extern uint32_t g_retUnitAmmo, g_retDangerLevel, g_retOreMine, g_retGodMode;
@@ -79,7 +112,21 @@ void OneKillCaveStub();
 void OKData1CaveStub();
 void OKData2CaveStub();
 void LockProbeCaveStub();   // 技能按钮锁定探针（只记录）
+void BuildLockCaveStub();   // 建造按钮禁用态探针（只记录）
+void BuildTipCaveStub();    // 禁用原因 tooltip 构造探针（只记录）
+void ScienceCaveStub();     // 建造前置科技判定桩（g_flags[0x1A] 打开时恒真）
+void ClanGateCaveStub();    // 可用对象集合判定桩（g_flags[0x1B] 打开时对本机玩家恒「可用」）
+void BuildBtnProbeCaveStub(); // 建造页按钮对象探针（g_flags[0x1C] 打开时记录 ecx）
+void CommandSetProbeCaveStub(); // CommandSet 探针（g_flags[0x1C] 打开时记录 ebx）
+void BtnEnableCaveStub();       // 建造按钮强制可用（g_flags[0x1E] 打开时对扩展建筑强制 setEnabled）
 }
+
+// 战役建造页补全扩展建筑：由 CommandSetProbeCaveStub 在每次取到建造者 CommandSet 时调用。
+// 若该 cs 缺扩展建筑（胡杨防空 / 礁石岸防），把它指向「扩展完整版」的 inner。
+// 实现在 features.cpp；同一局内只扫一次内存，之后查缓存。返回新 inner（0 = 未改）。
+extern "C" uint32_t Ra3BuildExtFix(uint32_t cs);
+// 供 HTTP /buildext 查询用：导出扫描统计与建造者类 CommandSet 摘要。
+uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries);
 
 // ---- 功能开关索引（对齐 CE 的 FLAGS 偏移）----
 enum FeatureIdx {
@@ -99,6 +146,12 @@ enum FeatureIdx {
     FID_GODMODE   = 0x16,
     FID_KILLMODE  = 0x17,   // 秒杀模式（敌方单位 HP 归零）
     FID_PROTOALL  = 0x18,   // 协议格全解锁（跳过前置条件检查）
+    FID_BUILDFORCE = 0x19,  // 建造按钮强制可用（把 vt+0x44 的 reason==0 改写成 1）
+    FID_SCIALL    = 0x1A,   // 忽略建造前置科技（0x4451F0 恒真 → 解锁战役科技锁）
+    FID_CLANGATE  = 0x1B,   // 可用对象集合判定（0x43EA70 对本机玩家返回「可用」→ 解锁建造页黑锁）
+    FID_BTNPROBE  = 0x1C,   // 探针：记录建造页按钮对象地址（只在找列表结构时临时开）
+    FID_BUILDEXT  = 0x1D,   // 战役建造页补全扩展建筑：构建时把战役版 CommandSet 换成扩展完整版
+    FID_BTNENABLE = 0x1E,   // 扩展建筑按钮强制可用（0xABB6F0 直接走 setEnabled，绕过前置/范围判定）
     FID_COUNT     = 32,
 };
 

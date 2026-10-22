@@ -42,6 +42,10 @@ EXTERNDEF g_zoomVal      : DWORD    ; 遥测：进入时 [esi+0x44]
 EXTERNDEF g_zoomPost     : DWORD    ; 遥测：运算后 [esi+0x44]
 EXTERNDEF g_zoomEntry    : DWORD    ; 遥测：缩放函数入口命中次数（含被早退的）
 
+; ---- C++ 侧可调用函数（__cdecl）----
+EXTERNDEF Ra3BuildExtFix : PROC     ; 战役建造页补全扩展建筑：入参 cs，返回新 inner（0=未改）
+EXTERNDEF Ra3IsExtTpl    : PROC     ; 入参模板哈希，返回 1=扩展建筑（苏/盟/天朝任一）
+
 ; ---- 各 hook 返回地址（运行时由 C++ 填充 = site + 重放长度）----
 EXTERNDEF g_retMoney        : DWORD
 EXTERNDEF g_retPlayerId     : DWORD
@@ -55,6 +59,24 @@ EXTERNDEF g_retProtoClick   : DWORD
 EXTERNDEF g_retLockProbe     : DWORD    ; 技能按钮锁定探针返回地址
 EXTERNDEF g_lpCount          : DWORD    ; 探针命中条数
 EXTERNDEF g_lpBuf            : DWORD    ; 探针记录 {this, esi, [this+4]} × 64
+EXTERNDEF g_retBuildLock     : DWORD    ; 建造按钮禁用态探针返回地址
+EXTERNDEF g_blCount          : DWORD    ; 禁用探针去重后的模板条数
+EXTERNDEF g_blBuf            : DWORD    ; 禁用探针记录 {tpl, thing, hits} × 128
+EXTERNDEF g_retBuildTip      : DWORD    ; 禁用原因 tooltip 探针返回地址
+EXTERNDEF g_tipCount         : DWORD    ; tooltip 探针去重后的条数
+EXTERNDEF g_tipBuf           : DWORD    ; tooltip 探针记录 {ecx, arg0, arg1, hits} × 128
+EXTERNDEF g_retScience       : DWORD    ; 建造前置科技判定桩返回地址
+EXTERNDEF g_retClanGate      : DWORD    ; 可用对象集合判定桩返回地址（0x43EA7A）
+EXTERNDEF g_localPlayerObj   : DWORD    ; 本机 Player 对象（PlayerIdCaveStub 写入）
+EXTERNDEF g_clanCount        : DWORD    ; ClanGate 询问去重条数
+EXTERNDEF g_clanBuf          : DWORD    ; ClanGate 询问记录 {template, 0, hits} × 128
+EXTERNDEF g_retBtnProbe      : DWORD    ; 建造页按钮对象探针返回地址（0xAB7075）
+EXTERNDEF g_bpCount          : DWORD    ; 按钮对象去重条数
+EXTERNDEF g_bpBuf            : DWORD    ; 按钮对象地址表 × 64
+EXTERNDEF g_retCsProbe       : DWORD    ; CommandSet 探针返回地址（0xACB35A）
+EXTERNDEF g_retBtnEnable     : DWORD    ; 扩展建筑按钮强制可用桩返回地址（0xABB6F6）
+EXTERNDEF g_csCount          : DWORD    ; CommandSet 去重条数
+EXTERNDEF g_csBuf            : DWORD    ; CommandSet 指针表 × 16
 EXTERNDEF g_retFastBuild1   : DWORD
 EXTERNDEF g_retFastBuild2   : DWORD
 EXTERNDEF g_retFastBuild3   : DWORD
@@ -678,6 +700,351 @@ lp_norec:
     call  eax
     jmp   dword ptr [g_retLockProbe]
 LockProbeCaveStub ENDP
+
+; ===========================================================================
+; BuildLockCaveStub <- base+0x6B7440
+;   AOB 565 78BF18B0DB82FCE00 (10 字节；0x6B5F31 / 0x6B73E0 / 0x6B7440 三处同构，
+;   本 hook 只装 0x6B7440 —— 它由 0x6C61DA call 与 0x6C6310 jmp 进入)
+;   0x6B7440 = 建造/技能按钮「禁用态」的绘制入口：进去就 push 0x207（禁用原因 CSF 串）
+;   并读 [esi+0x10]（Thing）与 [esi+0x18]（Template）。只有被引擎判为不可用的按钮才会来。
+;   本站点即 0x6C6301 分支的落点：
+;       0x6C62E3  call 0x445250 (Buildability)   al==0 → 正常返回
+;       0x6C62FD  call [0xCDBBCC]->vt+0x44       eax!=0 → 正常返回
+;       0x6C6310  jmp 0x6B7440                   ← 只剩这一条路 = 真·禁用
+;   本 stub 按 Template 去重记录 {tpl, thing, hits}，不改变任何行为。
+; ===========================================================================
+BuildLockCaveStub PROC
+    pushad
+    pushfd
+    cmp   ecx, 1000000h                    ; 指针基本校验
+    jb    bl_done
+    mov   edi, dword ptr [ecx+18h]         ; Template
+    mov   edx, dword ptr [g_blCount]
+    lea   ebx, dword ptr [g_blBuf]
+    xor   esi, esi
+bl_scan:
+    cmp   esi, edx
+    jae   bl_new
+    cmp   dword ptr [ebx], edi
+    je    bl_found
+    add   ebx, 12
+    inc   esi
+    jmp   bl_scan
+bl_found:
+    inc   dword ptr [ebx+8]
+    jmp   bl_done
+bl_new:
+    cmp   edx, 127
+    jae   bl_done
+    mov   ebx, edx
+    imul  ebx, ebx, 12
+    lea   eax, dword ptr [g_blBuf]
+    add   ebx, eax
+    mov   dword ptr [ebx+0], edi           ; Template
+    mov   eax, dword ptr [ecx+10h]         ; Thing
+    mov   dword ptr [ebx+4], eax
+    mov   dword ptr [ebx+8], 1
+    inc   edx
+    mov   dword ptr [g_blCount], edx
+bl_done:
+    popfd
+    popad
+    push  esi                              ; 56      原指令重放
+    push  edi                              ; 57
+    mov   esi, ecx                         ; 8B F1
+    jmp   dword ptr [g_retBuildLock]       ; = 6B7444
+BuildLockCaveStub ENDP
+
+; ===========================================================================
+; BuildTipCaveStub <- base+0x6C5D90
+;   AOB 83EC08568BF18B0D54B7 (10 字节)
+;   0x6C5D90 是「禁用原因 tooltip」的构造器：__thiscall，ecx = tooltip 目标对象，
+;   栈上两个参数（ret 8）。函数体内硬编码 push 0xC814EC = GUI:BuildabilityDisabled，
+;   所以**只有被引擎判为禁用的东西才会进来**——包括建造面板上那些黑锁占位格。
+;   记录 { ecx, arg0([esp+4]), arg1([esp+8]), hits }，按 ecx 去重，不改行为。
+;   pushad(32)+pushfd(4)=0x24 ⇒ 原始 [esp+4] 现在位于 [esp+0x28]。
+; ===========================================================================
+BuildTipCaveStub PROC
+    pushad
+    pushfd
+    mov   edi, ecx                          ; tooltip 目标对象
+    mov   esi, dword ptr [esp+28h]          ; arg0
+    mov   edx, dword ptr [esp+2Ch]          ; arg1
+    mov   ebx, dword ptr [g_tipCount]
+    lea   ebp, dword ptr [g_tipBuf]
+    xor   ecx, ecx
+bt_scan:
+    cmp   ecx, ebx
+    jae   bt_new
+    mov   eax, ecx
+    shl   eax, 4
+    add   eax, ebp
+    cmp   dword ptr [eax], edi
+    je    bt_found
+    inc   ecx
+    jmp   bt_scan
+bt_found:
+    inc   dword ptr [eax+12]
+    jmp   bt_done
+bt_new:
+    cmp   ebx, 127
+    jae   bt_done
+    mov   eax, ebx
+    shl   eax, 4
+    add   eax, ebp
+    mov   dword ptr [eax+0], edi            ; ecx
+    mov   dword ptr [eax+4], esi            ; arg0
+    mov   dword ptr [eax+8], edx            ; arg1
+    mov   dword ptr [eax+12], 1
+    inc   ebx
+    mov   dword ptr [g_tipCount], ebx
+bt_done:
+    popfd
+    popad
+    sub   esp, 8                            ; 83 EC 08   原指令重放
+    push  esi                               ; 56
+    mov   esi, ecx                          ; 8B F1
+    jmp   dword ptr [g_retBuildTip]         ; = 6C5D96
+BuildTipCaveStub ENDP
+
+; ===========================================================================
+; ScienceCaveStub <- base+0x4451F0
+;   AOB 51568B74240C85F6578BF9 (11 字节；0x4451F0 / 0x68B140 两处同构，只装前者)
+;   bool Science(Player* ecx, Template* [esp+8])  __thiscall, ret 4
+;   返回 false 是「建造前置科技不满足」的唯一来源：
+;       0x4451F0 内 if (0x43EA70(p,t)) → ret 0   ← 阵营/关系不匹配，战役锁走这条
+;   而 0x445250(Buildability) 的判定是：Science 假 → 假；Science 真 → 看 status
+;       （status 0/1 → true，2 → false，3 → 看 [Player+0x2C]）
+;   所以本站点恒真即可让被剧情锁住的建筑重新可建（等价于旁路
+;   0x43EA70 的阵营判定）。受 g_flags[1Ah]（FID_SCIALL）控制，默认关。
+;   2026-10-22 补：0x445250 正是「建造页按钮是否画成灰」的唯一门（按钮 vtable slot13
+;   → 0xABB6F0 → 0xABB812 调 0x445250），所以本开关对灰按钮同样有效 ——
+;   但它是全局的（所有建筑都忽略前置），精准场景改用 BtnEnableCaveStub（g_flags[1Eh]）。
+;   ⚠ 必须限定「只对本机玩家放行」：全局恒真会让 AI 也走未解锁的建筑分支，
+;      2026-10-22 10:30 实测直接崩游戏（c0000005）。
+; ===========================================================================
+ScienceCaveStub PROC
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Ah], 0
+    je    sci_orig
+    mov   edx, dword ptr [g_localPlayerObj]
+    test  edx, edx
+    jz    sci_orig
+    cmp   ecx, edx                         ; ecx = Player，只放行本机玩家
+    jne   sci_orig
+    mov   al, 1                            ; 恒真：忽略科技前置
+    ret   4                                ; 本函数只有 1 个栈参数
+sci_orig:
+    push  ecx                              ; 51          原指令重放
+    push  esi                              ; 56
+    mov   esi, dword ptr [esp+0Ch]         ; 8B 74 24 0C
+    jmp   dword ptr [g_retScience]         ; = 4451F6
+ScienceCaveStub ENDP
+
+; ===========================================================================
+; ClanGateCaveStub <- base+0x43EA70
+;   AOB 8B 44 24 04 8B 90 C0 00 00 00 (10 字节；exe 内 2 处命中，本表按固定 RVA
+;   安装并原地校验，只认 0x43EA70)
+;   0x43EA70 = 「模板是否在玩家可用对象集合里」的判定：
+;     __thiscall(ecx = Player*, [esp+4] = Template*) -> al, ret 4
+;     返回 1 = 命中 Player+0x200 链表（= 该模板被锁 / 不可用，UI 画黑锁）
+;     返回 0 = 不在链表里 = 可用
+;     （2026-10-22 反汇编复核：命中 → eax≠哨兵 → setne dl = 1；未命中 → 0。
+;       链表是「禁用集合」，不是白名单 —— 早先注释写反了，实测以 0=可用 为准。）
+;   三个 UI 调用点 (0x6B7089 / 0x6BB228 / 0x6BB4E2) 直接调它、绕过 0x4451F0，
+;   所以 Science 桩 (0x4451F0) 对它无效 —— 这才是建造页黑锁的门。
+;   原指令边界：+0 = mov eax,[esp+4] (4B) / +4 = mov edx,[eax+0C0h] (6B)
+;               → 边界在 +10，重放这两条后跳回 0x43EA7A
+;   开 g_flags[1Bh] (FID_CLANGATE) 时只对本机玩家返回 0，AI / 其他玩家不受影响。
+;
+;   附带遥测：每次进入都记下 Template 指针（去重 + 计数）到 g_clanBuf。
+;   战场外的用处 —— UI 每画一个建造按钮就会问一次，所以这份表就是
+;   「建造页实际问过哪些模板」的快照：战役 / 扩展模式各跑一遍即可对比列表差异。
+;   pushad(32) + pushfd(4) ⇒ 原 [esp+4] 在记录段里是 [esp+40]。
+; ===========================================================================
+ClanGateCaveStub PROC
+    pushad
+    pushfd
+    mov   eax, dword ptr [g_localPlayerObj] ; 只记本机玩家的询问（敌方 AI 也会调本函数）
+    test  eax, eax
+    jz    cg_rec_done
+    cmp   ecx, eax
+    jne   cg_rec_done
+    mov   esi, dword ptr [esp+40]          ; 原 [esp+4] = Template*
+    test  esi, esi
+    jz    cg_rec_done
+    xor   ecx, ecx
+    mov   edi, dword ptr [g_clanCount]
+    lea   edx, dword ptr [g_clanBuf]
+cg_rec_loop:
+    cmp   ecx, edi
+    jae   cg_rec_new
+    cmp   dword ptr [edx], esi
+    je    cg_rec_hit
+    add   edx, 12
+    inc   ecx
+    jmp   cg_rec_loop
+cg_rec_hit:
+    inc   dword ptr [edx+8]
+    jmp   cg_rec_done
+cg_rec_new:
+    cmp   edi, 128
+    jae   cg_rec_done
+    imul  ecx, edi, 12
+    lea   edx, dword ptr [g_clanBuf]
+    add   edx, ecx
+    mov   dword ptr [edx], esi
+    mov   dword ptr [edx+4], 0
+    mov   dword ptr [edx+8], 1
+    inc   edi
+    mov   dword ptr [g_clanCount], edi
+cg_rec_done:
+    popfd
+    popad
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Bh], 0
+    je    cg_orig
+    mov   edx, dword ptr [g_localPlayerObj]
+    test  edx, edx
+    jz    cg_orig
+    cmp   ecx, edx                         ; ecx = Player，只放行本机玩家
+    jne   cg_orig
+    xor   al, al                           ; 0 = 该模板对本机玩家可用
+    ret   4                                ; 本函数 ret 4（1 个栈参数）
+cg_orig:
+    mov   eax, dword ptr [esp+4]           ; 8B 44 24 04       原指令重放
+    mov   edx, dword ptr [eax+0C0h]        ; 8B 90 C0 00 00 00 原指令重放
+    jmp   dword ptr [g_retClanGate]        ; = 43EA7A
+ClanGateCaveStub ENDP
+
+; ===========================================================================
+; BuildBtnProbeCaveStub <- base+0xAB7070  AOB 83 EC 0C 53 56 8B F1 8B 4E 10 (10B)
+;   探针：只记录 ecx（建造页按钮对象自身），不改变任何行为。
+;   用途：拿到真实按钮对象地址后，反查「持有它们的数组」→ 定位建造页列表本体。
+;   站点原指令：sub esp,0Ch(3B) / push ebx(1B) / push esi(1B) = 5B，边界 +5 → 0xAB7075
+;   记录受 g_flags[1Ch] 控制（默认关）；去重上限 64 个地址。
+BuildBtnProbeCaveStub PROC
+    pushad
+    pushfd
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Ch], 0
+    je    bp_done
+    mov   esi, dword ptr [g_bpCount]
+    cmp   esi, 64
+    jae   bp_done
+    xor   edi, edi
+    lea   edx, dword ptr [g_bpBuf]
+bp_scan:
+    cmp   edi, esi
+    jae   bp_new
+    cmp   dword ptr [edx+edi*4], ecx
+    je    bp_done
+    inc   edi
+    jmp   bp_scan
+bp_new:
+    mov   dword ptr [edx+esi*4], ecx
+    inc   esi
+    mov   dword ptr [g_bpCount], esi
+bp_done:
+    popfd
+    popad
+    sub   esp, 0Ch                         ; 83 EC 0C  原指令重放
+    push  ebx                              ; 53        原指令重放
+    push  esi                              ; 56        原指令重放
+    jmp   dword ptr [g_retBtnProbe]        ; = 0xAB7075
+BuildBtnProbeCaveStub ENDP
+
+; ===========================================================================
+; CommandSetProbeCaveStub <- base+0xACB352  AOB 8B D8 85 DB 89 5C 24 18 (8B)
+;   探针：记录 ebx（= 从 [0xCD8D00] store 查出的 CommandSet 对象），不改变行为。
+;   调用者 0xACB330 是「建造页按钮列表构建器」：vt+0 = 按钮数、vt+0xC(i) = 第 i 个按钮定义。
+;   站点原指令：mov ebx,eax(2B) / test ebx,ebx(2B) / mov [esp+18h],ebx(4B) = 8B，边界 +8。
+;   注意：桩内 esp 与站点处一致（pushad/popad 净零），所以 [esp+18h] 可原样重放。
+;   g_flags[0x1D]（FID_BUILDEXT）打开时，先调 Ra3BuildExtFix(eax) 把战役版 cs 换成
+;   扩展完整版 —— 此刻按钮还没 new，换完同一轮构建即按新 count 走。
+CommandSetProbeCaveStub PROC
+    pushad
+    pushfd
+    test  eax, eax
+    jz    cs_done
+    ; --- 1) 探针必须在 Fix 之前：Fix 返回后 eax 会变成新 inner，不再是 cs
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Ch], 0
+    je    cs_fix
+    mov   esi, dword ptr [g_csCount]
+    cmp   esi, 16
+    jae   cs_fix
+    xor   edi, edi
+    lea   edx, dword ptr [g_csBuf]
+cs_scan:
+    cmp   edi, esi
+    jae   cs_new
+    cmp   dword ptr [edx+edi*4], eax
+    je    cs_fix
+    inc   edi
+    jmp   cs_scan
+cs_new:
+    mov   dword ptr [edx+esi*4], eax
+    inc   esi
+    mov   dword ptr [g_csCount], esi
+cs_fix:
+    ; --- 2) 补全扩展建筑（eax = 构建器查表拿到的 cs）
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Dh], 0
+    je    cs_done
+    push  eax                              ; cs（__cdecl，调用方清栈）
+    call  Ra3BuildExtFix
+    add   esp, 4
+cs_done:
+    popfd
+    popad
+    mov   ebx, eax                         ; 8B D8      原指令重放
+    test  ebx, ebx                         ; 85 DB      原指令重放
+    mov   dword ptr [esp+18h], ebx         ; 89 5C 24 18 原指令重放
+    jmp   dword ptr [g_retCsProbe]         ; = 0xACB35A
+CommandSetProbeCaveStub ENDP
+
+; ===========================================================================
+; BtnEnableCaveStub <- base+0xABB6F0  AOB 83EC08 56 8BF1 E865FCFFFF (11B，全 exe 唯一)
+;   建造页按钮「可用性刷新」入口（按钮对象 vtable 0x00C88518 的 slot13，0xAB7070 尾部调它）。
+;   原函数末尾决定 enable/disable：走 0xABB812 时调 0x845250(Buildability)，
+;     返回 0 → 0xAB7040(setDisabled) → 绘制成灰；返回 1 → 0xAB7000(setEnabled)。
+;   为什么 0x445250 会返回 0：它先调 0x8451F0(前置科技)，再调 0x7DF770(tmpl) 取状态；
+;   扩展建筑在战役局的前置建筑 / 科技不满足，故恒灰（引擎「落点可建」判定却是通过的）。
+;   桩：开关 g_flags[1Eh] 打开时，若按钮的 Template 是扩展建筑，直接 setEnabled(true) 并返回。
+;   重放 6 字节 = sub esp,8 (3B) / push esi (1B) / mov esi,ecx (2B)，边界在 +6。
+;   ⚠ 本桩无 pushad/pushfd，直接改 eax/ecx（两者都是调用者不保留的），ebx/esi/edi 不碰。
+; ===========================================================================
+BtnEnableCaveStub PROC
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Eh], 0
+    je    be_orig
+    mov   eax, dword ptr [ecx+18h]         ; 按钮的 Template*
+    test  eax, eax
+    jz    be_orig
+    mov   eax, dword ptr [eax+8]           ; Template+0x08 = 名字哈希
+    test  eax, eax
+    jz    be_orig
+    push  ecx                              ; C 调用会毁 ecx/edx，先存按钮对象
+    push  eax
+    call  Ra3IsExtTpl                      ; 苏/盟/天朝的扩展建筑统一判定
+    add   esp, 4
+    pop   ecx
+    test  eax, eax
+    jz    be_orig
+be_force:
+    push  ecx                              ; 保存按钮对象（0xAB7000 用 ecx 作 this）
+    mov   eax, 0AB7000h                    ; setEnabled(true)
+    call  eax
+    pop   ecx
+    mov   al, 1
+    ret
+be_orig:
+    sub   esp, 8                           ; 83 EC 08   原指令重放
+    push  esi                              ; 56
+    mov   esi, ecx                         ; 8B F1
+    jmp   dword ptr [g_retBtnEnable]       ; = 0xABB6F6
+BtnEnableCaveStub ENDP
 
 END
 
