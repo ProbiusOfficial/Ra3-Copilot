@@ -1626,6 +1626,211 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
 
 const char* SummonLastError() { return g_lastErr; }
 
+// ===================== 战役脚本 flag（ScriptEngine 的 flag 树）=====================
+// SAGE 的脚本 flag / timer 是 std::map<NameKeyType,int>（在 ScriptEngine 对象内，
+// 三棵树：+0x16CA8 timer、+0x16CC4 flag、+0x16CE0 其它）：
+//   - 键 = 8 字节 {作用域哈希, FNV-1(名字)}。名字的哈希是 **FNV-1**（先乘 16777619 再异或
+//     字节，起始 2166136261）—— 不是 FNV-1a、也不是模板名用的 sage_hash；
+//   - 作用域哈希有 4 种取值（0x811C9DC5 = 无前缀/全局，另有 0x9FA0497F / 0x13CD82CC /
+//     0x15B02882 等按玩家/脚本组区分）。**不能假定它恒为 0x811C9DC5**；
+//   - 节点布局（MSVC _Tree 节点）：+0x00 L / +0x04 P / +0x08 R / +0x0C color,
+//     +0x10 scope / +0x14 hash / +0x18 value；
+//   - value 只有 bit0 是 flag 值，其余位另有用途 —— 只改 bit0，别整体覆盖。
+// 定位不依赖红黑树遍历（DFS 会因节点链异常漏掉大半）：搜 4 字节 hash，
+// 候选节点 = 命中地址 - 0x14，再用指针字段做结构校验。
+// 注意：flag 节点可能"存在但值为 0"—— 脚本条件里引用了它、引擎就先建了节点，
+// 因此置 1 有效；完全不存在的 flag 则写作失败（SAGE 读取缺表项当作 0）。
+static uint32_t Fnv1Name(const char* s) {
+    uint32_t h = 2166136261u;
+    for (const unsigned char* p = (const unsigned char*)s; *p; ++p)
+        h = (h * 16777619u) ^ (uint32_t)*p;
+    return h;
+}
+
+// 节点头 +0x00 L / +0x04 P / +0x08 R —— 都是 0 或用户态堆地址（>= 0x01000000）。
+// 低于 0x01000000 的是可执行模块（ImageBase 0x400000），不可能是树节点。
+// 返回值：0 = 不像；1 = 弱（P==0，SAGE 自有树的根 / 游离节点）；2 = 强（P 合法，在树中）。
+static int LooksLikeFlagNode(uintptr_t node, uint32_t hash) {
+    if (node < 0x01000000u) return 0;
+    __try {
+        const uint32_t* w = (const uint32_t*)node;
+        if (w[5] != hash) return 0;
+        const uint32_t L = w[0], P = w[1], R = w[2];
+        const bool okL = (L == 0) || (L >= 0x01000000u && L < 0x7F000000u);
+        const bool okR = (R == 0) || (R >= 0x01000000u && R < 0x7F000000u);
+        if (!okL || !okR) return 0;
+        const bool okP = (P >= 0x01000000u && P < 0x7F000000u);
+        // P 不合法（含 P==0）：SAGE 自有树的根或游离节点，仍然接受（弱）
+        return 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
+static uintptr_t FindFlagNode(uint32_t hash) {
+    // 按 DWORD 线性扫描；hash 是随机值，误命中极少，命中后再做结构校验。
+    // 分 8MB 一块，避免单次 __try 覆盖过大的块（也便于跨过不可读页）。
+    // 优先返回"在树里"（P 合法）的候选；只有在扫完全程都没更强候选时才用弱候选。
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    uintptr_t cur = (uintptr_t)si.lpMinimumApplicationAddress;
+    const uintptr_t end = (uintptr_t)si.lpMaximumApplicationAddress;
+    const DWORD readMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    const size_t step = 8u << 20;
+    uintptr_t weak = 0;
+    MEMORY_BASIC_INFORMATION mbi;
+    while (cur < end && VirtualQuery((LPCVOID)cur, &mbi, sizeof(mbi)) == sizeof(mbi)) {
+        const uintptr_t base = (uintptr_t)mbi.BaseAddress;
+        const size_t size = mbi.RegionSize;
+        // base >= 0x01000000：跳过 exe 自身的代码/数据段，省时间也避免误判
+        if (mbi.State == MEM_COMMIT && base >= 0x01000000u &&
+            !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) && (mbi.Protect & readMask)) {
+            for (size_t off = 0; off < size; off += step) {
+                const size_t n = (size - off) < step ? (size - off) : step;
+                uintptr_t strong = 0;
+                __try {
+                    const uintptr_t start = (base + off + 3) & ~(uintptr_t)3;
+                    const uint32_t* w = (const uint32_t*)start;
+                    const size_t cnt = (n > (start - (base + off)))
+                                           ? (n - (start - (base + off))) / 4 : 0;
+                    for (size_t i = 0; i < cnt; ++i) {
+                        if (w[i] != hash) continue;
+                        const uintptr_t node = (uintptr_t)(w + i) - 0x14;
+                        const int q = LooksLikeFlagNode(node, hash);
+                        if (q == 2) { strong = node; break; }
+                        if (q == 1 && !weak) weak = node;
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    strong = 0;
+                }
+                if (strong) return strong;
+            }
+        }
+        const uintptr_t next = base + size;
+        if (next <= cur) break;
+        cur = next;
+    }
+    return weak;
+}
+
+int ScriptFlagWrite(uintptr_t node, int on) {
+    g_lastErr[0] = 0;
+    if (!node) { SetErr("节点地址为空"); return -1; }
+    uint32_t old = 0;
+    __try {
+        uint32_t* val = (uint32_t*)(node + 0x18);
+        old = *val;
+        const uint32_t nv = on ? (old | 1u) : (old & ~1u);
+        if (nv != old) *val = nv;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        SetErr("写 flag 异常（目标地址不可写）");
+        return -1;
+    }
+    R3_LOG(0, "[flag] node=%08X 0x%08X -> bit0=%d", (unsigned)node, old, on ? 1 : 0);
+    return 1;
+}
+
+uintptr_t ScriptFlagResolve(const char* name) {
+    g_lastErr[0] = 0;
+    if (!name || !*name) { SetErr("flag 名为空"); return 0; }
+    const uint32_t h = Fnv1Name(name);
+    const uintptr_t node = FindFlagNode(h);
+    if (!node) SetErr("没找到这个 flag —— 检查拼写，或本局脚本里没有它");
+    return node;
+}
+
+int ActScriptFlag(const char* name, int on) {
+    const uintptr_t node = ScriptFlagResolve(name);
+    if (!node) return 0;
+    return ScriptFlagWrite(node, on);
+}
+
+// 一次扫描找多个 flag：逐个 ActScriptFlag 会各扫一遍全内存（单次数秒），批量版把
+// 候选 hash 一起带进同一轮遍历。只读，可放工作线程；写入仍需回渲染线程。
+int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes) {
+    if (!names || !nodes || n <= 0) return 0;
+    if (n > 8) n = 8;
+    uint32_t hashes[8];
+    uintptr_t weak[8];
+    for (int i = 0; i < n; ++i) {
+        hashes[i] = Fnv1Name(names[i]);
+        nodes[i] = 0;
+        weak[i] = 0;
+    }
+
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    uintptr_t cur = (uintptr_t)si.lpMinimumApplicationAddress;
+    const uintptr_t end = (uintptr_t)si.lpMaximumApplicationAddress;
+    const DWORD readMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    const size_t step = 8u << 20;
+    int remaining = n;
+    MEMORY_BASIC_INFORMATION mbi;
+    while (cur < end && remaining > 0 &&
+           VirtualQuery((LPCVOID)cur, &mbi, sizeof(mbi)) == sizeof(mbi)) {
+        const uintptr_t base = (uintptr_t)mbi.BaseAddress;
+        const size_t size = mbi.RegionSize;
+        if (mbi.State == MEM_COMMIT && base >= 0x01000000u &&
+            !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) && (mbi.Protect & readMask)) {
+            for (size_t off = 0; off < size && remaining > 0; off += step) {
+                const size_t nb = (size - off) < step ? (size - off) : step;
+                __try {
+                    const uintptr_t start = (base + off + 3) & ~(uintptr_t)3;
+                    const uint32_t* w = (const uint32_t*)start;
+                    const size_t cnt = (nb > (start - (base + off)))
+                                           ? (nb - (start - (base + off))) / 4 : 0;
+                    for (size_t i = 0; i < cnt; ++i) {
+                        const uint32_t v = w[i];
+                        for (int k = 0; k < n; ++k) {
+                            if (v != hashes[k] || nodes[k]) continue;
+                            const uintptr_t node = (uintptr_t)(w + i) - 0x14;
+                            const int q = LooksLikeFlagNode(node, hashes[k]);
+                            if (q == 2) { nodes[k] = node; --remaining; break; }
+                            if (q == 1 && !weak[k]) weak[k] = node;
+                        }
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    // 跳过不可读块
+                }
+            }
+        }
+        const uintptr_t next = base + size;
+        if (next <= cur) break;
+        cur = next;
+    }
+
+    int hit = 0;
+    for (int k = 0; k < n; ++k) {
+        if (!nodes[k] && weak[k]) nodes[k] = weak[k];
+        if (nodes[k]) ++hit;
+    }
+    return hit;
+}
+
+const char* ScriptFlagLastError() { return g_lastErr[0] ? g_lastErr : "ok"; }
+
+// 通用节点写入：flag 改 bit0，timer 整体覆盖（0xFFFFFFFF = 已过期）。
+int ScriptNodeWrite(uintptr_t node, uint32_t value, int mode) {
+    g_lastErr[0] = 0;
+    if (!node) { SetErr("节点地址为空"); return -1; }
+    uint32_t old = 0, nv = 0;
+    __try {
+        uint32_t* val = (uint32_t*)(node + 0x18);
+        old = *val;
+        if (mode == 1)      nv = old | 1u;
+        else if (mode == 2) nv = old & ~1u;
+        else                nv = value;
+        if (nv != old) *val = nv;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        SetErr("写节点异常（目标地址不可写）");
+        return -1;
+    }
+    R3_LOG(0, "[node] %08X mode=%d 0x%08X -> 0x%08X", (unsigned)node, mode, old, nv);
+    return 1;
+}
+
 // ---- 安全护栏对外接口（必须在匿名命名空间之外，才有外部链接）----
 bool SetDryRun(bool on) { g_dryRun = on; return true; }
 bool GetDryRun() { return g_dryRun; }

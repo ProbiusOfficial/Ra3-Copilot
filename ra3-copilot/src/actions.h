@@ -184,6 +184,28 @@ uint32_t RandomUnitHash(const char* pool);
 // 最近一次召唤失败的具体原因（供 UI 显示）
 const char* SummonLastError();
 
+// ---- 战役脚本 flag ----
+// 按名字设置 ScriptEngine 的脚本 flag / timer（如 "f_debug_skip_objective_01"）。
+// 键 = 8 字节 {作用域哈希, FNV-1(名字)} —— 作用域有 4 种取值，**不恒为 0x811C9DC5**。
+// 定位方式：搜 4 字节 FNV-1(名字)，候选节点 = 命中地址 - 0x14，再做指针字段校验；
+// value 在节点 +0x18，只改 bit0。
+//
+// 分两段是为了线程安全：Resolve 只读扫描（慢，放 HTTP 线程，不卡渲染），
+// Write 只改 4 字节（快，必须放渲染线程）。
+uintptr_t ScriptFlagResolve(const char* name);   // 返回节点地址，0 = 没找到
+int ScriptFlagWrite(uintptr_t node, int on);     // 1=已写 -1=异常
+int ActScriptFlag(const char* name, int on);     // 便捷版（两段一起跑，仅供渲染线程内使用）
+// 批量 Resolve：一次内存扫描同时定位多个 flag（逐个调会各扫一遍全内存）。
+// nodes 与 names 对齐，0 = 没找到；返回命中的个数。同样只读，可放工作线程。
+int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes);
+const char* ScriptFlagLastError();
+
+// 按"值"写脚本节点（flag 与 timer 通用）：
+//   mode 0 = 直接写 value（timer 写 0xFFFFFFFF 表示已过期）
+//   mode 1 = 置 bit0（flag 置真）
+//   mode 2 = 清 bit0（flag 置假）
+int ScriptNodeWrite(uintptr_t node, uint32_t value, int mode);
+
 // ---- 安全护栏 ----
 bool SetDryRun(bool on);   // dry-run：只记录、不改内存（排查闪退用）
 bool GetDryRun();

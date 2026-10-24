@@ -15,6 +15,7 @@
 #include "protocol.h"
 #include "aicmd.h"
 #include "battle_catalog.h"
+#include "scriptobj.h"   // 战役目标表（自动识别关卡 + 一键完成目标）
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -518,6 +519,12 @@ void ExecCmd(CmdSlot& c) {
                  p[0], p[1], p[2], pick, g_autoCandN, pd, g_autoDiag);
         break;
     }
+    case 34: {  // allclearance: 一次性授予当前阵营的全部许可等级（Upgrade_*Tech* / RANK*）
+        char o9[384] = { 0 };
+        const int rc = ProtoGrantAllClearance(o9, sizeof(o9));
+        CmdReply("allclearance r=%d %s", rc, o9);
+        break;
+    }
     case 33: {  // upgrade: g_scriptArgs[0]=名字，a1=mode(2=Upgrade 1=PlayerTech)
         char o8[256] = { 0 };
         const int ru = ProtoGrantUpgrade(g_scriptArgs[0], (int)c.a1, o8, sizeof(o8));
@@ -588,6 +595,22 @@ void ExecCmd(CmdSlot& c) {
                    g_scriptArgs[2][0] ? g_scriptArgs[2] : nullptr,
                    o3, sizeof(o3));
         CmdReply("%s", o3);
+        break;
+    }
+    case 40: {  // flag: g_scriptArgs[0]=名字 a1=on a2=节点地址（HTTP 线程已解析好）
+        const uintptr_t node = (uintptr_t)(intptr_t)c.a2;
+        if (!g_scriptArgs[0][0]) { CmdReply("flag: name 为空"); break; }
+        if (!node) { CmdReply("flag %s : %s", g_scriptArgs[0], ScriptFlagLastError()); break; }
+        const int rf = ScriptFlagWrite(node, (int)c.a1);
+        CmdReply("flag %s -> %d : %s", g_scriptArgs[0], (int)c.a1,
+                 rf == 1 ? "ok" : ScriptFlagLastError());
+        break;
+    }
+    case 41: {  // nodewrite: a1=节点 a2=写入值 a3=mode(0=覆盖 1=置bit0 2=清bit0)
+        const uintptr_t node = (uintptr_t)(intptr_t)c.a1;
+        const int rw = ScriptNodeWrite(node, (uint32_t)c.a2, (int)c.a3);
+        CmdReply("node %08X mode=%d -> %s", (unsigned)node, (int)c.a3,
+                 rw == 1 ? "ok" : ScriptFlagLastError());
         break;
     }
     default:
@@ -744,6 +767,11 @@ void Handle(SOCKET c, char* req) {
             "GET  /snapshot[?fresh=1&vtab=0x..]  战场快照 JSON（资金/我方/敌方单位数+构成/选中/扫描统计）\n"
             "GET  /objects?q=&owner=&cls=&cat=&limit=40  活体对象列表（带 Thing/AI 地址/坐标/血量，MCP 感知层）\n"
             "GET  /obj?addr=0x..             单个对象详情（addr = Thing 地址，见 /objects）\n"
+            "== 战役目标（卡进度时用）==\n"
+            "GET  /objectives               扫一次脚本节点 -> 自动识别关卡 + 列出目标/完成路径/依赖状态\n"
+            "POST /objdone?i=&p=            完成第 i 个目标的第 p 条路径（省略 p = 选实体条件最少的那条）\n"
+            "POST /flag?name=&on=1|0        按名字拨任意脚本 flag（键 = FNV-1(名字)，自动匹配作用域）\n"
+            "GET  /objdbg                   目标表解析结果（排查用）\n"
             "GET  /enemy                    仅敌方归属的明细\n"
             "GET  /units?q=&side=&cls=&limit=  单位目录检索（名字/模板名/哈希）\n"
             "GET  /ai/status                脑机接口状态 JSON\n"
@@ -781,6 +809,7 @@ void Handle(SOCKET c, char* req) {
             "                               例：/action?name=PLAYER_GRANT_SPECIAL_POWER&a1=SpecialPower_X&a2=%3CThis%20Player%3E\n"
             "POST /grant?power=SpecialPower_X[&who=<This Player>|Player_2|<All Players>]  按内部名授予协议技能（可跨阵营/指向敌方）\n"
             "POST /upgrade?name=Upgrade_X[&mode=2]  按内部名授予 Upgrade（mode=2，默认）或 PlayerTech（mode=1），不走脚本层\n"
+            "POST /allclearance              一键授予当前阵营全部许可等级（Upgrade_*Tech* / RANK*），换关需重来\n"
             "POST /power?power=SpecialPower_X[&state=Available|Disabled|Hidden][&who=..]  设技能栏按钮状态\n"
             "GET  /grant?list=1[&from=0&n=40]            协议目录分页（官方中文名 + 阵营 + 内部名）\n"
             "POST /lua?rva=0x..&a1=&a2=&a3=  按 RVA 直调引擎 Lua C 函数（只支持名字串参数）\n"
@@ -1445,6 +1474,12 @@ void Handle(SOCKET c, char* req) {
             URLDecode(ub, g_scriptArgs[0], sizeof(g_scriptArgs[0]));
         args[0] = GetParamInt(query, "mode", 2);
         na = 1;
+    } else if (strcmp(path, "/allclearance") == 0) {
+        // 一键授予四个阵营的全部许可等级 Upgrade（AlliedTech2..4 / CelestialTech_RANK1..3 /
+        // Japan{Barracks,WarFactory,NavalYard}Tech2..4）。只作用于当前对局，换关需重来。
+        fn = 34;
+        na = 1;
+        g_scriptArgs[0][0] = 0;
     } else if (strcmp(path, "/sbuf") == 0) {
         // 字符串搬运：?s=文本[&idx=0..7]，回地址。仅 RE 实验用。
         char vb[160] = { 0 };
@@ -1546,6 +1581,154 @@ void Handle(SOCKET c, char* req) {
                              i, (unsigned)tpl, hash, e[2], nm);
         }
         HttpSend(c, pb, (int)strlen(pb));
+        return;
+    } else if (strcmp(path, "/flag") == 0) {
+        // 战役脚本 flag：name=<flag 名>[&on=1|0]
+        // 键 = FNV-1(名字)；全内存搜 {0x811C9DC5, hash} 定位，只改 value 的 bit0。
+        // 扫描放在 HTTP 线程（2GB 线性扫描 1~2 秒），投到渲染线程会卡住游戏。
+        char tmpfl[128] = { 0 };
+        g_scriptArgs[0][0] = 0;
+        if (GetParam(query, "name", tmpfl, sizeof(tmpfl)))
+            URLDecode(tmpfl, g_scriptArgs[0], (int)sizeof(g_scriptArgs[0]));
+        fn = 40;
+        args[0] = GetParamInt(query, "on", 1);
+        args[1] = (int)(intptr_t)ScriptFlagResolve(g_scriptArgs[0]);
+        na = 2;
+    } else if (strcmp(path, "/objdbg") == 0) {
+        // 诊断：目标表解析后的内部索引（排查 map/obj 错位）
+        static char ob[8192];
+        size_t w = 0;
+        const int nm = ObjTableMapCount();
+        w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE, "maps=%d\n", nm);
+        for (int m = 0; m < nm && w + 160 < sizeof(ob); ++m) {
+            w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE, "  M[%d] %s objs=%d\n",
+                             m, ObjTableMapName(m), ObjTableMapObjCount(m));
+            for (int i = 0; i < ObjTableMapObjCount(m) && i < 12 && w + 200 < sizeof(ob); ++i) {
+                const ObjItemInfo* it = ObjTableMapObj(m, i);
+                w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                                 "      O[%d] %s first=%d n=%d\n",
+                                 i, it->name, it->firstPath, it->pathCount);
+                const ObjPathInfo* pi = ObjTablePath(it->firstPath);
+                if (pi) w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                                         "          dep0=%s deps=%d\n",
+                                         pi->nDeps ? pi->deps[0].name : "-", pi->nDeps);
+            }
+        }
+        HttpSend(c, ob, (int)w);
+        return;
+    } else if (strcmp(path, "/objectives") == 0) {
+        // 战役目标清单：扫一次脚本节点表 → 自动识别当前关卡 → 列出目标/完成路径/依赖状态。
+        // 依赖标记：F=flag(置1) N=取反flag(置0) T=timer(写过期)；ok=已满足 no=未满足 absent=节点不存在
+        static char ob[24576];
+        const int nNode = ScriptNodeScan();
+        int score = 0;
+        const int mAuto = ObjDetectMap(&score);
+        // ?map=N 直接指定关卡（N 见 /objdbg 的 M[i]）；自动识别会因跨关卡同名的 timer 误判
+        const int mreq = GetParamInt(query, "map", -1);
+        const int m = (mreq >= 0 && mreq < ObjTableMapCount()) ? mreq : mAuto;
+        size_t w = 0;
+        w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                         "nodes=%d | map=%s | score=%d%s\n",
+                         nNode, m >= 0 ? ObjTableMapName(m) : "(未识别)", score,
+                         (mreq >= 0 && mreq != mAuto) ? " [手动指定]" : "");
+        if (m >= 0) {
+            const int nobj = ObjTableMapObjCount(m);
+            for (int i = 0; i < nobj && w + 1200 < sizeof(ob); ++i) {
+                const ObjItemInfo* it = ObjTableMapObj(m, i);
+                w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE, "[%d] %s\n", i, it->name);
+                for (int k = 0; k < it->pathCount && w + 640 < sizeof(ob); ++k) {
+                    const int p = it->firstPath + k;
+                    const ObjPathInfo* pi = ObjTablePath(p);
+                    if (!pi) continue;
+                    w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                                     "    p=%d other=%d :", k, pi->otherConds);
+                    for (int d = 0; d < pi->nDeps && w + 160 < sizeof(ob); ++d) {
+                        const int st = ObjDepState(pi->deps[d].name, pi->deps[d].kind);
+                        w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE, " %c[%s]=%s",
+                                         pi->deps[d].kind, pi->deps[d].name,
+                                         st == 1 ? "ok" : (st == 0 ? "no" : "absent"));
+                    }
+                    w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE, "\n");
+                }
+            }
+            w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                             "\nPOST /objdone?i=<目标序号>[&p=<路径序号>] 完成该目标\n");
+        }
+        HttpSend(c, ob, (int)w);
+        return;
+    } else if (strcmp(path, "/objdone") == 0) {
+        // 完成某个战役目标：把一条完成路径上的依赖全部拨到位 —— 走脚本原本的判定路径，
+        // 下一帧脚本自己执行 DO 块（打勾 / 挂计时器 / 解除无敌 / 推进后续），后续链完整。
+        static char ob[8192];
+        const int nNode = ScriptNodeScan();
+        int score = 0;
+        const int m = ObjDetectMap(&score);
+        const int oi = GetParamInt(query, "i", -1);
+        const int psel = GetParamInt(query, "p", -1);
+        size_t w = 0;
+        if (m < 0) {
+            w += _snprintf_s(ob, sizeof(ob), _TRUNCATE,
+                             "未识别当前关卡（nodes=%d）—— 先进对局再试\n", nNode);
+            HttpSend(c, ob, (int)w);
+            return;
+        }
+        const ObjItemInfo* it = ObjTableMapObj(m, oi);
+        if (!it) {
+            w += _snprintf_s(ob, sizeof(ob), _TRUNCATE,
+                             "目标序号越界：i=%d，本关共 %d 个目标\n", oi,
+                             ObjTableMapObjCount(m));
+            HttpSend(c, ob, (int)w);
+            return;
+        }
+        // 选路径：指定了就照办，否则选 other 条件最少的一条
+        int pick = -1;
+        if (psel >= 0 && psel < it->pathCount) pick = it->firstPath + psel;
+        else {
+            int bestOther = 1 << 30;
+            for (int k = 0; k < it->pathCount; ++k) {
+                const ObjPathInfo* pi = ObjTablePath(it->firstPath + k);
+                if (!pi) continue;
+                if (pi->otherConds < bestOther) { bestOther = pi->otherConds; pick = it->firstPath + k; }
+            }
+        }
+        if (pick < 0) {
+            w += _snprintf_s(ob, sizeof(ob), _TRUNCATE, "该目标没有可用的完成路径\n");
+            HttpSend(c, ob, (int)w);
+            return;
+        }
+        const ObjPathInfo* pi = ObjTablePath(pick);
+        w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                         "%s | map=%s | path=%d other=%d deps=%d\n",
+                         it->name, ObjTableMapName(m), pick - it->firstPath,
+                         pi->otherConds, pi->nDeps);
+        int nOk = 0, nMiss = 0;
+        for (int d = 0; d < pi->nDeps; ++d) {
+            const uint32_t hash = ObjNameHash(pi->deps[d].name);
+            const char kind = pi->deps[d].kind;
+            uintptr_t node = 0;
+            if (!ScriptNodeAddr(hash, &node)) {
+                w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                                 "  %c[%s] 节点不存在，跳过\n", kind, pi->deps[d].name);
+                ++nMiss;
+                continue;
+            }
+            const int mode = (kind == 'N') ? 2 : ((kind == 'T') ? 0 : 1);
+            const int val = (kind == 'T') ? (int)0xFFFFFFFF : 0;
+            int a3[3];
+            a3[0] = (int)(intptr_t)node;
+            a3[1] = val;
+            a3[2] = mode;
+            char rr[128] = { 0 };
+            PostAndWaitN(41, a3, 3, rr, sizeof(rr));
+            w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                             "  %c[%s] -> %s\n", kind, pi->deps[d].name,
+                             rr[0] ? rr : "?");
+            ++nOk;
+        }
+        w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
+                         "写入 %d 项（%d 项节点缺失）。若 other>0，还需满足其余实体条件才会打勾。\n",
+                         nOk, nMiss);
+        HttpSend(c, ob, (int)w);
         return;
     } else if (strcmp(path, "/buildext") == 0) {
         // 战役建造页补全扩展建筑（g_flags[0x1D]）状态 + 建造者类 CommandSet 摘要。

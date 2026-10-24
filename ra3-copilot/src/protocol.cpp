@@ -686,6 +686,39 @@ int ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz) {
     return 1;
 }
 
+// 阵营许可等级：日冕里「初级/中级/高级/最高许可」= 玩家级 Upgrade，与 Science 无关。
+// 名字从进程内 intern 串扫出来（Upgrade_AlliedTech2/3/4、Upgrade_CelestialTech_RANK1..3、
+// Upgrade_Japan{Barracks,WarFactory,NavalYard}Tech2..4）；苏联不用 Tech 命名，暂未收录。
+// 注册表里没有的名字返回 0，静默跳过 —— 一盘只会命中自己阵营那几条。
+int ProtoGrantAllClearance(char* out, size_t outsz) {
+    static const char* kNames[] = {
+        "Upgrade_AlliedTech2", "Upgrade_AlliedTech3", "Upgrade_AlliedTech4",
+        "Upgrade_CelestialTech_RANK1", "Upgrade_CelestialTech_RANK2", "Upgrade_CelestialTech_RANK3",
+        "Upgrade_JapanBarracksTech2", "Upgrade_JapanBarracksTech3",
+        "Upgrade_JapanWarFactoryTech2", "Upgrade_JapanWarFactoryTech3", "Upgrade_JapanWarFactoryTech4",
+        "Upgrade_JapanNavalYardTech2", "Upgrade_JapanNavalYardTech3", "Upgrade_JapanNavalYardTech4",
+    };
+    const int total = static_cast<int>(sizeof(kNames) / sizeof(kNames[0]));
+    int granted = 0;
+    char buf[256];
+    char fail[384]; fail[0] = 0;
+    for (const char* n : kNames) {
+        buf[0] = 0;
+        const int r = ProtoGrantUpgrade(n, 2, buf, sizeof(buf));
+        if (r == 1) {
+            ++granted;
+        } else if (r != 0) {
+            const size_t used = strlen(fail);
+            if (used + 48 < sizeof(fail))
+                _snprintf_s(fail + used, sizeof(fail) - used, _TRUNCATE, "%s; ", n);
+        }
+    }
+    if (out && outsz)
+        _snprintf_s(out, outsz, _TRUNCATE, "%d/%d 条许可已授予%s%s",
+                    granted, total, fail[0] ? "，失败: " : "", fail);
+    return granted;
+}
+
 
 // 依据（0x439500 / 0x43F570 反汇编）：
 //     idx = [SCPoint+0x30]; total = [[[Player+0x10]]+0xA8]

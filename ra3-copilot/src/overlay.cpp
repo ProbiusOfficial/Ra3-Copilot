@@ -19,6 +19,7 @@
 #include "overlay.h"
 #include "features.h"
 #include "actions.h"
+#include "scriptobj.h"   // 战役目标表：自动识别关卡 + 一键完成目标
 #include "symres.h"
 #include "httpapi.h"
 #include "battlefield.h"
@@ -63,6 +64,50 @@ volatile LONG g_unloading  = 0;   // 1=拆卸已开始（防重入；中止后�
 volatile LONG g_silent     = 0;   // 1=渲染线程已完成拆卸并即将离开 DLL 代码路径
 volatile LONG g_inHook     = 0;   // 正执行 DLL 内 detour / 窗口过程的计数
 volatile LONG g_stopInput  = 0;   // 输入线程退出标志
+
+// ---- 战役目标扫描（后台线程；全内存扫描 ~10s，绝不能放渲染线程）----
+static HANDLE g_objScanThread = nullptr;
+static volatile LONG g_objScanState = 0;   // 0=未扫 1=扫描中 2=就绪
+static int g_objMap = -1, g_objScore = 0, g_objNodes = 0;
+
+// ---- 修复卡关：后台扫描（全内存 ~10s），写入在渲染线程 ----
+static HANDLE g_fixThread = nullptr;
+static volatile LONG g_fixState = 0;   // 0=空闲 1=扫描中 2=待写 3=完成
+static int g_fixMap = -1;              // 识别到的关卡，-1 = 未识别
+// 自动识别按「目标依赖节点命中率」打分，跨关卡同名的 TIMER - Objective Buffer 之类会让
+// 旧关卡（尤其 A01）拿到高分 —— 允许手动指定关卡号覆盖，-1 = 仍用自动识别。
+static int g_objMapOverride = -1;
+static uintptr_t g_fixNodes[4] = { 0 }; // 未识别关卡时的回退：地图自带跳过开关
+static int g_fixHit = 0;
+static char g_fixMsg[192] = { 0 };
+
+static const char* const kFixFlags[4] = {
+    "f_debug_skip_objective_01", "f_debug_skip_objective_02",
+    "f_debug_skip_objective_03", "f_debug_skip_objective_04",
+};
+
+static DWORD WINAPI FixStuckThreadProc(LPVOID) {
+    ScriptNodeScan();
+    int score = 0;
+    const int autoMap = ObjDetectMap(&score);
+    g_fixMap = (g_objMapOverride >= 0) ? g_objMapOverride : autoMap;
+    g_fixHit = 0;
+    if (g_fixMap < 0)   // 目标表没覆盖的图，退而求其次拨 debug 跳过开关
+        g_fixHit = ScriptFlagResolveBatch(kFixFlags, 4, g_fixNodes);
+    InterlockedExchange(&g_fixState, 2);
+    return 0;
+}
+
+static DWORD WINAPI ObjScanThreadProc(LPVOID) {
+    const int n = ScriptNodeScan();
+    int sc = 0;
+    const int m = ObjDetectMap(&sc);
+    g_objNodes = n;
+    g_objScore = sc;
+    g_objMap = m;
+    InterlockedExchange(&g_objScanState, 2);
+    return 0;
+}
 HANDLE g_inputThread = nullptr;
 LPTOP_LEVEL_EXCEPTION_FILTER g_oldFilter = nullptr;   // 安装 Ra3CrashFilter 前的过滤器
 
@@ -675,6 +720,15 @@ void DoUnload(IDirect3DDevice9* dev) {
         }
     }
 
+    // 2b) 停战役目标扫描线程（它在读内存，必须等它真退出，否则卸载中途会跑飞）
+    ScriptNodeScanAbort();
+    if (g_objScanThread) {
+        if (WaitForSingleObject(g_objScanThread, 4000) != WAIT_OBJECT_0)
+            AddLog(LOG_WARN, "[卸载] 目标扫描线程未在 4s 内退出（继续）");
+        CloseHandle(g_objScanThread);
+        g_objScanThread = nullptr;
+    }
+
     // 3) 还原窗口过程 + 崩溃过滤器（之后窗口消息与异常都不再进本 DLL）
     if (ok) {
         if (g_ov.wnd && g_origWndProc) {
@@ -1274,6 +1328,8 @@ void PanelUnitOps() {
 }
 
 // ===== 面板：杂项操作（作用于全局的开关）=====
+// ===== 战役目标扫描（后台线程）=====
+// 全内存扫描要 10 秒左右，绝不能放渲染线程 —— 放独立线程，UI 每帧读状态位。
 void PanelMisc() {
     bool b;
     b = GetFeature(FID_GODMODE);
@@ -1312,46 +1368,259 @@ void PanelMisc() {
             AddLog(zi ? LOG_OK : LOG_INFO, "[缩放] 无限缩放 %s", zi ? "开" : "关");
         }
     }
+    ImGui::Separator();
+    ImGui::TextDisabled("建造 / 科技");
     {
-        // hook 0x43EA70（可用对象集合判定）：开启后对本机玩家恒返回「可用」，
-        // 建造页里被剧情锁住的格子恢复正常图标、可直接建造（详见 docs/建造页科技锁定-破除.md）
+        // hook 0x43EA70（可用对象集合判定）：开启后对本机玩家恒返回「可用」——
+        // 战役剧情挂的黑锁（建造页显示锁图标、tooltip 只有「科技锁定」）随之消失。
         bool bu = GetFeature(FID_CLANGATE);
-        if (ImGui::Checkbox("移除科技锁定", &bu)) {
+        if (ImGui::Checkbox("解除科技锁定", &bu)) {
             SetFeature(FID_CLANGATE, bu);
             AddLog(bu ? LOG_OK : LOG_INFO, "[建造] 科技锁定 %s", bu ? "已解除" : "已恢复");
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("战役剧情会给部分科技上黑锁（建造页显示锁图标）\n"
-                              "开启后这些格子恢复正常图标，可直接建造\n"
-                              "只对本机玩家生效，不影响电脑");
+            ImGui::SetTooltip("使用强大的局外科技，解除战役科技锁定\n"
+                              "或其他超自然力量导致的科技抑制\n"
+                              "只对本机玩家生效，电脑不受影响");
     }
     {
-        // hook 0xACB352（建造页列表构建器内）：构建时把「战役版建造者 CommandSet」
-        // 换成引擎里常驻的「扩展完整版」→ 支援建筑物页多出胡杨防空 / 礁石岸防。
-        // 需在进入对局前就是开的状态，否则本局建造页已构建完，重开一局才生效。
-        bool be = GetFeature(FID_BUILDEXT);
-        if (ImGui::Checkbox("补全扩展建筑", &be)) {
-            SetFeature(FID_BUILDEXT, be);
-            AddLog(be ? LOG_OK : LOG_INFO, "[建造] 扩展建筑 %s", be ? "已补全" : "已还原");
+        // hook 0x8451F0（Science 判定）：开启后对本机玩家恒真，前置科技不再拦路。
+        // 「初/中/高/最高许可」是玩家级 Upgrade，Science 链不看它 —— 勾选时一并授予。
+        bool sc = GetFeature(FID_SCIALL);
+        if (ImGui::Checkbox("忽略前置科技", &sc)) {
+            SetFeature(FID_SCIALL, sc);
+            if (sc) {
+                char o8[384] = { 0 };
+                ProtoGrantAllClearance(o8, sizeof(o8));
+                AddLog(LOG_OK, "[建造] 忽略前置科技 已开启 · %s", o8);
+            } else {
+                AddLog(LOG_INFO, "[建造] 忽略前置科技 已关闭（已授予的许可不回退）");
+            }
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("战役模式的建造页比扩展模式少两栋特殊防御建筑\n"
-                              "开启后补上：胡杨防空导弹系统、礁石岸防导弹要塞\n"
-                              "在建造页构建时生效 —— 若本局已进过建造页，需重开一局");
+            ImGui::SetTooltip("无需前置科技，也无需议会批准的各种许可证件\n"
+                              "许可按对局授予 —— 换关后需重新勾选\n"
+                              "只对本机玩家生效，电脑不受影响");
     }
     {
-        // hook 0xABB6F0（建造页按钮可用性刷新）：扩展建筑在战役局的前置建筑 / 科技不满足，
-        // 0x845250(Buildability) 恒返回 0 → 0xAB7040(setDisabled) 把按钮画成灰。
-        // 开这个后对这两栋建筑直接 setEnabled(true)，绕开整条判定链。
-        bool bn = GetFeature(FID_BTNENABLE);
-        if (ImGui::Checkbox("扩展建筑可点（解除灰色）", &bn)) {
-            SetFeature(FID_BTNENABLE, bn);
-            AddLog(bn ? LOG_OK : LOG_INFO, "[建造] 扩展建筑按钮 %s", bn ? "已启用" : "已恢复");
+        // 0x1D 补列表 + 0x1E 解灰色，两件事合起来才是「扩展模式那套建造页」。
+        // 0x1D 只在进对局构建建造页那一刻生效，本局已构建完就要重开一局。
+        const bool bExt = GetFeature(FID_BUILDEXT);
+        const bool bBtn = GetFeature(FID_BTNENABLE);
+        bool ext = bExt || bBtn;
+        if (ImGui::Checkbox("启用扩展模式科技", &ext)) {
+            SetFeature(FID_BUILDEXT, ext);
+            SetFeature(FID_BTNENABLE, ext);
+            AddLog(ext ? LOG_OK : LOG_INFO, "[建造] 扩展模式科技 %s", ext ? "已启用" : "已恢复");
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("「补全扩展建筑」后按钮会出现在建造页，但可能显示为灰色不可点\n"
-                              "原因是战役局缺它们的前置建筑 / 科技\n"
-                              "开启后这两栋建筑按钮恒为可点，可直接建造");
+            ImGui::SetTooltip("战役建造页缺的扩展建筑补上，并让它们可点\n"
+                              "含胡杨防空导弹系统、礁石岸防导弹要塞等（四阵营通用）\n"
+                              "补全在进入对局时生效 —— 本局已进过建造页则需重开一局");
+    }
+    ImGui::Separator();
+    {
+        // 卡关时优先走「目标表」：识别关卡后把每个未完成目标最省的一条路径拨到位，
+        // 脚本下一帧自己执行 DO 块（打勾 / 挂计时器 / 解除无敌 / 推进后续）。
+        // 目标表没覆盖的图，退而求其次把地图自带的 f_debug_skip_objective_0N 置 1。
+        if (g_fixState == 2) {
+            int acted = 0, miss = 0, ndeps = 0, pathNo = 0;
+            const char* target = nullptr;
+            int otherLeft = 0;
+            if (g_fixMap >= 0) {
+                // 只推进「第一个未完成」的目标 —— 一次全推会越过剧情，卡关解的是当前这道坎。
+                const int nobj = ObjTableMapObjCount(g_fixMap);
+                for (int i = 0; i < nobj; ++i) {
+                    const ObjItemInfo* it = ObjTableMapObj(g_fixMap, i);
+                    if (!it) continue;
+                    bool anyDone = false;
+                    for (int k = 0; k < it->pathCount && !anyDone; ++k) {
+                        const ObjPathInfo* pi = ObjTablePath(it->firstPath + k);
+                        if (!pi || pi->nDeps == 0) continue;
+                        bool ok = true;
+                        for (int d = 0; d < pi->nDeps; ++d)
+                            if (ObjDepState(pi->deps[d].name, pi->deps[d].kind) != 1) { ok = false; break; }
+                        if (ok) anyDone = true;
+                    }
+                    if (anyDone) continue;
+                    // 选路先看「依赖节点齐不齐」——absent 的写不进去，再比实体条件多少。
+                    // 只按 other 选会挑到「两个依赖都 absent」的路，等于白跑。
+                    int pick = -1, bestMiss = 1 << 30, best = 1 << 30;
+                    for (int k = 0; k < it->pathCount; ++k) {
+                        const ObjPathInfo* pi = ObjTablePath(it->firstPath + k);
+                        if (!pi || pi->nDeps == 0) continue;   // 纯实体条件的路径拨不动
+                        int mcnt = 0;
+                        for (int d = 0; d < pi->nDeps; ++d)
+                            if (ObjDepState(pi->deps[d].name, pi->deps[d].kind) < 0) ++mcnt;
+                        if (mcnt < bestMiss || (mcnt == bestMiss && pi->otherConds < best)) {
+                            bestMiss = mcnt;
+                            best = pi->otherConds;
+                            pick = it->firstPath + k;
+                            ndeps = pi->nDeps;
+                        }
+                    }
+                    if (pick < 0) { ++miss; break; }
+                    target = it->name;
+                    otherLeft = best;
+                    pathNo = pick - it->firstPath + 1;
+                    uint32_t hs[12], vs[12];
+                    int ms[12];
+                    const int nd = ObjPathWrites(pick, hs, vs, ms, 12);
+                    for (int d = 0; d < nd; ++d) {
+                        uintptr_t node = 0;
+                        if (!ScriptNodeAddr(hs[d], &node)) { ++miss; continue; }
+                        if (ScriptNodeWrite(node, vs[d], ms[d]) == 1) ++acted; else ++miss;
+                    }
+                    break;
+                }
+                ScriptNodeRefresh();
+                if (target)
+                    _snprintf_s(g_fixMsg, sizeof(g_fixMsg), _TRUNCATE,
+                                "已推进「%s」路径%d：写入 %d/%d 项，缺 %d 项%s",
+                                target, pathNo, acted, ndeps, miss,
+                                otherLeft > 0 ? "（另有实体条件，可能不打勾）" : "");
+                else
+                    _snprintf_s(g_fixMsg, sizeof(g_fixMsg), _TRUNCATE,
+                                "%s：没有可推进的目标", ObjTableMapName(g_fixMap));
+            } else {
+                int wrote = 0;
+                for (int i = 0; i < 4; ++i)
+                    if (g_fixNodes[i] && ScriptFlagWrite(g_fixNodes[i], 1) == 1) ++wrote;
+                _snprintf_s(g_fixMsg, sizeof(g_fixMsg), _TRUNCATE,
+                            g_fixHit ? "未识别关卡，已置位 %d/%d 个跳过开关"
+                                     : "未识别关卡，也没有跳过开关 —— 用下面的目标面板",
+                            wrote, g_fixHit);
+            }
+            InterlockedExchange(&g_fixState, 3);
+        }
+        const float bw = ImGui::GetContentRegionAvail().x;
+        if (g_fixState != 1 && ImGui::Button("修复关卡剧情异常", ImVec2(bw, 0))) {
+            if (g_fixThread) { CloseHandle(g_fixThread); g_fixThread = nullptr; }
+            g_fixMsg[0] = 0;
+            g_fixMap = -1;
+            if (InterlockedExchange(&g_fixState, 1) != 1)
+                g_fixThread = CreateThread(nullptr, 0, FixStuckThreadProc, nullptr, 0, nullptr);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("剧情不推进时点一下：识别当前关卡，把第一个未完成的目标\n"
+                              "按它最省的一条依赖路径拨到位，脚本下一帧自己执行\n"
+                              "扫描约 10 秒，期间可正常操作");
+        if (g_fixState == 1) {
+            ImGui::TextDisabled("扫描中…（约 10 秒）");
+        } else if (g_fixState == 3) {
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("%s", g_fixMsg);
+            ImGui::PopTextWrapPos();
+        }
+    }
+
+    ImGui::Separator();
+    char objHdr[96];
+    _snprintf_s(objHdr, sizeof(objHdr), _TRUNCATE, "任务目标调试器%s",
+                g_objScanState == 1 ? " · 扫描中"
+                                    : (g_objScanState == 2 ? " · 已识别" : ""));
+    if (ImGui::CollapsingHeader(objHdr)) {
+        // 目标多的图能列出几十行，限高滚动，别把整个面板撑出屏幕
+        ImGui::BeginChild("##objbody", ImVec2(0, 340), false);
+        if (ImGui::Button("扫描当前关卡", ImVec2(150, 0))) {
+            // 换关之后已经扫过一次也要能重扫 —— 旧逻辑只在 state==0 时启动，
+            // 换图后点按钮没反应。
+            if (InterlockedExchange(&g_objScanState, 1) != 1) {
+                g_objMap = -1;
+                if (g_objScanThread) { CloseHandle(g_objScanThread); g_objScanThread = nullptr; }
+                g_objScanThread = CreateThread(nullptr, 0, ObjScanThreadProc, nullptr, 0, nullptr);
+            }
+        }
+        ImGui::SameLine();
+        if (g_objScanState == 1) {
+            ImGui::TextDisabled("扫描中…（约 10 秒，期间可正常操作）");
+        } else if (g_objScanState == 2) {
+            ImGui::TextDisabled("自动识别：%s · %d 个脚本节点",
+                                g_objMap >= 0 ? ObjTableMapName(g_objMap) : "未识别",
+                                g_objNodes);
+        } else {
+            ImGui::TextDisabled("未扫描");
+        }
+        // 自动识别按依赖节点命中率打分，跨关卡同名的 TIMER - Objective Buffer 会让旧关卡
+        // （尤其是 A01）一直拿高分 —— 这里允许直接指定关卡。
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##mapsel", g_objMapOverride >= 0 ? ObjTableMapName(g_objMapOverride)
+                                                               : "关卡：自动识别")) {
+            if (ImGui::Selectable("自动识别", g_objMapOverride < 0)) g_objMapOverride = -1;
+            for (int m = 0; m < ObjTableMapCount(); ++m) {
+                if (ImGui::Selectable(ObjTableMapName(m), g_objMapOverride == m))
+                    g_objMapOverride = m;
+            }
+            ImGui::EndCombo();
+        }
+        const int curMap = (g_objMapOverride >= 0) ? g_objMapOverride : g_objMap;
+        if (g_objScanState == 2 && curMap >= 0) {
+            const int nobj = ObjTableMapObjCount(curMap);
+            for (int i = 0; i < nobj; ++i) {
+                const ObjItemInfo* it = ObjTableMapObj(curMap, i);
+                if (!it) continue;
+                // 任一完成路径的依赖全部满足 → 视为已完成
+                bool anyDone = false;
+                for (int k = 0; k < it->pathCount && !anyDone; ++k) {
+                    const ObjPathInfo* pi = ObjTablePath(it->firstPath + k);
+                    if (!pi || pi->nDeps == 0) continue;
+                    bool ok = true;
+                    for (int d = 0; d < pi->nDeps; ++d)
+                        if (ObjDepState(pi->deps[d].name, pi->deps[d].kind) != 1) { ok = false; break; }
+                    if (ok) anyDone = true;
+                }
+                char label[224];
+                _snprintf_s(label, sizeof(label), _TRUNCATE, "%s%s##obj%d",
+                            anyDone ? "[已完成] " : "", it->name, i);
+                ImGui::PushID(i);
+                if (ImGui::TreeNode(label)) {
+                    for (int k = 0; k < it->pathCount; ++k) {
+                        const int pidx = it->firstPath + k;
+                        const ObjPathInfo* pi = ObjTablePath(pidx);
+                        if (!pi) continue;
+                        ImGui::TextDisabled("路径 %d：依赖 %d 项，另需实体条件 %d 个",
+                                            k + 1, pi->nDeps, pi->otherConds);
+                        for (int d = 0; d < pi->nDeps; ++d) {
+                            const int st = ObjDepState(pi->deps[d].name, pi->deps[d].kind);
+                            ImGui::BulletText("%c %s = %s", pi->deps[d].kind, pi->deps[d].name,
+                                              st == 1 ? "满足" : (st == 0 ? "未满足" : "节点不存在"));
+                        }
+                        if (pi->nDeps == 0) {
+                            ImGui::TextDisabled("纯实体条件，没有可拨的 flag / 计时器");
+                        } else {
+                            char btn[64];
+                            _snprintf_s(btn, sizeof(btn), _TRUNCATE, "完成这条路径##p%d", k);
+                            if (ImGui::Button(btn)) {
+                                uint32_t hs[12], vs[12];
+                                int ms[12];
+                                const int nd = ObjPathWrites(pidx, hs, vs, ms, 12);
+                                int okc = 0, miss = 0;
+                                for (int d = 0; d < nd; ++d) {
+                                    uintptr_t node = 0;
+                                    if (!ScriptNodeAddr(hs[d], &node)) { ++miss; continue; }
+                                    if (ScriptNodeWrite(node, vs[d], ms[d]) == 1) ++okc; else ++miss;
+                                }
+                                ScriptNodeRefresh();
+                                AddLog(miss == 0 ? LOG_OK : LOG_WARN,
+                                       "[目标] %s · 路径%d：写入 %d 项，缺失 %d 项%s",
+                                       it->name, k + 1, okc, miss,
+                                       pi->otherConds > 0 ? "（另有实体条件，可能不打勾）" : "");
+                            }
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip("把该路径的 flag/计时器全部拨到位，脚本下一帧自己执行\n"
+                                                  "「打勾 + 挂后续计时器 + 推进剧情」。\n"
+                                                  "依赖项里显示「节点不存在」的会被跳过 —— 那类\n"
+                                                  "需要先让对应脚本跑过一次才会建表项。");
+                        }
+                        ImGui::Separator();
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            if (nobj == 0) ImGui::TextDisabled("本关没有可识别的目标");
+        }
+        ImGui::EndChild();
     }
 }
 

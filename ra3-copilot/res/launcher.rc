@@ -11,8 +11,8 @@ IDR_PAYLOAD_MCP     RCDATA "..\\mcp\\ra3_mcp.py"
 IDR_PAYLOAD_CATALOG RCDATA "..\\mcp\\unit_catalog.json"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,1,0,0
- PRODUCTVERSION 1,1,0,0
+ FILEVERSION 1,2,0,0
+ PRODUCTVERSION 1,2,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -25,12 +25,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ProbiusOfficial"
             VALUE "FileDescription", "Ra3-Copilot Launcher"
-            VALUE "FileVersion", "1.1.0.0"
+            VALUE "FileVersion", "1.2.0.0"
             VALUE "InternalName", "Ra3Copilot"
             VALUE "LegalCopyright", "Single-player study only"
             VALUE "OriginalFilename", "Ra3Copilot.exe"
             VALUE "ProductName", "Ra3-Copilot"
-            VALUE "ProductVersion", "1.1.0.0"
+            VALUE "ProductVersion", "1.2.0.0"
         END
     END
     BLOCK "VarFileInfo"
