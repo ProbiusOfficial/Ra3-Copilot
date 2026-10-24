@@ -1740,6 +1740,11 @@ uintptr_t ScriptFlagResolve(const char* name) {
     return node;
 }
 
+uintptr_t ScriptFlagResolveHash(uint32_t hash) {
+    if (!hash) return 0;
+    return FindFlagNode(hash);
+}
+
 int ActScriptFlag(const char* name, int on) {
     const uintptr_t node = ScriptFlagResolve(name);
     if (!node) return 0;

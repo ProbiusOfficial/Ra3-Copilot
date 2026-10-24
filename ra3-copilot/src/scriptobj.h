@@ -44,6 +44,9 @@ const ObjPathInfo* ObjTablePath(int pathIdx);
 int  ScriptNodeScan();
 bool ScriptNodeValue(uint32_t hash, uint32_t* outValue);
 bool ScriptNodeAddr(uint32_t hash, uintptr_t* outNode);
+// 同 ScriptNodeAddr，但会核对缓存地址里 +0x14 是否仍是该 hash。
+// 缓存可能指向已被释放的旧节点（换关/脚本重载），写入前必须走这个。
+bool ScriptNodeAddrLive(uint32_t hash, uintptr_t* outNode);
 
 // 叫停正在进行的扫描（DLL 卸载前必须调，否则线程会跑在已卸载的代码上）。
 void ScriptNodeScanAbort();

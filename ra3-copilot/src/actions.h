@@ -193,6 +193,8 @@ const char* SummonLastError();
 // 分两段是为了线程安全：Resolve 只读扫描（慢，放 HTTP 线程，不卡渲染），
 // Write 只改 4 字节（快，必须放渲染线程）。
 uintptr_t ScriptFlagResolve(const char* name);   // 返回节点地址，0 = 没找到
+// 已知 hash 时直接按 hash 定位（重新扫一遍全内存，慢但在缓存失效时是唯一可靠手段）。
+uintptr_t ScriptFlagResolveHash(uint32_t hash);
 int ScriptFlagWrite(uintptr_t node, int on);     // 1=已写 -1=异常
 int ActScriptFlag(const char* name, int on);     // 便捷版（两段一起跑，仅供渲染线程内使用）
 // 批量 Resolve：一次内存扫描同时定位多个 flag（逐个调会各扫一遍全内存）。

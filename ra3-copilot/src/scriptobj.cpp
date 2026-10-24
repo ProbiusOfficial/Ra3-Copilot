@@ -313,8 +313,18 @@ int ScriptNodeScan() {
 }
 
 bool ScriptNodeValue(uint32_t hash, uint32_t* outValue) {
-    for (int i = 0; i < g_hitCount; ++i)
-        if (g_hits[i].hash == hash) { if (outValue) *outValue = g_hits[i].value; return true; }
+    for (int i = 0; i < g_hitCount; ++i) {
+        if (g_hits[i].hash != hash) continue;
+        // 实时读 + 核对 hash：缓存地址可能在换关/脚本重载后被别的数据占用，
+        // 直接返还扫描快照会把「上一局的 1」当成「这一局的 1」。
+        __try {
+            if (*(const uint32_t*)(g_hits[i].node + 0x14) != hash) return false;
+            if (outValue) *outValue = *(const uint32_t*)(g_hits[i].node + 0x18);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return false;
+        }
+        return true;
+    }
     return false;
 }
 
@@ -333,6 +343,21 @@ bool ScriptNodeAddr(uint32_t hash, uintptr_t* outNode) {
     for (int i = 0; i < g_hitCount; ++i)
         if (g_hits[i].hash == hash) { if (outNode) *outNode = g_hits[i].node; return true; }
     return false;
+}
+
+// 缓存里的地址可能已经失效（换关 / 脚本重载后节点被释放，同址被别的数据占用）。
+// 写入前用它核对：地址还读得通，且 +0x14 仍是同一个 hash。
+// 失败时调用方应改用 ScriptFlagResolveHash() 重新扫一遍。
+bool ScriptNodeAddrLive(uint32_t hash, uintptr_t* outNode) {
+    uintptr_t n = 0;
+    if (!ScriptNodeAddr(hash, &n) || !n) return false;
+    __try {
+        if (*(const uint32_t*)(n + 0x14) != hash) return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    if (outNode) *outNode = n;
+    return true;
 }
 
 // 当前地图路径：TheGameLogic（[0x00CD8CE4]）+0x98 是一个 C 串，

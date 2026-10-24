@@ -1424,7 +1424,7 @@ void PanelMisc() {
         // 脚本下一帧自己执行 DO 块（打勾 / 挂计时器 / 解除无敌 / 推进后续）。
         // 目标表没覆盖的图，退而求其次把地图自带的 f_debug_skip_objective_0N 置 1。
         if (g_fixState == 2) {
-            int acted = 0, miss = 0, ndeps = 0, pathNo = 0;
+            int acted = 0, miss = 0, ndeps = 0, pathNo = 0, rescan = 2;
             const char* target = nullptr;
             int otherLeft = 0;
             if (g_fixMap >= 0) {
@@ -1468,7 +1468,11 @@ void PanelMisc() {
                     const int nd = ObjPathWrites(pick, hs, vs, ms, 12);
                     for (int d = 0; d < nd; ++d) {
                         uintptr_t node = 0;
-                        if (!ScriptNodeAddr(hs[d], &node)) { ++miss; continue; }
+                        if (!ScriptNodeAddrLive(hs[d], &node) && rescan > 0) {
+                            --rescan;
+                            node = ScriptFlagResolveHash(hs[d]);
+                        }
+                        if (!node) { ++miss; continue; }
                         if (ScriptNodeWrite(node, vs[d], ms[d]) == 1) ++acted; else ++miss;
                     }
                     break;
@@ -1594,10 +1598,16 @@ void PanelMisc() {
                                 uint32_t hs[12], vs[12];
                                 int ms[12];
                                 const int nd = ObjPathWrites(pidx, hs, vs, ms, 12);
-                                int okc = 0, miss = 0;
+                                int okc = 0, miss = 0, rescan = 2;
                                 for (int d = 0; d < nd; ++d) {
                                     uintptr_t node = 0;
-                                    if (!ScriptNodeAddr(hs[d], &node)) { ++miss; continue; }
+                                    // 缓存地址可能指向已释放的旧节点 —— 核对 hash 后再写，
+                                    // 不符就重新扫一遍（最多 2 次，避免多次全内存扫卡住渲染）
+                                    if (!ScriptNodeAddrLive(hs[d], &node) && rescan > 0) {
+                                        --rescan;
+                                        node = ScriptFlagResolveHash(hs[d]);
+                                    }
+                                    if (!node) { ++miss; continue; }
                                     if (ScriptNodeWrite(node, vs[d], ms[d]) == 1) ++okc; else ++miss;
                                 }
                                 ScriptNodeRefresh();
