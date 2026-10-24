@@ -145,6 +145,8 @@ jobs:
             SHA256SUMS.txt
           body_path: RELEASE_NOTES.md
           generate_release_notes: true
+          # 同一个 tag 重新推送时覆盖已有 Release（产物与说明一起替换）
+          allowUpdates: true
 
       - name: Upload build log on failure
         if: failure()
