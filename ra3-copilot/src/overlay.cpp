@@ -1064,7 +1064,7 @@ void SaveKeyBinds() {
     fprintf(f, "enabled=%d\n", g_hkEnabled ? 1 : 0);
     fprintf(f, "toggle=%d %d\n", g_toggleVk, g_toggleCtrl ? 1 : 0);
     for (int i = 0; i < kHKCount; ++i)
-        fprintf(f, "%d %d %d\n", kHK[i].id, kHK[i].vk, kHK[i].ctrl ? 1 : 0);
+        fprintf(f, "%d %d %d %s\n", kHK[i].id, kHK[i].vk, kHK[i].ctrl ? 1 : 0, kHK[i].desc);
     fclose(f);
     g_keysStamp = KeysFileStamp();      // 自己写的，算不上外部变更
 }

@@ -94,6 +94,10 @@ if errorlevel 1 (
     exit /b 1
 )
 copy /Y build_out\Ra3Copilot.exe Ra3Copilot.exe >nul 2>&1
+if errorlevel 1 (
+    echo *** LAUNCHER_STALE *** root Ra3Copilot.exe NOT updated - a running instance holds it.
+    echo     Close Ra3Copilot.exe first, then copy build_out\Ra3Copilot.exe manually.
+)
 rem injector.exe / hot_reload.bat 读的是根目录这份 DLL；不拷就会一直注入旧版
 copy /Y build_out\ra3copilot.dll ra3copilot.dll >nul 2>&1
 

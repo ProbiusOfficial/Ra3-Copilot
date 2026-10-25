@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <algorithm>
 #include "injectcore.h"
 #include "resource.h"
 #include "imgui.h"
@@ -79,7 +80,9 @@ std::wstring g_keysPath;
 // 75 配列等没有 INSERT 键的键盘靠这里改 —— 局内面板打不开时，这是唯一入口。
 int  g_toggleVk = VK_INSERT;
 bool g_toggleCtrl = false;
-bool g_captureToggle = false;
+int  g_captureTarget = 0;       // 正在等哪个键：0=没有，-1=呼出键，>0=功能热键 id
+ULONGLONG g_captureSince = 0;   // 捕获起始时刻：没有超时的话，点了按钮又不按，之后随便一个键就改掉呼出键
+int  g_page = 0;                // 0=主界面，1=设置
 
 DWORD g_pid = 0;
 bool g_loaded = false;
@@ -295,9 +298,12 @@ void WriteConfig(const wchar_t* key, const std::wstring& val) {
     WritePrivateProfileStringW(L"launcher", key, val.c_str(), g_configPath.c_str());
 }
 
-// ===== 呼出键 =====
+// ===== 快捷键 =====
 // 与局内修改器共用 ra3copilot_keys.ini（格式见 overlay.cpp 的 LoadKeyBinds）：
-// 无节名的裸文本，所以自己按行读写；写回时必须保留功能热键那些行。
+//   enabled=1
+//   toggle=<vk> <ctrl>
+//   <id> <vk> <ctrl> <说明>
+// 无节名的裸文本，按行读写。说明列由修改器写入，启动器只负责显示。
 
 // 键码 → 显示名（与局内面板同一套叫法；两边独立编译，各维护一份）
 std::wstring KeyNameW(int vk) {
@@ -331,10 +337,67 @@ std::wstring KeyNameW(int vk) {
     }
 }
 
-std::wstring ToggleLabelW() {
-    std::wstring k = KeyNameW(g_toggleVk);
-    return g_toggleCtrl ? (L"Ctrl+" + k) : k;
+std::wstring KeyLabelW(int vk, bool ctrl) {
+    std::wstring k = KeyNameW(vk);
+    return ctrl ? (L"Ctrl+" + k) : k;
 }
+
+std::wstring ToggleLabelW() { return KeyLabelW(g_toggleVk, g_toggleCtrl); }
+
+std::wstring FromUtf8(const std::string& s) {
+    if (s.empty()) return L"";
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+    if (n <= 1) return L"";
+    std::wstring w(static_cast<size_t>(n - 1), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+    return w;
+}
+
+struct KeyRow {
+    int id = 0;
+    int vk = 0;
+    bool ctrl = false;
+    std::string desc;          // UTF-8
+};
+
+std::vector<KeyRow> g_keyRows;
+bool g_hkEnabled = true;        // 功能热键总开关（界面里叫「静默」）
+
+// ini 缺失或还是老格式（没有说明列）时的出厂绑定。
+// 取值与 overlay.cpp 的 kHKDefault 同源，只用于显示与冲突提示。
+struct KeyDef { int id; int vk; bool ctrl; const char* desc; };
+const KeyDef kKeyDefault[] = {
+    { 1,  VK_F1,          true,  "加钱（每次金额）" },
+    { 2,  VK_F2,          true,  "电力无限（开关）" },
+    { 3,  VK_F3,          true,  "科技点无限（开关）" },
+    { 4,  VK_F4,          true,  "全科技（开关）" },
+    { 5,  VK_F5,          true,  "快速建造（开关）" },
+    { 6,  VK_F6,          true,  "超武就绪（开关）" },
+    { 7,  VK_F7,          true,  "禁用敌方超武（开关）" },
+    { 29, VK_F8,          true,  "无限缩放（开关）" },
+    { 8,  VK_F9,          true,  "全图 / 去迷雾（开关）" },
+    { 9,  VK_F10,         true,  "敌人无法建造（开关）" },
+    { 10, VK_F11,         true,  "玩家无敌（开关）" },
+    { 12, 'P',            false, "升级单位（满级）" },
+    { 30, 'O',            false, "接管单位（把选中单位改成你的）" },
+    { 31, 'I',            false, "复制选中单位" },
+    { 13, VK_OEM_MINUS,   false, "加速（选中单位）" },
+    { 14, VK_OEM_PLUS,    false, "减速（选中单位）" },
+    { 15, VK_PRIOR,       false, "定住单位" },
+    { 16, VK_NEXT,        false, "恢复速度" },
+    { 17, VK_OEM_4,       false, "无限血量" },
+    { 18, VK_OEM_6,       false, "残血（血量设为 1）" },
+    { 19, VK_OEM_5,       false, "恢复血量" },
+    { 20, VK_OEM_1,       false, "选中单位弹药满（开关）" },
+    { 21, VK_DELETE,      false, "摧毁选中" },
+    { 22, VK_OEM_COMMA,   false, "危险等级 = 最高" },
+    { 23, VK_OEM_PERIOD,  false, "危险等级 = 最低" },
+    { 24, VK_OEM_2,       false, "危险等级 = 不干预" },
+    { 25, VK_OEM_7,       false, "恢复矿场" },
+    { 26, 'L',            false, "免费建造（开关）" },
+    { 27, 'K',            false, "召唤基地车" },
+    { 32, 'J',            false, "预设增援（召唤 ×8）" },
+};
 
 bool ReadKeysLines(std::vector<std::string>* out) {
     if (g_keysPath.empty()) return false;
@@ -350,53 +413,94 @@ bool ReadKeysLines(std::vector<std::string>* out) {
     return true;
 }
 
-void LoadToggleKey() {
+void LoadKeyTable() {
     g_toggleVk = VK_INSERT;
     g_toggleCtrl = false;
+    g_hkEnabled = true;
+    g_keyRows.clear();
+
     std::vector<std::string> lines;
-    if (!ReadKeysLines(&lines)) return;
-    for (const std::string& ln : lines) {
-        int vk = 0, ctrl = 0;
-        if (sscanf_s(ln.c_str(), "toggle=%d %d", &vk, &ctrl) == 2 && vk > 0 && vk < 0x100) {
-            g_toggleVk = vk;
-            g_toggleCtrl = (ctrl != 0);
+    if (ReadKeysLines(&lines)) {
+        for (const std::string& ln : lines) {
+            if (ln.empty() || ln[0] == '#') continue;
+            if (ln.compare(0, 8, "enabled=") == 0) { g_hkEnabled = (ln[8] == '1'); continue; }
+            if (ln.compare(0, 7, "toggle=") == 0) {
+                int vk = 0, ctrl = 0;
+                if (sscanf_s(ln.c_str() + 7, "%d %d", &vk, &ctrl) == 2 && vk > 0 && vk < 0x100) {
+                    g_toggleVk = vk;
+                    g_toggleCtrl = (ctrl != 0);
+                }
+                continue;
+            }
+            int id = 0, vk = 0, ctrl = 0;
+            if (sscanf_s(ln.c_str(), "%d %d %d", &id, &vk, &ctrl) != 3) continue;
+            if (vk <= 0 || vk >= 0x100) continue;
+            // 第三个字段之后就是说明（老版本写的 ini 没有这一段）
+            int fields = 0;
+            const char* q = ln.c_str();
+            while (*q && fields < 3) {
+                while (*q == ' ') ++q;
+                if (!*q) break;
+                while (*q && *q != ' ') ++q;
+                ++fields;
+            }
+            KeyRow r;
+            r.id = id; r.vk = vk; r.ctrl = (ctrl != 0);
+            if (*q) r.desc = std::string(q + 1);
+            g_keyRows.push_back(r);
         }
     }
+    if (g_keyRows.empty()) {
+        for (const KeyDef& d : kKeyDefault) {
+            KeyRow r; r.id = d.id; r.vk = d.vk; r.ctrl = d.ctrl; r.desc = d.desc;
+            g_keyRows.push_back(r);
+        }
+    }
+    for (KeyRow& r : g_keyRows) {
+        if (!r.desc.empty()) continue;
+        for (const KeyDef& d : kKeyDefault)
+            if (d.id == r.id) { r.desc = d.desc; break; }
+    }
+    std::sort(g_keyRows.begin(), g_keyRows.end(),
+              [](const KeyRow& a, const KeyRow& b) { return a.id < b.id; });
 }
 
-// 是否与某条功能热键同键。功能热键由局内修改器写进同一个 ini（首次运行会落一份全表）。
-bool ToggleClash(int vk, bool ctrl) {
-    std::vector<std::string> lines;
-    if (!ReadKeysLines(&lines)) return false;
-    for (const std::string& ln : lines) {
-        if (ln.empty() || ln[0] == '#') continue;
-        if (ln.compare(0, 8, "enabled=") == 0 || ln.compare(0, 7, "toggle=") == 0) continue;
-        int id = 0, evk = 0, ectrl = 0;
-        if (sscanf_s(ln.c_str(), "%d %d %d", &id, &evk, &ectrl) != 3) continue;
-        if (evk == vk && (ectrl != 0) == ctrl) return true;
-    }
-    return false;
-}
-
-// 只替换 toggle= 行，其余行原样保留（功能热键的绑定不能被这次写入吃掉）
-void SaveToggleKey(int vk, bool ctrl) {
-    std::vector<std::string> lines;
-    ReadKeysLines(&lines);
-    char want[64] = { 0 };
-    sprintf_s(want, "toggle=%d %d", vk, ctrl ? 1 : 0);
-    bool replaced = false;
-    for (std::string& ln : lines) {
-        if (ln.compare(0, 7, "toggle=") == 0) { ln = want; replaced = true; }
-    }
-    if (!replaced) lines.push_back(want);
-
+void SaveKeyTable() {
     FILE* f = nullptr;
     if (_wfopen_s(&f, g_keysPath.c_str(), L"w") != 0 || !f) {
-        AppendLog(L"呼出键写入失败（运行目录不可写）", LOG_ERR);
+        AppendLog(L"快捷键写入失败（运行目录不可写）", LOG_ERR);
         return;
     }
-    for (const std::string& ln : lines) fprintf(f, "%s\n", ln.c_str());
+    fprintf(f, "enabled=%d\n", g_hkEnabled ? 1 : 0);
+    fprintf(f, "toggle=%d %d\n", g_toggleVk, g_toggleCtrl ? 1 : 0);
+    for (const KeyRow& r : g_keyRows)
+        fprintf(f, "%d %d %d %s\n", r.id, r.vk, r.ctrl ? 1 : 0, r.desc.c_str());
     fclose(f);
+}
+
+// 与已有绑定撞车时返回那条绑定的名字；没有冲突返回空串。
+// target：-1 = 呼出键，>0 = 功能热键的 id
+std::wstring KeyConflict(int target, int vk, bool ctrl) {
+    if (target != -1 && g_toggleVk == vk && g_toggleCtrl == ctrl) return L"呼出菜单";
+    for (const KeyRow& r : g_keyRows) {
+        if (r.id == target) continue;
+        if (r.vk == vk && r.ctrl == ctrl) return FromUtf8(r.desc);
+    }
+    return L"";
+}
+
+bool ApplyKey(int target, int vk, bool ctrl) {
+    if (target == -1) {
+        g_toggleVk = vk;
+        g_toggleCtrl = ctrl;
+    } else {
+        bool found = false;
+        for (KeyRow& r : g_keyRows)
+            if (r.id == target) { r.vk = vk; r.ctrl = ctrl; found = true; break; }
+        if (!found) return false;
+    }
+    SaveKeyTable();
+    return true;
 }
 
 void LoadConfig() {
@@ -426,7 +530,7 @@ bool EnsureRuntime() {
     const std::wstring oldKeys = Join(g_exeDir, L"ra3copilot_keys.ini");
     const std::wstring newKeys = Join(g_runtimeDir, L"ra3copilot_keys.ini");
     if (FileExists(oldKeys) && !FileExists(newKeys)) CopyFileW(oldKeys.c_str(), newKeys.c_str(), TRUE);
-    LoadToggleKey();
+    LoadKeyTable();
 
     std::wstring err;
     if (!WriteResourceIfChanged(IDR_PAYLOAD_DLL, g_dllPath, err) && !FileExists(g_dllPath)) {
@@ -580,12 +684,7 @@ std::wstring McpConfigJson() {
 
 void OnMcp() {
     CopyTextToClipboard(McpConfigJson());
-    AppendLog(L"MCP 配置已复制到剪贴板（需要本机有 python）", LOG_OK);
-    MessageBoxW(g_wnd,
-                L"MCP 客户端配置已复制到剪贴板。\n\n"
-                L"把它粘贴到支持 MCP 的客户端配置里即可。\n"
-                L"要求：本机已安装 Python 3，并且游戏内修改器已注入。",
-                kAppName, MB_ICONINFORMATION);
+    AppendLog(L"MCP 配置已复制到剪贴板（粘贴到客户端的 mcpServers；需要本机 Python 3）", LOG_OK);
 }
 
 void OnFolder() {
@@ -763,7 +862,7 @@ void DrawStatusCard() {
     const wchar_t* status = L"检测中…";
     if (g_busy) status = L"正在处理…";
     else if (!g_pid) status = L"游戏未运行";
-    else if (g_loaded) status = g_http ? L"修改器已就绪" : L"修改器已注入";
+    else if (g_loaded) status = L"修改器已注入";
     else if (g_moduleUnknown) status = L"游戏已运行 · 需要管理员权限";
     else status = L"游戏已运行 · 未注入";
 
@@ -816,27 +915,12 @@ void DrawLogPanel() {
     ImGui::TextDisabled("v1.12.3444.25830  ·  github.com/ProbiusOfficial/Ra3-Copilot");
 }
 
-void BuildUi() {
-    ImGuiIO& io = ImGui::GetIO();
+const ImVec4 kAccent(0.35f, 0.85f, 0.95f, 1.f);
+const ImVec4 kWarn(0.95f, 0.72f, 0.30f, 1.f);
+
+// 主界面：状态 + 动作 + 运行记录
+void DrawMainPage() {
     const float s = g_scale;
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(9 * s, 8 * s));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
-    ImGui::Begin("##root", nullptr,
-                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    // 顶栏只保留两行，和局内面板一样克制。
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.85f, 0.95f, 1.f));
-    ImGui::TextUnformatted("Ra3-Copilot");
-    ImGui::PopStyleColor();
-    ImGui::SameLine(0, 8 * s);
-    ImGui::TextDisabled("v%s", ToUtf8(kVersion).c_str());
-    ImGui::TextDisabled("红色警戒 3 · 日冕 Mod 局内修改器");
-
-    ImGui::Separator();
     DrawStatusCard();
     ImGui::Separator();
 
@@ -846,7 +930,7 @@ void BuildUi() {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.42f, 0.52f, 1.f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.55f, 0.66f, 1.f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.12f, 0.34f, 0.42f, 1.f));
-    if (ImGui::Button(primary, ImVec2(112 * s, 0))) OnPrimary();
+    if (ImGui::Button(primary, ImVec2(104 * s, 0))) OnPrimary();
     ImGui::PopStyleColor(3);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered())
@@ -855,14 +939,14 @@ void BuildUi() {
 
     ImGui::SameLine(0, 6 * s);
     ImGui::BeginDisabled(!canAct);
-    if (ImGui::Button("重载", ImVec2(76 * s, 0))) OnReload();
+    if (ImGui::Button("重载", ImVec2(68 * s, 0))) OnReload();
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("卸载后重新注入当前版本\n更新 Ra3Copilot.exe 后用这个");
 
     ImGui::SameLine(0, 6 * s);
     ImGui::BeginDisabled(g_busy);
-    if (ImGui::Button(g_pid ? "游戏" : "启动", ImVec2(76 * s, 0))) {
+    if (ImGui::Button(g_pid ? "游戏" : "启动", ImVec2(68 * s, 0))) {
         if (g_pid) ShowGameWindow();
         else LaunchGame();
     }
@@ -871,13 +955,12 @@ void BuildUi() {
         ImGui::SetTooltip(g_pid ? "把游戏窗口切到前台" : "启动日冕启动器；找不到时手动选择");
 
     ImGui::SameLine(0, 6 * s);
-    if (ImGui::Button("MCP", ImVec2(68 * s, 0))) OnMcp();
+    if (ImGui::Button("设置", ImVec2(68 * s, 0))) {
+        g_page = 1;
+        g_captureTarget = 0;
+    }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("复制 MCP 客户端配置到剪贴板");
-    ImGui::SameLine(0, 6 * s);
-    if (ImGui::Button("目录", ImVec2(68 * s, 0))) OnFolder();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("打开运行目录（日志 / 配置 / MCP 脚本）");
+        ImGui::SetTooltip("运行目录 / MCP 配置 / 快捷键");
 
     if (ImGui::Checkbox("自动注入", &g_autoInject)) SaveConfig();
     ImGui::SameLine(0, 18 * s);
@@ -885,27 +968,120 @@ void BuildUi() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("注入完成后把启动器最小化，不挡游戏");
 
-    ImGui::TextUnformatted("呼出菜单");
-    ImGui::SameLine(0, 8 * s);
-    ImGui::BeginDisabled(g_busy);
-    if (g_captureToggle) {
-        ImGui::Button("按新键…", ImVec2(112 * s, 0));
-    } else if (ImGui::Button(ToUtf8(ToggleLabelW()).c_str(), ImVec2(112 * s, 0))) {
-        g_captureToggle = true;
-        AppendLog(L"请按下新的呼出键（Esc 取消）");
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine(0, 8 * s);
-    if (g_captureToggle) {
-        ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.30f, 1.f), "按下新键…（Esc 取消）");
-    } else {
-        ImGui::TextDisabled("没有 Insert 键的键盘在这里改");
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("写入 ra3copilot_keys.ini；游戏中 1 秒内生效，不必重注入");
-    }
-
     ImGui::Separator();
     DrawLogPanel();
+}
+
+// 设置页：运行目录 + 快捷键（呼出键 / 功能键 / 静默）
+void DrawSettingsPage() {
+    const float s = g_scale;
+    if (ImGui::Button("< 返回", ImVec2(84 * s, 0))) {
+        g_page = 0;
+        g_captureTarget = 0;                 // 离开这一页就别留着捕获
+    }
+    ImGui::SameLine(0, 10 * s);
+    ImGui::TextDisabled("设置");
+
+    ImGui::Separator();
+    ImGui::BeginChild("##setbody", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+    ImGui::TextColored(kAccent, "运行目录");
+    ImGui::TextDisabled("配置、日志、MCP 脚本都在这里");
+    ImGui::TextWrapped("%s", ToUtf8(g_runtimeDir).c_str());
+    if (ImGui::Button("打开目录", ImVec2(104 * s, 0))) OnFolder();
+    ImGui::SameLine(0, 6 * s);
+    if (ImGui::Button("复制 MCP 配置", ImVec2(120 * s, 0))) OnMcp();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("把 MCP 客户端配置复制到剪贴板\n需要本机有 Python 3");
+
+    ImGui::Separator();
+    ImGui::TextColored(kAccent, "快捷键");
+    ImGui::TextDisabled("点键名改键（Esc 取消）；改动立即存盘，游戏中 1 秒内生效");
+
+    ImGui::TextUnformatted("呼出菜单");
+    ImGui::SameLine(0, 12 * s);
+    if (g_captureTarget == -1) {
+        ImGui::Button("按新键…", ImVec2(116 * s, 0));
+    } else if (ImGui::Button(ToUtf8(ToggleLabelW()).c_str(), ImVec2(116 * s, 0))) {
+        g_captureTarget = -1;
+        g_captureSince = GetTickCount64();
+        AppendLog(L"请按下呼出菜单的新按键（Esc 取消）");
+    }
+    ImGui::SameLine(0, 12 * s);
+    ImGui::TextDisabled("不受静默开关影响");
+
+    bool en = g_hkEnabled;
+    if (ImGui::Checkbox("静默功能快捷键", &en)) {
+        g_hkEnabled = en;
+        SaveKeyTable();
+        AppendLog(en ? L"功能快捷键已启用" : L"功能快捷键已静默：只保留呼出菜单", LOG_OK);
+    }
+    ImGui::SameLine(0, 10 * s);
+    ImGui::TextDisabled("静默后按功能键不触发任何动作");
+
+    if (g_captureTarget != 0) {
+        ImGui::TextColored(kWarn, "等待按键…（Esc 取消）");
+    } else {
+        ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeight() * 0.4f));
+    }
+
+    // 两列共用一个滚动容器：分开滚会左右错位
+    const int n = static_cast<int>(g_keyRows.size());
+    const int half = (n + 1) / 2;
+    const float rest = ImGui::GetContentRegionAvail().y;
+    ImGui::BeginChild("##keylist", ImVec2(0, rest > 120 ? rest : 120), true);
+    ImGui::Columns(2, "##keycols", false);
+    for (int i = 0; i < n; ++i) {
+        if (i == half) ImGui::NextColumn();
+        const KeyRow& r = g_keyRows[i];
+        ImGui::PushID(r.id);
+        if (g_captureTarget == r.id) {
+            ImGui::Button("按新键…", ImVec2(104, 0));
+        } else if (ImGui::Button(ToUtf8(KeyLabelW(r.vk, r.ctrl)).c_str(), ImVec2(104, 0))) {
+            g_captureTarget = r.id;
+            g_captureSince = GetTickCount64();
+            AppendLog(L"请按下「" + FromUtf8(r.desc) + L"」的新按键（Esc 取消）");
+        }
+        ImGui::PopID();
+        ImGui::SameLine(112);
+        ImGui::TextDisabled("%s", r.desc.c_str());
+    }
+    ImGui::Columns(1);
+    ImGui::EndChild();
+
+    ImGui::EndChild();
+}
+
+void BuildUi() {
+    ImGuiIO& io = ImGui::GetIO();
+    const float s = g_scale;
+
+    // 捕获超时兜底：点了按钮又不按，之后的第一个按键（可能完全无关）就会改掉绑定
+    if (g_captureTarget != 0 && GetTickCount64() - g_captureSince > 15000) {
+        g_captureTarget = 0;
+        AppendLog(L"改键超时，已取消");
+    }
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(9 * s, 8 * s));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::Begin("##root", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    // 顶栏两页共用
+    ImGui::PushStyleColor(ImGuiCol_Text, kAccent);
+    ImGui::TextUnformatted("Ra3-Copilot");
+    ImGui::PopStyleColor();
+    ImGui::SameLine(0, 8 * s);
+    ImGui::TextDisabled("v%s", ToUtf8(kVersion).c_str());
+    ImGui::TextDisabled("红色警戒 3 · 日冕 Mod 局内修改器");
+    ImGui::Separator();
+
+    if (g_page == 1) DrawSettingsPage();
+    else DrawMainPage();
 
     ImGui::End();
     ImGui::PopStyleVar(2);
@@ -987,24 +1163,37 @@ void InitDpi(HWND hwnd) {
 
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     // 改键捕获要抢在 ImGui 前面：否则按键先被 ImGui 的输入处理吃掉
-    if (g_captureToggle) {
+    if (g_captureTarget != 0) {
+        // 切走就作废：否则回来随手按个键（哪怕按在别的窗口里）就把绑定改掉了
+        if (msg == WM_KILLFOCUS) {
+            g_captureTarget = 0;
+            AppendLog(L"改键已取消（窗口失去焦点）");
+            return 0;
+        }
         if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
             const int vk = static_cast<int>(w);
             if (vk == VK_ESCAPE) {
-                g_captureToggle = false;
+                g_captureTarget = 0;
                 AppendLog(L"已取消改键");
                 return 0;
             }
             if (vk != VK_SHIFT && vk != VK_CONTROL && vk != VK_MENU) {   // 修饰键不当主键
                 const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-                if (ToggleClash(vk, ctrl)) {
-                    AppendLog(L"该键已被功能快捷键占用，请换一个（Esc 取消）", LOG_WARN);
+                const int target = g_captureTarget;
+                const std::wstring dup = KeyConflict(target, vk, ctrl);
+                if (!dup.empty()) {
+                    AppendLog(L"该键已被「" + dup + L"」占用，请换一个（Esc 取消）", LOG_WARN);
                 } else {
-                    g_toggleVk = vk;
-                    g_toggleCtrl = ctrl;
-                    SaveToggleKey(vk, ctrl);
-                    g_captureToggle = false;
-                    AppendLog(L"呼出菜单已改为 " + ToggleLabelW() + L"；游戏中 1 秒内生效", LOG_OK);
+                    const std::wstring label = KeyLabelW(vk, ctrl);
+                    const std::wstring name = (target == -1) ? std::wstring(L"呼出菜单") : FromUtf8(
+                        [&] { for (const KeyRow& r : g_keyRows) if (r.id == target) return r.desc; return std::string(); }());
+                    if (ApplyKey(target, vk, ctrl)) {
+                        g_captureTarget = 0;
+                        AppendLog(name + L" → " + label + L"；游戏中 1 秒内生效", LOG_OK);
+                    } else {
+                        g_captureTarget = 0;
+                        AppendLog(L"改键失败：找不到对应的快捷键条目", LOG_ERR);
+                    }
                 }
             }
             return 0;
@@ -1142,7 +1331,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
     wc.lpszClassName = kWindowClass;
     RegisterClassExW(&wc);
 
-    RECT wr{ 0, 0, S(560), S(448) };
+    RECT wr{ 0, 0, S(560), S(600) };
     AdjustWindowRectEx(&wr, WS_OVERLAPPEDWINDOW, FALSE, 0);
     HWND h = CreateWindowExW(0, kWindowClass, L"Ra3-Copilot · 修改器启动器",
                              WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -1153,7 +1342,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
 
     InitDpi(h);
     if (g_scale > 1.0f) {
-        RECT sr{ 0, 0, S(560), S(448) };
+        RECT sr{ 0, 0, S(560), S(600) };
         AdjustWindowRectEx(&sr, WS_OVERLAPPEDWINDOW, FALSE, 0);
         SetWindowPos(h, nullptr, 0, 0, sr.right - sr.left, sr.bottom - sr.top,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
