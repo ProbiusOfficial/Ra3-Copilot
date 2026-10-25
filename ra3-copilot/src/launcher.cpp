@@ -83,6 +83,7 @@ bool g_toggleCtrl = false;
 int  g_captureTarget = 0;       // 正在等哪个键：0=没有，-1=呼出键，>0=功能热键 id
 ULONGLONG g_captureSince = 0;   // 捕获起始时刻：没有超时的话，点了按钮又不按，之后随便一个键就改掉呼出键
 int  g_page = 0;                // 0=主界面，1=设置
+bool g_keysTop = true;          // 进设置页时把键位列表滚回顶部（首帧同样从头看）
 
 DWORD g_pid = 0;
 bool g_loaded = false;
@@ -917,6 +918,8 @@ void DrawLogPanel() {
 
 const ImVec4 kAccent(0.35f, 0.85f, 0.95f, 1.f);
 const ImVec4 kWarn(0.95f, 0.72f, 0.30f, 1.f);
+const ImVec4 kDim(0.56f, 0.61f, 0.66f, 1.f);      // 弱化说明
+const ImVec4 kDesc(0.82f, 0.86f, 0.90f, 1.f);     // 键位说明正文
 
 // 主界面：状态 + 动作 + 运行记录
 void DrawMainPage() {
@@ -957,6 +960,7 @@ void DrawMainPage() {
     ImGui::SameLine(0, 6 * s);
     if (ImGui::Button("设置", ImVec2(68 * s, 0))) {
         g_page = 1;
+        g_keysTop = true;
         g_captureTarget = 0;
     }
     if (ImGui::IsItemHovered())
@@ -972,6 +976,31 @@ void DrawMainPage() {
     DrawLogPanel();
 }
 
+// 键名按钮：捕获中换成提示并高亮 —— 这一页唯一的交互就是它，得一眼认得出
+bool DrawKeyCell(int target, int vk, bool ctrl, float w) {
+    if (g_captureTarget == target) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.48f, 0.33f, 0.10f, 1.f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.48f, 0.33f, 0.10f, 1.f));
+        ImGui::Button("按新键…", ImVec2(w, 0));
+        ImGui::PopStyleColor(2);
+        return false;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.26f, 0.32f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.37f, 0.45f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.22f, 0.28f, 1.f));
+    const bool hit = ImGui::Button(ToUtf8(KeyLabelW(vk, ctrl)).c_str(), ImVec2(w, 0));
+    ImGui::PopStyleColor(3);
+    return hit;
+}
+
+// 与按钮同行的文字：顶对齐会看起来贴在行上沿，用 AlignTextToFramePadding 压到中线
+void TextOnRow(const char* text, const ImVec4& col) {
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Text, col);
+    ImGui::TextUnformatted(text);
+    ImGui::PopStyleColor();
+}
+
 // 设置页：运行目录 + 快捷键（呼出键 / 功能键 / 静默）
 void DrawSettingsPage() {
     const float s = g_scale;
@@ -983,10 +1012,10 @@ void DrawSettingsPage() {
     ImGui::TextDisabled("设置");
 
     ImGui::Separator();
-    ImGui::BeginChild("##setbody", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     ImGui::TextColored(kAccent, "运行目录");
-    ImGui::TextDisabled("配置、日志、MCP 脚本都在这里");
+    ImGui::SameLine(0, 10 * s);
+    TextOnRow("配置、日志、MCP 脚本都在这里", kDim);
     ImGui::TextWrapped("%s", ToUtf8(g_runtimeDir).c_str());
     if (ImGui::Button("打开目录", ImVec2(104 * s, 0))) OnFolder();
     ImGui::SameLine(0, 6 * s);
@@ -997,18 +1026,19 @@ void DrawSettingsPage() {
     ImGui::Separator();
     ImGui::TextColored(kAccent, "快捷键");
     ImGui::TextDisabled("点键名改键（Esc 取消）；改动立即存盘，游戏中 1 秒内生效");
+    ImGui::Spacing();
 
+    // 呼出键：不受静默影响，单独一行放在列表上方
+    ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("呼出菜单");
-    ImGui::SameLine(0, 12 * s);
-    if (g_captureTarget == -1) {
-        ImGui::Button("按新键…", ImVec2(116 * s, 0));
-    } else if (ImGui::Button(ToUtf8(ToggleLabelW()).c_str(), ImVec2(116 * s, 0))) {
+    ImGui::SameLine(0, 10 * s);
+    if (DrawKeyCell(-1, g_toggleVk, g_toggleCtrl, 116 * s)) {
         g_captureTarget = -1;
         g_captureSince = GetTickCount64();
         AppendLog(L"请按下呼出菜单的新按键（Esc 取消）");
     }
     ImGui::SameLine(0, 12 * s);
-    ImGui::TextDisabled("不受静默开关影响");
+    TextOnRow("不受静默开关影响", kDim);
 
     bool en = g_hkEnabled;
     if (ImGui::Checkbox("静默功能快捷键", &en)) {
@@ -1017,39 +1047,65 @@ void DrawSettingsPage() {
         AppendLog(en ? L"功能快捷键已启用" : L"功能快捷键已静默：只保留呼出菜单", LOG_OK);
     }
     ImGui::SameLine(0, 10 * s);
-    ImGui::TextDisabled("静默后按功能键不触发任何动作");
+    TextOnRow("静默后按功能键不触发任何动作", kDim);
 
-    if (g_captureTarget != 0) {
-        ImGui::TextColored(kWarn, "等待按键…（Esc 取消）");
-    } else {
-        ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeight() * 0.4f));
-    }
+    // 状态行常驻，避免捕获时整块内容上下跳
+    if (g_captureTarget != 0) ImGui::TextColored(kWarn, "正在等待按键…（Esc 取消）");
+    else                      ImGui::Dummy(ImVec2(0, ImGui::GetTextLineHeight()));
 
-    // 两列共用一个滚动容器：分开滚会左右错位
+    // 键位列表：表格四列（键名·说明·键名·说明）。行高由按钮决定，说明与按钮垂直居中，
+    // 两列共用一个滚动容器（分开滚会左右错位）。
     const int n = static_cast<int>(g_keyRows.size());
     const int half = (n + 1) / 2;
     const float rest = ImGui::GetContentRegionAvail().y;
-    ImGui::BeginChild("##keylist", ImVec2(0, rest > 120 ? rest : 120), true);
-    ImGui::Columns(2, "##keycols", false);
-    for (int i = 0; i < n; ++i) {
-        if (i == half) ImGui::NextColumn();
-        const KeyRow& r = g_keyRows[i];
-        ImGui::PushID(r.id);
-        if (g_captureTarget == r.id) {
-            ImGui::Button("按新键…", ImVec2(104, 0));
-        } else if (ImGui::Button(ToUtf8(KeyLabelW(r.vk, r.ctrl)).c_str(), ImVec2(104, 0))) {
-            g_captureTarget = r.id;
-            g_captureSince = GetTickCount64();
-            AppendLog(L"请按下「" + FromUtf8(r.desc) + L"」的新按键（Esc 取消）");
-        }
-        ImGui::PopID();
-        ImGui::SameLine(112);
-        ImGui::TextDisabled("%s", r.desc.c_str());
+    const float btnW = 100 * s;
+    const float cellY = 4 * s;
+    const float rowH = ImGui::GetFrameHeight() + cellY * 2;
+    // 高度取整行，否则滚动区底部总是把最后一行切一半
+    int rows = static_cast<int>((rest - 6 * s) / rowH);
+    if (rows < 3) rows = 3;
+    if (rows > half) rows = half;
+    const float listH = rows * rowH + 6 * s;
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10 * s, cellY));
+    if (g_keysTop) {                      // 每次进设置页从头看，别停在上一轮的滚动位置
+        ImGui::SetNextWindowScroll(ImVec2(0.f, 0.f));
+        g_keysTop = false;
     }
-    ImGui::Columns(1);
+    ImGui::BeginChild("##keylist", ImVec2(0, listH), true);
+    if (ImGui::BeginTable("##keys", 4,
+                          ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp |
+                          ImGuiTableFlags_NoSavedSettings)) {
+        ImGui::TableSetupColumn("##k1", ImGuiTableColumnFlags_WidthFixed, btnW);
+        ImGui::TableSetupColumn("##d1", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("##k2", ImGuiTableColumnFlags_WidthFixed, btnW);
+        ImGui::TableSetupColumn("##d2", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        for (int i = 0; i < half; ++i) {
+            ImGui::TableNextRow();
+            // 正在等待按键的那一行整行点亮，滚到哪都看得见
+            const bool capL = (i < n) && (g_keyRows[i].id == g_captureTarget);
+            const bool capR = (i + half < n) && (g_keyRows[i + half].id == g_captureTarget);
+            if (g_captureTarget != 0 && (capL || capR))
+                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(110, 74, 22, 160));
+            for (int col = 0; col < 2; ++col) {
+                const int idx = i + col * half;
+                if (idx >= n) continue;
+                const KeyRow& r = g_keyRows[idx];
+                ImGui::TableSetColumnIndex(col * 2);
+                ImGui::PushID(r.id);
+                if (DrawKeyCell(r.id, r.vk, r.ctrl, btnW)) {
+                    g_captureTarget = r.id;
+                    g_captureSince = GetTickCount64();
+                    AppendLog(L"请按下「" + FromUtf8(r.desc) + L"」的新按键（Esc 取消）");
+                }
+                ImGui::PopID();
+                ImGui::TableSetColumnIndex(col * 2 + 1);
+                TextOnRow(r.desc.c_str(), kDesc);
+            }
+        }
+        ImGui::EndTable();
+    }
     ImGui::EndChild();
-
-    ImGui::EndChild();
+    ImGui::PopStyleVar();
 }
 
 void BuildUi() {
