@@ -728,7 +728,7 @@ void RefreshStatus(bool pollHttp) {
     if (g_pid != lastPid || g_loaded != lastLoaded) {
         lastPid = g_pid;
         lastLoaded = g_loaded;
-        if (g_loaded) AppendLog(g_http ? L"修改器已就绪（接口已应答）" : L"修改器已注入", LOG_OK);
+        if (g_loaded) AppendLog(g_http ? L"修改器已注入，接口已应答" : L"修改器已注入", LOG_OK);
         else if (g_pid) AppendLog(L"游戏已运行，修改器未注入", LOG_INFO);
     }
 
