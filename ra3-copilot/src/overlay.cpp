@@ -941,11 +941,20 @@ const HKDef kHKDefault[] = {
 constexpr int kHKCount = (int)(sizeof(kHKDefault) / sizeof(kHKDefault[0]));
 
 HKDef kHK[kHKCount];                 // 运行期绑定（LoadKeyBinds 初始化）
-volatile LONG g_hkEnabled = 1;       // 功能热键总开关；INSERT 不受它管
+
+// 呼出 / 隐藏菜单的键。默认 INSERT —— 75 配列等没有该键的键盘会因此打不开面板，
+// 所以它单独可改：局内面板能改，启动器也能改（打不开面板时的唯一入口）。
+// 不受「启用功能快捷键」总开关管，与功能热键是两套。
+int      g_toggleVk     = VK_INSERT;
+bool     g_toggleCtrl   = false;
+volatile LONG g_toggleRebind = 0;    // 1 = 正在等待捕获新的呼出键
+
+volatile LONG g_hkEnabled = 1;       // 功能热键总开关；呼出键不受它管
 volatile LONG g_hkRebind  = -1;      // 正在等待捕获新键的下标；-1 = 未在改键
-volatile LONG g_hkMsgKind = 0;       // 改键结果 1=成功 2=取消 3=冲突（输入线程写，渲染线程记日志）
+volatile LONG g_hkMsgKind = 0;       // 改键结果 1=成功 2=取消 3=冲突 4=呼出键已改 5=外部改键生效
 volatile LONG g_hkMsgIdx  = -1;
 volatile LONG g_hkMsgDup  = -1;
+ULONGLONG g_keysStamp     = 0;       // ini 上次读写的写时间戳，外部改键后据此热重载
 
 // 键码 → 显示名（与 kHKDefault 的既有叫法一致）
 void KeyName(int vk, char* out, int n) {
@@ -985,6 +994,14 @@ void HKLabel(int i, char* out, int n) {
     else             _snprintf_s(out, n, _TRUNCATE, "%s", k);
 }
 
+// 呼出键 → 显示串
+void ToggleLabel(char* out, int n) {
+    char k[16] = { 0 };
+    KeyName(g_toggleVk, k, sizeof(k));
+    if (g_toggleCtrl) _snprintf_s(out, n, _TRUNCATE, "Ctrl+%s", k);
+    else              _snprintf_s(out, n, _TRUNCATE, "%s", k);
+}
+
 void HKResetDefaults() { for (int i = 0; i < kHKCount; ++i) kHK[i] = kHKDefault[i]; }
 
 // 占用了 (vk,ctrl) 的其它条目下标；无则 -1
@@ -998,17 +1015,38 @@ void HKFilePath(char* out, int n) {
     _snprintf_s(out, n, _TRUNCATE, "%sra3copilot_keys.ini", DllDir());
 }
 
-// enabled= 行 + 每条 "<id> <vk> <ctrl>"；读到合法值才覆盖，其余保持默认。
+// ini 的写时间。启动器在外部改键时靠它发现变更 —— 只比时间戳，不轮询内容。
+ULONGLONG KeysFileStamp() {
+    char path[MAX_PATH] = { 0 }; HKFilePath(path, sizeof(path));
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &fad)) return 0;
+    return ((ULONGLONG)fad.ftLastWriteTime.dwHighDateTime << 32) | fad.ftLastWriteTime.dwLowDateTime;
+}
+
+void SaveKeyBinds();
+
+// enabled= 行 + toggle= 行 + 每条 "<id> <vk> <ctrl>"；读到合法值才覆盖，其余保持默认。
+// 文件不存在时落一份完整绑定，启动器据此校验键位冲突。
 void LoadKeyBinds() {
     HKResetDefaults();
     g_hkEnabled = 1;
+    g_toggleVk = VK_INSERT;
+    g_toggleCtrl = false;
     char path[MAX_PATH] = { 0 }; HKFilePath(path, sizeof(path));
     FILE* f = nullptr;
-    if (fopen_s(&f, path, "r") != 0 || !f) return;
+    if (fopen_s(&f, path, "r") != 0 || !f) { g_keysStamp = 0; SaveKeyBinds(); return; }
     char line[128];
     while (fgets(line, sizeof(line), f)) {
         if (line[0] == '#') continue;
         if (strncmp(line, "enabled=", 8) == 0) { g_hkEnabled = (line[8] == '1') ? 1 : 0; continue; }
+        if (strncmp(line, "toggle=", 7) == 0) {
+            int vk = 0, ctrl = 0;
+            if (sscanf_s(line + 7, "%d %d", &vk, &ctrl) == 2 && vk > 0 && vk < 0x100) {
+                g_toggleVk = vk;
+                g_toggleCtrl = (ctrl != 0);
+            }
+            continue;
+        }
         int id = 0, vk = 0, ctrl = 0;
         if (sscanf_s(line, "%d %d %d", &id, &vk, &ctrl) != 3) continue;
         if (vk <= 0 || vk >= 0x100) continue;
@@ -1016,6 +1054,7 @@ void LoadKeyBinds() {
             if (kHK[i].id == id) { kHK[i].vk = vk; kHK[i].ctrl = (ctrl != 0); break; }
     }
     fclose(f);
+    g_keysStamp = KeysFileStamp();
 }
 
 void SaveKeyBinds() {
@@ -1023,9 +1062,11 @@ void SaveKeyBinds() {
     FILE* f = nullptr;
     if (fopen_s(&f, path, "w") != 0 || !f) return;
     fprintf(f, "enabled=%d\n", g_hkEnabled ? 1 : 0);
+    fprintf(f, "toggle=%d %d\n", g_toggleVk, g_toggleCtrl ? 1 : 0);
     for (int i = 0; i < kHKCount; ++i)
         fprintf(f, "%d %d %d\n", kHK[i].id, kHK[i].vk, kHK[i].ctrl ? 1 : 0);
     fclose(f);
+    g_keysStamp = KeysFileStamp();      // 自己写的，算不上外部变更
 }
 
 // 输入线程只记结果，日志由渲染线程写（AddLog 不在输入线程上调）
@@ -1041,6 +1082,12 @@ void HKMsgTick() {
         AddLog(LOG_INFO, "[快捷键] 已取消改键");
     } else if (kind == 3 && dup >= 0 && dup < kHKCount) {
         AddLog(LOG_WARN, "[快捷键] 该键已被「%s」占用，请换一个", kHK[dup].desc);
+    } else if (kind == 4) {
+        char lbl[32] = { 0 }; ToggleLabel(lbl, sizeof(lbl));
+        AddLog(LOG_OK, "[快捷键] 呼出菜单 → %s", lbl);
+    } else if (kind == 5) {
+        char lbl[32] = { 0 }; ToggleLabel(lbl, sizeof(lbl));
+        AddLog(LOG_OK, "[快捷键] 配置文件已更新，呼出菜单 → %s", lbl);
     }
 }
 
@@ -2211,7 +2258,18 @@ void TabSettings() {
     // ===== 快捷键（可开关 / 可改键，两列并排，各带滚动）=====
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "快捷键");
-    ImGui::TextDisabled("INSERT 显示或隐藏本菜单（固定，不可改）");
+    // 呼出键单独一项：不受「启用功能快捷键」管；打不开面板的键盘得在启动器里改
+    if (g_toggleRebind) {
+        ImGui::Button("按新键…", ImVec2(100, 0));
+    } else {
+        char tgl[32] = { 0 }; ToggleLabel(tgl, sizeof(tgl));
+        if (ImGui::Button(tgl, ImVec2(100, 0))) {
+            InterlockedExchange(&g_toggleRebind, 1);
+            AddLog(LOG_INFO, "[快捷键] 请按下呼出菜单的新按键（Esc 取消）");
+        }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("呼出 / 隐藏本菜单（无 Insert 键的键盘请在启动器里改）");
     {
         bool en = g_hkEnabled != 0;
         if (ImGui::Checkbox("启用功能快捷键", &en)) {
@@ -2510,20 +2568,44 @@ DWORD WINAPI InputThread(LPVOID) {
     bool down[kHKCount] = { false };
     bool downAll[0x100] = { false };        // 改键捕获用（全键位边沿检测）
     bool wasCapturing = false;
-    bool lastIns = false;
+    bool lastToggle = false;
+    DWORD lastScan = 0;
     while (!g_stopInput) {
         const bool focused = GameFocused();
-        const bool ins = focused && (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
-        if (ins && !lastIns) g_cfg.visible = !g_cfg.visible;
-        lastIns = ins;
+
+        // 启动器在外部改键：每秒看一眼 ini 的写时间，变了就重读（捕获期间不打断）
+        const DWORD now = GetTickCount();
+        if (now - lastScan >= 1000) {
+            lastScan = now;
+            if (g_hkRebind < 0 && g_toggleRebind == 0) {
+                const ULONGLONG stamp = KeysFileStamp();
+                if (stamp && stamp != g_keysStamp) {
+                    const int oldVk = g_toggleVk;
+                    const bool oldCtrl = g_toggleCtrl;
+                    LoadKeyBinds();
+                    if (g_toggleVk != oldVk || g_toggleCtrl != oldCtrl)
+                        InterlockedExchange(&g_hkMsgKind, 5);   // 记一条，玩家能确认生效
+                    // 重读可能整体换键，按下状态要跟着同步，否则会虚发一次
+                    for (int i = 0; i < kHKCount; ++i)
+                        down[i] = focused && (GetAsyncKeyState(kHK[i].vk) & 0x8000) != 0;
+                    lastToggle = focused && (GetAsyncKeyState(g_toggleVk) & 0x8000) != 0;
+                }
+            }
+        }
+
+        const bool ctrlAll = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        const bool tgl = focused && (GetAsyncKeyState(g_toggleVk) & 0x8000) != 0;
+        if (tgl && !lastToggle && g_toggleCtrl == ctrlAll) g_cfg.visible = !g_cfg.visible;
+        lastToggle = tgl;
 
         // 改键捕获优先；捕获期间功能热键一律不响应
         const LONG rb = g_hkRebind;
-        if (rb >= 0) {
+        const bool capToggle = (g_toggleRebind != 0);
+        if (rb >= 0 || capToggle) {
             // 进入捕获时把全键位标记成"已按下" —— 只有**新按下**的键才算数，
             // 否则点按钮时手还按着别的键会被误捕获。
             if (!wasCapturing) { for (int vk = 0; vk < 0x100; ++vk) downAll[vk] = true; wasCapturing = true; }
-            const bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool ctrl = ctrlAll;
             bool finished = false;
             for (int vk = 0x08; vk < 0x100 && !finished; ++vk) {
                 if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) continue;   // 修饰键不当主键
@@ -2533,7 +2615,19 @@ DWORD WINAPI InputThread(LPVOID) {
                 if (!edge) continue;
                 if (vk == VK_ESCAPE) {
                     g_hkMsgIdx = -1; g_hkMsgDup = -1; InterlockedExchange(&g_hkMsgKind, 2);
-                    InterlockedExchange(&g_hkRebind, -1); finished = true; break;
+                    InterlockedExchange(&g_hkRebind, -1); InterlockedExchange(&g_toggleRebind, 0);
+                    finished = true; break;
+                }
+                if (capToggle) {
+                    const int dup = HKConflict(-1, vk, ctrl);
+                    if (dup >= 0) {                // 与功能热键撞车：保持捕获态，让用户换一个键
+                        g_hkMsgIdx = -1; g_hkMsgDup = dup; InterlockedExchange(&g_hkMsgKind, 3);
+                        break;
+                    }
+                    g_toggleVk = vk; g_toggleCtrl = ctrl;
+                    SaveKeyBinds();
+                    g_hkMsgIdx = -1; g_hkMsgDup = -1; InterlockedExchange(&g_hkMsgKind, 4);
+                    InterlockedExchange(&g_toggleRebind, 0); finished = true; break;
                 }
                 const int dup = HKConflict((int)rb, vk, ctrl);
                 if (dup >= 0) {                    // 冲突：保持捕获态，让用户换一个键
@@ -2550,13 +2644,14 @@ DWORD WINAPI InputThread(LPVOID) {
                 // 重同步按下状态：刚捕获的键此刻多半还按着，不能立刻被当成一次触发
                 for (int i = 0; i < kHKCount; ++i)
                     down[i] = focused && (GetAsyncKeyState(kHK[i].vk) & 0x8000) != 0;
+                lastToggle = focused && (GetAsyncKeyState(g_toggleVk) & 0x8000) != 0;
             }
             Sleep(25);
             continue;
         }
         wasCapturing = false;
 
-        const bool ctrl = focused && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        const bool ctrl = ctrlAll;
         for (int i = 0; i < kHKCount; ++i) {
             const bool cur = focused && (GetAsyncKeyState(kHK[i].vk) & 0x8000) != 0;
             const bool edge = cur && !down[i];
@@ -2682,7 +2777,8 @@ void OverlayInit() {
     for (int i = 0; i < 1800 && !GetModuleHandleA("d3d9.dll"); ++i) Sleep(100);
 
     g_inputThread = CreateThread(nullptr, 0, InputThread, nullptr, 0, nullptr);   // 句柄留到卸载时 join
-    AddLog(LOG_INFO, "输入线程已启动（INSERT 显示 / 隐藏菜单）");
+    char tgl[32] = { 0 }; ToggleLabel(tgl, sizeof(tgl));
+    AddLog(LOG_INFO, "输入线程已启动（%s 显示 / 隐藏菜单）", tgl);
 
     InstallRenderHooks();
     g_running = true;

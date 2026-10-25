@@ -17,6 +17,7 @@
 #include <commdlg.h>
 #include <string>
 #include <vector>
+#include <cstdio>
 #include "injectcore.h"
 #include "resource.h"
 #include "imgui.h"
@@ -72,6 +73,13 @@ std::wstring g_runtimeDir;
 std::wstring g_dllPath;
 std::wstring g_launcherPath;
 std::wstring g_configPath;
+std::wstring g_keysPath;
+
+// 呼出菜单的键（与局内修改器共用 ra3copilot_keys.ini 的 toggle= 行）。
+// 75 配列等没有 INSERT 键的键盘靠这里改 —— 局内面板打不开时，这是唯一入口。
+int  g_toggleVk = VK_INSERT;
+bool g_toggleCtrl = false;
+bool g_captureToggle = false;
 
 DWORD g_pid = 0;
 bool g_loaded = false;
@@ -287,6 +295,110 @@ void WriteConfig(const wchar_t* key, const std::wstring& val) {
     WritePrivateProfileStringW(L"launcher", key, val.c_str(), g_configPath.c_str());
 }
 
+// ===== 呼出键 =====
+// 与局内修改器共用 ra3copilot_keys.ini（格式见 overlay.cpp 的 LoadKeyBinds）：
+// 无节名的裸文本，所以自己按行读写；写回时必须保留功能热键那些行。
+
+// 键码 → 显示名（与局内面板同一套叫法；两边独立编译，各维护一份）
+std::wstring KeyNameW(int vk) {
+    if (vk >= VK_F1 && vk <= VK_F24) return L"F" + std::to_wstring(vk - VK_F1 + 1);
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) return std::wstring(1, static_cast<wchar_t>(vk));
+    switch (vk) {
+    case VK_OEM_MINUS:  return L"-";
+    case VK_OEM_PLUS:   return L"+";
+    case VK_OEM_4:      return L"[";
+    case VK_OEM_6:      return L"]";
+    case VK_OEM_5:      return L"\\";
+    case VK_OEM_1:      return L";";
+    case VK_OEM_7:      return L"'";
+    case VK_OEM_COMMA:  return L",";
+    case VK_OEM_PERIOD: return L".";
+    case VK_OEM_2:      return L"/";
+    case VK_PRIOR:      return L"PageUp";
+    case VK_NEXT:       return L"PageDown";
+    case VK_INSERT:     return L"Insert";
+    case VK_DELETE:     return L"Delete";
+    case VK_HOME:       return L"Home";
+    case VK_END:        return L"End";
+    case VK_SPACE:      return L"Space";
+    case VK_TAB:        return L"Tab";
+    case VK_BACK:       return L"Backspace";
+    default: {
+        wchar_t b[16] = { 0 };
+        swprintf_s(b, L"VK%02X", vk);
+        return b;
+    }
+    }
+}
+
+std::wstring ToggleLabelW() {
+    std::wstring k = KeyNameW(g_toggleVk);
+    return g_toggleCtrl ? (L"Ctrl+" + k) : k;
+}
+
+bool ReadKeysLines(std::vector<std::string>* out) {
+    if (g_keysPath.empty()) return false;
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, g_keysPath.c_str(), L"r") != 0 || !f) return false;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        std::string s(line);
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+        out->push_back(s);
+    }
+    fclose(f);
+    return true;
+}
+
+void LoadToggleKey() {
+    g_toggleVk = VK_INSERT;
+    g_toggleCtrl = false;
+    std::vector<std::string> lines;
+    if (!ReadKeysLines(&lines)) return;
+    for (const std::string& ln : lines) {
+        int vk = 0, ctrl = 0;
+        if (sscanf_s(ln.c_str(), "toggle=%d %d", &vk, &ctrl) == 2 && vk > 0 && vk < 0x100) {
+            g_toggleVk = vk;
+            g_toggleCtrl = (ctrl != 0);
+        }
+    }
+}
+
+// 是否与某条功能热键同键。功能热键由局内修改器写进同一个 ini（首次运行会落一份全表）。
+bool ToggleClash(int vk, bool ctrl) {
+    std::vector<std::string> lines;
+    if (!ReadKeysLines(&lines)) return false;
+    for (const std::string& ln : lines) {
+        if (ln.empty() || ln[0] == '#') continue;
+        if (ln.compare(0, 8, "enabled=") == 0 || ln.compare(0, 7, "toggle=") == 0) continue;
+        int id = 0, evk = 0, ectrl = 0;
+        if (sscanf_s(ln.c_str(), "%d %d %d", &id, &evk, &ectrl) != 3) continue;
+        if (evk == vk && (ectrl != 0) == ctrl) return true;
+    }
+    return false;
+}
+
+// 只替换 toggle= 行，其余行原样保留（功能热键的绑定不能被这次写入吃掉）
+void SaveToggleKey(int vk, bool ctrl) {
+    std::vector<std::string> lines;
+    ReadKeysLines(&lines);
+    char want[64] = { 0 };
+    sprintf_s(want, "toggle=%d %d", vk, ctrl ? 1 : 0);
+    bool replaced = false;
+    for (std::string& ln : lines) {
+        if (ln.compare(0, 7, "toggle=") == 0) { ln = want; replaced = true; }
+    }
+    if (!replaced) lines.push_back(want);
+
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, g_keysPath.c_str(), L"w") != 0 || !f) {
+        AppendLog(L"呼出键写入失败（运行目录不可写）", LOG_ERR);
+        return;
+    }
+    for (const std::string& ln : lines) fprintf(f, "%s\n", ln.c_str());
+    fclose(f);
+}
+
 void LoadConfig() {
     g_autoInject = ReadConfig(L"auto_inject", L"0") == L"1";
     g_minimizeAfter = ReadConfig(L"minimize_after", L"1") == L"1";
@@ -305,6 +417,7 @@ bool EnsureRuntime() {
         g_dllPath = Join(g_runtimeDir, L"ra3copilot.dll");
         g_configPath = Join(g_runtimeDir, L"launcher.ini");
     }
+    g_keysPath = Join(g_runtimeDir, L"ra3copilot_keys.ini");
     EnsureDir(g_runtimeDir);
     EnsureDir(Join(g_runtimeDir, L"mcp"));
     if (!DirExists(g_runtimeDir)) return false;
@@ -313,6 +426,7 @@ bool EnsureRuntime() {
     const std::wstring oldKeys = Join(g_exeDir, L"ra3copilot_keys.ini");
     const std::wstring newKeys = Join(g_runtimeDir, L"ra3copilot_keys.ini");
     if (FileExists(oldKeys) && !FileExists(newKeys)) CopyFileW(oldKeys.c_str(), newKeys.c_str(), TRUE);
+    LoadToggleKey();
 
     std::wstring err;
     if (!WriteResourceIfChanged(IDR_PAYLOAD_DLL, g_dllPath, err) && !FileExists(g_dllPath)) {
@@ -771,6 +885,25 @@ void BuildUi() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("注入完成后把启动器最小化，不挡游戏");
 
+    ImGui::TextUnformatted("呼出菜单");
+    ImGui::SameLine(0, 8 * s);
+    ImGui::BeginDisabled(g_busy);
+    if (g_captureToggle) {
+        ImGui::Button("按新键…", ImVec2(112 * s, 0));
+    } else if (ImGui::Button(ToUtf8(ToggleLabelW()).c_str(), ImVec2(112 * s, 0))) {
+        g_captureToggle = true;
+        AppendLog(L"请按下新的呼出键（Esc 取消）");
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine(0, 8 * s);
+    if (g_captureToggle) {
+        ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.30f, 1.f), "按下新键…（Esc 取消）");
+    } else {
+        ImGui::TextDisabled("没有 Insert 键的键盘在这里改");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("写入 ra3copilot_keys.ini；游戏中 1 秒内生效，不必重注入");
+    }
+
     ImGui::Separator();
     DrawLogPanel();
 
@@ -853,6 +986,32 @@ void InitDpi(HWND hwnd) {
 }
 
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
+    // 改键捕获要抢在 ImGui 前面：否则按键先被 ImGui 的输入处理吃掉
+    if (g_captureToggle) {
+        if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+            const int vk = static_cast<int>(w);
+            if (vk == VK_ESCAPE) {
+                g_captureToggle = false;
+                AppendLog(L"已取消改键");
+                return 0;
+            }
+            if (vk != VK_SHIFT && vk != VK_CONTROL && vk != VK_MENU) {   // 修饰键不当主键
+                const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                if (ToggleClash(vk, ctrl)) {
+                    AppendLog(L"该键已被功能快捷键占用，请换一个（Esc 取消）", LOG_WARN);
+                } else {
+                    g_toggleVk = vk;
+                    g_toggleCtrl = ctrl;
+                    SaveToggleKey(vk, ctrl);
+                    g_captureToggle = false;
+                    AppendLog(L"呼出菜单已改为 " + ToggleLabelW() + L"；游戏中 1 秒内生效", LOG_OK);
+                }
+            }
+            return 0;
+        }
+        if (msg == WM_KEYUP || msg == WM_SYSKEYUP || msg == WM_CHAR || msg == WM_SYSCHAR) return 0;
+    }
+
     if (ImGui_ImplWin32_WndProcHandler(h, msg, w, l)) return 1;
 
     switch (msg) {
@@ -983,7 +1142,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
     wc.lpszClassName = kWindowClass;
     RegisterClassExW(&wc);
 
-    RECT wr{ 0, 0, S(560), S(420) };
+    RECT wr{ 0, 0, S(560), S(448) };
     AdjustWindowRectEx(&wr, WS_OVERLAPPEDWINDOW, FALSE, 0);
     HWND h = CreateWindowExW(0, kWindowClass, L"Ra3-Copilot · 修改器启动器",
                              WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -994,7 +1153,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
 
     InitDpi(h);
     if (g_scale > 1.0f) {
-        RECT sr{ 0, 0, S(560), S(420) };
+        RECT sr{ 0, 0, S(560), S(448) };
         AdjustWindowRectEx(&sr, WS_OVERLAPPEDWINDOW, FALSE, 0);
         SetWindowPos(h, nullptr, 0, 0, sr.right - sr.left, sr.bottom - sr.top,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
