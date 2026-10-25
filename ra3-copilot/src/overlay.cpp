@@ -2547,9 +2547,16 @@ void RunHotkey(int id) {
         break;
     }
     case HK_WNB: {
-        int r = ActSummonSquad();
+        const int r = ActSummonSquad();
         if (r > 0) Ding();
-        AddLog(r > 0 ? LOG_OK : LOG_WARN, "[召唤] 预设增援 %s", r > 0 ? "已生成 ×8" : "失败");
+        if (r > 0) {
+            uint32_t h = 0; int c = 0; const char* id = nullptr;
+            SummonPresetGet(&h, &c, &id);
+            const char* nm = UnitNameByHash(h);
+            AddLog(LOG_OK, "[召唤] 预设增援 ×%d（%s）", r, nm ? nm : (id && *id ? id : "?"));
+        } else {
+            AddLog(LOG_WARN, "[召唤] 预设增援 失败（%s）", SummonLastError());
+        }
         break;
     }
     }

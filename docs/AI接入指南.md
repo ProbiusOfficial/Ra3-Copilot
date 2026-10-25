@@ -79,7 +79,7 @@ curl http://127.0.0.1:17832/snapshot   # -> 战场态势 JSON
 | 端点 | 作用 |
 |---|---|
 | `POST /summon?hash=0x..&count=N[&owner=idx][&place=view\|selection\|cursor][&x=&y=&z=]` | **按哈希召唤**（`owner` 见 `/snapshot`）。落点：`place` 指定来源，或给 `x/y/z`；都不给则按「落点来源」设置。回执带实际落点 `at=x,y,z via=来源` |
-| `POST /copy` / `/wnb` / `/mcv` | 复制选中 / 预设增援×8 / 基地车 |
+| `POST /copy` / `/wnb` / `/mcv` | 复制选中 / 预设增援（数量可配） / 基地车 |
 | `POST /capture` / `/kill` / `/rank` | 收编 / 摧毁选中 / 满级 |
 | `POST /speed?mode=0..3` | 超速 / 慢速 / 定住 / 恢复 |
 | `POST /health?mode=0..2` | 无敌 / 残血 / 恢复 |

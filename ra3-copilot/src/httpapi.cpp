@@ -748,6 +748,17 @@ void Handle(SOCKET c, char* req) {
         HttpSend(c, r, (int)strlen(r));
         return;
     }
+    // 预设增援（J）的当前配置：只读文件，不碰游戏对象
+    if (strcmp(path, "/preset") == 0) {
+        uint32_t h = 0; int cnt = 0; const char* id = nullptr;
+        SummonPresetGet(&h, &cnt, &id);
+        const char* nm = UnitNameByHash(h);
+        const int len = _snprintf_s(out, sizeof(out), _TRUNCATE,
+                                    "preset hash=0x%08X count=%d id=%s cn=%s\n",
+                                    h, cnt, (id && *id) ? id : "?", nm ? nm : "?");
+        HttpSend(c, out, len > 0 ? len : 0);
+        return;
+    }
     if (strcmp(path, "/log") == 0) {
         int n = GetParamInt(query, "n", 40);
         int len = OverlayLogDump(out, sizeof(out), n);
@@ -782,7 +793,7 @@ void Handle(SOCKET c, char* req) {
             "GET  /selected_pos             当前选中单位的世界坐标\n"
             "GET  /spot                     按「落点来源」设置自动挑一个可用落点（带 water 标记）\n"
             "== 变更（投递到渲染线程=游戏主线程）==\n"
-            "POST /copy | /wnb | /mcv       复制选中 / 预设增援×8 / 基地车\n"
+            "POST /copy | /wnb | /mcv       复制选中 / 预设增援（数量见设置）/ 基地车\n"
             "POST /capture | /kill | /rank  收编 / 摧毁选中 / 满级\n"
             "POST /speed?mode=0..3          超速/慢速/定住/恢复（或 value=0..1000 按值设置速度）\n"
             "POST /health?mode=0..2         无敌/残血/恢复\n"

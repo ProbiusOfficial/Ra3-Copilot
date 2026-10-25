@@ -99,7 +99,9 @@ void BurstPump();                  // 引爆队列推进（渲染线程每帧调
 
 bool SummonMCV();          // 召唤三阵营基地车各一辆
 int  ActCopySelected();    // 复制选中单位（按"当前对象哈希"创建 1 个）
-int  ActSummonSquad();     // 召唤预设单位 ×8（基于 CE 的 We Need Back）
+int  ActSummonSquad();     // 召唤预设单位（基于 CE 的 We Need Back）；单位与数量见 ra3copilot_preset.ini
+// 预设增援的当前配置（每次调用现读文件）：hash=对象类型哈希，count=数量，id=对象模板名
+void SummonPresetGet(uint32_t* hash, int* count, const char** id);
 
 // 供 tooltip / 诊断：模板库是否可用
 bool TemplateStoreReady();

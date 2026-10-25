@@ -50,7 +50,7 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/copy` | 复制选中单位到落点 |
-| POST | `/wnb` | We Need Back（预设单位 ×8） |
+| POST | `/wnb` | We Need Back（按预设召唤，单位与数量见 `ra3copilot_preset.ini`） |
 | POST | `/mcv` | 召唤三阵营基地车 |
 | POST | `/capture` | 收编（归属改成本地玩家） |
 | POST | `/kill` | 摧毁选中 |

@@ -22,6 +22,8 @@
 #include "battlefield.h"  // ScanLiveObjects（自动摆放的样本来源）
 #include <windows.h>
 #include <cstdio>
+#include <cstring>
+#include <cstdlib>
 #include <cmath>
 #include <cstring>
 #include <cstdarg>
@@ -2334,9 +2336,54 @@ int ActCopySelected() {
     return SummonByHash(hash, 1, 0, true, "copy") ? 1 : -1;
 }
 
-// 基于 CE「We Need Back」(J)：在鼠标处创建 8 个预设单位
+// ===== 预设增援（J 键）的配置 =====
+// 存 DLL 同目录的 ra3copilot_preset.ini，启动器写、这里读：
+//   hash=0x6586A5A0    对象类型哈希（决定召唤什么）
+//   count=8            数量 1..64
+//   name=JapanCommandoTech1   对象模板名，仅作显示/回执
+// 每次按键现读（J 不常按），改完设置不用重注入；文件缺失或值非法时保持默认。
+static uint32_t g_squadHash  = 0x6586A5A0u;
+static int      g_squadCount = 8;
+static char     g_squadId[64] = "JapanCommandoTech1";
+
+static void SquadLoadPreset() {
+    char path[MAX_PATH] = { 0 };
+    _snprintf_s(path, sizeof(path), _TRUNCATE, "%sra3copilot_preset.ini", DllDir());
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "r") != 0 || !f) return;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '#' || line[0] == ';' || line[0] == '\n' || line[0] == '\r') continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* v = eq + 1;
+        while (*v == ' ' || *v == '\t') ++v;
+        for (char* q = v; *q; ++q) if (*q == '\r' || *q == '\n') { *q = '\0'; break; }
+        if (_stricmp(line, "hash") == 0) {
+            const unsigned long h = strtoul(v, nullptr, 0);
+            if (h) g_squadHash = static_cast<uint32_t>(h);
+        } else if (_stricmp(line, "count") == 0) {
+            const int c = atoi(v);
+            if (c >= 1 && c <= 64) g_squadCount = c;
+        } else if (_stricmp(line, "name") == 0) {
+            if (*v && strlen(v) < sizeof(g_squadId)) strcpy_s(g_squadId, v);
+        }
+    }
+    fclose(f);
+}
+
+void SummonPresetGet(uint32_t* hash, int* count, const char** id) {
+    SquadLoadPreset();
+    if (hash)  *hash = g_squadHash;
+    if (count) *count = g_squadCount;
+    if (id)    *id = g_squadId;
+}
+
+// 基于 CE「We Need Back」(J)：在鼠标处创建预设单位 × N（单位与数量见 preset 文件）
 int ActSummonSquad() {
-    return SummonByHash(0x6586A5A0u, 8, 0, true, "squad") ? 8 : -1;
+    SquadLoadPreset();
+    return SummonByHash(g_squadHash, g_squadCount, 0, true, "squad") ? g_squadCount : -1;
 }
 
 // ===================== 调试：选中单位详情 =====================

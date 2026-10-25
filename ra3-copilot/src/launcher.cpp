@@ -18,6 +18,9 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cctype>
 #include <algorithm>
 #include "injectcore.h"
 #include "resource.h"
@@ -25,6 +28,7 @@
 #include "backends/imgui_impl_win32.h"
 #include "backends/imgui_impl_dx9.h"
 #include "ui_theme.h"
+#include "units_corona.h"     // 预设增援的单位清单（与局内召唤面板同一张表）
 
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "comdlg32.lib")
@@ -75,6 +79,7 @@ std::wstring g_dllPath;
 std::wstring g_launcherPath;
 std::wstring g_configPath;
 std::wstring g_keysPath;
+std::wstring g_presetPath;
 
 // 呼出菜单的键（与局内修改器共用 ra3copilot_keys.ini 的 toggle= 行）。
 // 75 配列等没有 INSERT 键的键盘靠这里改 —— 局内面板打不开时，这是唯一入口。
@@ -414,6 +419,81 @@ bool ReadKeysLines(std::vector<std::string>* out) {
     return true;
 }
 
+// ===== 预设增援（游戏内按 J）=====
+// 与修改器共用 ra3copilot_preset.ini（DLL 同目录），格式见 actions.cpp 的 SquadLoadPreset：
+//   hash=<对象类型哈希>   count=<1..64>   name=<对象模板名>
+uint32_t    g_squadHash  = 0x6586A5A0u;
+int         g_squadCount = 8;
+std::string g_squadId    = "JapanCommandoTech1";
+
+const ra3::SupportUnit* FindUnitByHash(uint32_t hash) {
+    for (int i = 0; i < ra3::kSupportUnitCount; ++i)
+        if (ra3::kSupportUnits[i].hash == hash) return &ra3::kSupportUnits[i];
+    for (int i = 0; i < ra3::kCrateCount; ++i)
+        if (ra3::kCrates[i].hash == hash) return &ra3::kCrates[i];
+    return nullptr;
+}
+
+void LoadPreset() {
+    g_squadHash = 0x6586A5A0u;
+    g_squadCount = 8;
+    g_squadId = "JapanCommandoTech1";
+    if (g_presetPath.empty()) return;
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, g_presetPath.c_str(), L"r") != 0 || !f) return;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '#' || line[0] == ';') continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* v = eq + 1;
+        while (*v == ' ' || *v == '\t') ++v;
+        for (char* q = v; *q; ++q) if (*q == '\r' || *q == '\n') { *q = '\0'; break; }
+        if (_stricmp(line, "hash") == 0) {
+            const unsigned long h = strtoul(v, nullptr, 0);
+            if (h) g_squadHash = static_cast<uint32_t>(h);
+        } else if (_stricmp(line, "count") == 0) {
+            const int c = atoi(v);
+            if (c >= 1 && c <= 64) g_squadCount = c;
+        } else if (_stricmp(line, "name") == 0) {
+            if (*v) g_squadId = v;
+        }
+    }
+    fclose(f);
+}
+
+void SavePreset() {
+    if (g_presetPath.empty()) return;
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, g_presetPath.c_str(), L"w") != 0 || !f) {
+        AppendLog(L"预设增援写入失败（运行目录不可写）", LOG_ERR);
+        return;
+    }
+    fprintf(f, "# 预设增援：游戏内按 J 在鼠标位置召唤这些单位；改完存盘即生效，不用重注入\n");
+    fprintf(f, "hash=0x%08X\n", g_squadHash);
+    fprintf(f, "count=%d\n", g_squadCount);
+    fprintf(f, "name=%s\n", g_squadId.c_str());
+    fclose(f);
+}
+
+// 单位显示名：优先中文名，表里没有就用模板名
+std::wstring UnitLabel(uint32_t hash, const std::string& id) {
+    const ra3::SupportUnit* u = FindUnitByHash(hash);
+    return FromUtf8(u ? std::string(u->name) : id);
+}
+
+// 搜索命中：中文名 / 模板名 / 拼音都能搜，忽略大小写
+bool UnitHit(const ra3::SupportUnit& u, const char* q) {
+    if (!q[0]) return true;
+    std::string hay = std::string(u.name) + " " + u.id + " " + u.py;
+    std::string needle(q);
+    auto lower = [](unsigned char c) { return static_cast<char>(tolower(c)); };
+    std::transform(hay.begin(), hay.end(), hay.begin(), lower);
+    std::transform(needle.begin(), needle.end(), needle.begin(), lower);
+    return hay.find(needle) != std::string::npos;
+}
+
 void LoadKeyTable() {
     g_toggleVk = VK_INSERT;
     g_toggleCtrl = false;
@@ -523,6 +603,7 @@ bool EnsureRuntime() {
         g_configPath = Join(g_runtimeDir, L"launcher.ini");
     }
     g_keysPath = Join(g_runtimeDir, L"ra3copilot_keys.ini");
+    g_presetPath = Join(g_runtimeDir, L"ra3copilot_preset.ini");
     EnsureDir(g_runtimeDir);
     EnsureDir(Join(g_runtimeDir, L"mcp"));
     if (!DirExists(g_runtimeDir)) return false;
@@ -532,6 +613,8 @@ bool EnsureRuntime() {
     const std::wstring newKeys = Join(g_runtimeDir, L"ra3copilot_keys.ini");
     if (FileExists(oldKeys) && !FileExists(newKeys)) CopyFileW(oldKeys.c_str(), newKeys.c_str(), TRUE);
     LoadKeyTable();
+    LoadPreset();
+    if (!FileExists(g_presetPath)) SavePreset();   // 第一次运行落一份默认值，方便对着改
 
     std::wstring err;
     if (!WriteResourceIfChanged(IDR_PAYLOAD_DLL, g_dllPath, err) && !FileExists(g_dllPath)) {
@@ -1001,17 +1084,60 @@ void TextOnRow(const char* text, const ImVec4& col) {
     ImGui::PopStyleColor();
 }
 
-// 设置页：运行目录 + 快捷键（呼出键 / 功能键 / 静默）
-void DrawSettingsPage() {
-    const float s = g_scale;
-    if (ImGui::Button("< 返回", ImVec2(84 * s, 0))) {
-        g_page = 0;
-        g_captureTarget = 0;                 // 离开这一页就别留着捕获
-    }
-    ImGui::SameLine(0, 10 * s);
-    ImGui::TextDisabled("设置");
+// ===== 设置页 =====
+// 两页签：常规（运行目录 / 预设增援）、快捷键（呼出键 / 静默 / 全部键位）
+bool g_pickOpen = false;              // 下一帧打开单位选择弹窗
+char g_pickQuery[128] = { 0 };        // 选择弹窗的搜索词
 
-    ImGui::Separator();
+void DrawUnitPicker() {
+    const float s = g_scale;
+    if (g_pickOpen) {
+        ImGui::OpenPopup("##pickunit");
+        g_pickOpen = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(560 * s, 470 * s), ImGuiCond_Always);
+    if (!ImGui::BeginPopupModal("##pickunit", nullptr, ImGuiWindowFlags_NoSavedSettings)) return;
+
+    ImGui::TextColored(kAccent, "选择预设增援单位");
+    ImGui::TextDisabled("中文名、模板名、拼音都能搜（例如 jdc = 基地车）；点一行即选中");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##q", "搜索…", g_pickQuery, sizeof(g_pickQuery));
+    ImGui::Spacing();
+
+    const float footer = ImGui::GetFrameHeightWithSpacing() + 6 * s;
+    int shown = 0;
+    ImGui::BeginChild("##unitlist", ImVec2(0, -footer), true);
+    auto row = [&](const ra3::SupportUnit& u) {
+        if (!UnitHit(u, g_pickQuery)) return;
+        ++shown;
+        ImGui::PushID(static_cast<int>(u.hash));
+        if (ImGui::Selectable(u.name, u.hash == g_squadHash, 0, ImVec2(200 * s, 0))) {
+            g_squadHash = u.hash;
+            g_squadId = u.id;
+            SavePreset();
+            AppendLog(L"预设增援 → " + FromUtf8(std::string(u.name)) + L"（" +
+                      FromUtf8(std::string(u.id)) + L"）×" + std::to_wstring(g_squadCount), LOG_OK);
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\n哈希 0x%08X · %s · %s", u.id, u.hash, u.type, u.faction);
+        ImGui::SameLine(0, 10 * s);
+        ImGui::TextDisabled("%s · %s", u.id, u.type);
+        ImGui::PopID();
+    };
+    for (int i = 0; i < ra3::kSupportUnitCount; ++i) row(ra3::kSupportUnits[i]);
+    for (int i = 0; i < ra3::kCrateCount; ++i) row(ra3::kCrates[i]);
+    ImGui::EndChild();
+
+    ImGui::TextDisabled("共 %d 个匹配", shown);
+    ImGui::SameLine(0, 12 * s);
+    if (ImGui::Button("取消", ImVec2(80 * s, 0))) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// 常规页：运行目录 + 预设增援
+void DrawGeneralTab() {
+    const float s = g_scale;
 
     ImGui::TextColored(kAccent, "运行目录");
     ImGui::SameLine(0, 10 * s);
@@ -1024,8 +1150,51 @@ void DrawSettingsPage() {
         ImGui::SetTooltip("把 MCP 客户端配置复制到剪贴板\n需要本机有 Python 3");
 
     ImGui::Separator();
+    ImGui::TextColored(kAccent, "预设增援");
+    ImGui::SameLine(0, 10 * s);
+    TextOnRow("游戏内按 J，在鼠标位置召唤下面这个单位", kDim);
+    ImGui::Spacing();
+
+    const ra3::SupportUnit* u = FindUnitByHash(g_squadHash);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("单位");
+    ImGui::SameLine(0, 16 * s);
+    const std::wstring label = UnitLabel(g_squadHash, g_squadId) + L"  ...";
+    if (ImGui::Button(ToUtf8(label).c_str(), ImVec2(190 * s, 0))) {
+        g_pickOpen = true;
+        g_pickQuery[0] = 0;
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("点击选择要召唤的单位");
+    ImGui::Indent(56 * s);
+    if (u) ImGui::TextDisabled("%s · %s · %s · 0x%08X", u->id, u->faction, u->type, u->hash);
+    else   ImGui::TextDisabled("%s · 0x%08X（不在单位表里）", g_squadId.c_str(), g_squadHash);
+    ImGui::Unindent(56 * s);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("数量");
+    ImGui::SameLine(0, 16 * s);
+    int n = g_squadCount;
+    ImGui::SetNextItemWidth(120 * s);
+    if (ImGui::InputInt("##count", &n, 1, 8)) {
+        if (n < 1) n = 1;
+        if (n > 64) n = 64;
+        if (n != g_squadCount) {
+            g_squadCount = n;
+            SavePreset();
+        }
+    }
+    ImGui::SameLine(0, 12 * s);
+    ImGui::TextDisabled("1 – 64；召唤出来归你自己");
+}
+
+// 快捷键页：呼出键 / 静默 / 全部键位（表格两列）
+void DrawKeysTab() {
+    const float s = g_scale;
+
     ImGui::TextColored(kAccent, "快捷键");
-    ImGui::TextDisabled("点键名改键（Esc 取消）；改动立即存盘，游戏中 1 秒内生效");
+    ImGui::SameLine(0, 10 * s);
+    TextOnRow("点键名改键（Esc 取消）；改动立即存盘，游戏中 1 秒内生效", kDim);
     ImGui::Spacing();
 
     // 呼出键：不受静默影响，单独一行放在列表上方
@@ -1106,6 +1275,30 @@ void DrawSettingsPage() {
     }
     ImGui::EndChild();
     ImGui::PopStyleVar();
+}
+
+void DrawSettingsPage() {
+    const float s = g_scale;
+    if (ImGui::Button("< 返回", ImVec2(84 * s, 0))) {
+        g_page = 0;
+        g_captureTarget = 0;                 // 离开这一页就别留着捕获
+    }
+    ImGui::SameLine(0, 10 * s);
+    ImGui::TextDisabled("设置");
+    ImGui::Separator();
+
+    if (ImGui::BeginTabBar("##settab")) {
+        if (ImGui::BeginTabItem("常规")) {
+            DrawGeneralTab();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("快捷键")) {
+            DrawKeysTab();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+    DrawUnitPicker();
 }
 
 void BuildUi() {
