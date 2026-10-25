@@ -362,7 +362,7 @@ struct KeyRow {
 };
 
 std::vector<KeyRow> g_keyRows;
-bool g_hkEnabled = true;        // 功能热键总开关（界面里叫「静默」）
+bool g_hkEnabled = true;        // 功能热键总开关；界面上的「静默」是它的反面，默认不勾
 
 // ini 缺失或还是老格式（没有说明列）时的出厂绑定。
 // 取值与 overlay.cpp 的 kHKDefault 同源，只用于显示与冲突提示。
@@ -1040,11 +1040,11 @@ void DrawSettingsPage() {
     ImGui::SameLine(0, 12 * s);
     TextOnRow("不受静默开关影响", kDim);
 
-    bool en = g_hkEnabled;
-    if (ImGui::Checkbox("静默功能快捷键", &en)) {
-        g_hkEnabled = en;
+    bool silent = !g_hkEnabled;              // 默认不勾选 = 功能键可用
+    if (ImGui::Checkbox("静默功能快捷键", &silent)) {
+        g_hkEnabled = !silent;
         SaveKeyTable();
-        AppendLog(en ? L"功能快捷键已启用" : L"功能快捷键已静默：只保留呼出菜单", LOG_OK);
+        AppendLog(g_hkEnabled ? L"功能快捷键已启用" : L"功能快捷键已静默：只保留呼出菜单", LOG_OK);
     }
     ImGui::SameLine(0, 10 * s);
     TextOnRow("静默后按功能键不触发任何动作", kDim);
