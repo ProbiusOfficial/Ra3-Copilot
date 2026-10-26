@@ -31,6 +31,7 @@
 | GET | `/peek?addr=0x..&type=u32` | 读单值，`type` = `u32`(默认) / `f32` / `u8` / `u16` / `ptr`（ptr 会多解一层） |
 | GET | `/resolve?hash=0x..` | 对象类型哈希 → 模板指针 |
 | GET | `/help` | 全部端点列表 |
+| GET | `/ui[?on=1\|0]` | 面板显隐：不带参数读状态（`visible` / `toggle` 呼出键名 / `blockInput`）；`on=1` 显示、`on=0` 隐藏。热重载后 `visible` 回到默认隐藏，键盘上又没有呼出键时用它叫回面板 |
 
 ### 落点查询
 
