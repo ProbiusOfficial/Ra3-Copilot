@@ -39,7 +39,8 @@ jobs:
           $files = @(
             'ra3-copilot/build_out/Ra3Copilot.exe',
             'ra3-copilot/build_out/ra3copilot.dll',
-            'ra3-copilot/injector.exe'
+            'ra3-copilot/injector.exe',
+            'ra3-copilot/ra3diag.exe'
           )
           $bad = $false
           foreach ($f in $files) {
@@ -76,12 +77,14 @@ jobs:
           Copy-Item ra3-copilot/build_out/Ra3Copilot.exe stage/
           Copy-Item ra3-copilot/build_out/ra3copilot.dll stage/
           Copy-Item ra3-copilot/injector.exe stage/
+          Copy-Item ra3-copilot/ra3diag.exe stage/
           @(
             'Ra3-Copilot —— 红色警戒 3 日冕 Mod 作战辅助系统',
             '',
             'Ra3Copilot.exe   双击运行，自动识别游戏进程；面板内「注入修改器」',
             'ra3copilot.dll   注入模块（热重载 / 开发用）',
             'injector.exe     命令行注入器（开发用）',
+            'ra3diag.exe      排障诊断器：卡住时双击运行，把同目录生成的 txt 发回',
             '',
             '要求：ra3_1.12.game v1.12.3444.25830（32 位）。hook 点硬编码于该版本，',
             '      注入前做 AOB 字节级校验，不符拒绝挂载。',

@@ -13,8 +13,8 @@ IDR_PAYLOAD_CATALOG RCDATA "..\\mcp\\unit_catalog.json"
 // 资源 ID 必须写数字 1：VS_VERSION_INFO 是 winver.h 里的宏，本文件没引入它，
 // 写成标识符会被当成字符串资源名，GetFileVersionInfo 按 ID 1 查不到 → 文件属性里没有版本
 1 VERSIONINFO
- FILEVERSION 1,3,0,0
- PRODUCTVERSION 1,3,0,0
+ FILEVERSION 1,3,1,0
+ PRODUCTVERSION 1,3,1,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -27,12 +27,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ProbiusOfficial"
             VALUE "FileDescription", "Ra3-Copilot Launcher"
-            VALUE "FileVersion", "1.3.0.0"
+            VALUE "FileVersion", "1.3.1.0"
             VALUE "InternalName", "Ra3Copilot"
             VALUE "LegalCopyright", "Single-player study only"
             VALUE "OriginalFilename", "Ra3Copilot.exe"
             VALUE "ProductName", "Ra3-Copilot"
-            VALUE "ProductVersion", "1.3.0.0"
+            VALUE "ProductVersion", "1.3.1.0"
         END
     END
     BLOCK "VarFileInfo"
