@@ -63,7 +63,8 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-产物：`Ra3Copilot-<tag>-win-x86.zip`（启动器 + DLL + 注入器 + 说明）、单文件 `Ra3Copilot.exe`、`SHA256SUMS.txt`。
+产物（资产名都带版本号）：`Ra3Copilot-<tag>-win-x86.zip`（启动器 + DLL + 注入器 + 诊断器 + 说明）、
+单文件 `Ra3Copilot-<tag>-win-x86.exe`、`SHA256SUMS.txt`（覆盖上面两个）。
 
 - 版本号取自 `ra3-copilot/res/launcher.rc` 的 `FILEVERSION`；与 tag 不符时 CI 只告警，exe 属性里的版本会对不上
 - `workflow_dispatch` 手动触发只构建、不发布

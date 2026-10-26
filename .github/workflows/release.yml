@@ -94,9 +94,13 @@ jobs:
           ) -join "`r`n" | Set-Content -Path stage/RELEASE.txt -Encoding UTF8
           $zip = "Ra3Copilot-${{ github.ref_name }}-win-x86.zip"
           Compress-Archive -Path stage/* -DestinationPath $zip -Force
-          Get-FileHash $zip -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  $zip" } |
-            Set-Content -Path SHA256SUMS.txt -Encoding ascii
+          # 单文件对外发布件也带版本号：下载下来能一眼分清是哪个版本
+          $exe = "Ra3Copilot-${{ github.ref_name }}-win-x86.exe"
+          Copy-Item -Path stage/Ra3Copilot.exe -Destination $exe -Force
+          @($zip, $exe) | ForEach-Object {
+            Get-FileHash $_ -Algorithm SHA256 |
+              ForEach-Object { "$($_.Hash.ToLower())  $_" }
+          } | Set-Content -Path SHA256SUMS.txt -Encoding ascii
           Get-Content SHA256SUMS.txt
 
       # 更新说明取 CHANGELOG.md 里对应 tag 的那一节，避免每次发版都手改 yml。
@@ -129,7 +133,7 @@ jobs:
             '',
             '**适配基线**：`ra3_1.12.game` v1.12.3444.25830（32 位，日冕 Mod）。hook 点硬编码于该版本，注入前执行 AOB 字节级校验，不符拒绝挂载。',
             '',
-            '**使用**：进入对局 → 双击 `Ra3Copilot.exe` → 「注入」→ 游戏内按呼出键（默认 `INSERT`）呼出面板。功能按资源 / 战斗 / 建造 / 单位 / 召唤 / 协议 / 战场感知分组。呼出键、全部功能热键、J 键预设增援的单位与数量，都在启动器「设置」里改，改完 1 秒内生效、不用重注入。注入即常驻监听 `127.0.0.1:17832`。',
+            '**使用**：进入对局 → 双击 `Ra3Copilot.exe`（单文件版文件名带版本号，内容相同）→ 「注入」→ 游戏内按呼出键（默认 `INSERT`）呼出面板。功能按资源 / 战斗 / 建造 / 单位 / 召唤 / 协议 / 战场感知分组。呼出键、全部功能热键、J 键预设增援的单位与数量，都在启动器「设置」里改，改完 1 秒内生效、不用重注入。注入即常驻监听 `127.0.0.1:17832`。',
             '',
             '**CI 只验证可构建**：字节级兼容性以本地 `tools/precheck_aob.py` 对真实 exe 的预检为准（当前基线 30/30 通过）。',
             '',
@@ -144,12 +148,35 @@ jobs:
           name: Ra3-Copilot ${{ github.ref_name }}
           files: |
             Ra3Copilot-${{ github.ref_name }}-win-x86.zip
-            ra3-copilot/build_out/Ra3Copilot.exe
+            Ra3Copilot-${{ github.ref_name }}-win-x86.exe
             SHA256SUMS.txt
           body_path: RELEASE_NOTES.md
           generate_release_notes: true
           # 同一个 tag 重新推送时覆盖已有 Release（产物与说明一起替换）
           allowUpdates: true
+
+      # 重发同名 tag 时，旧命名的资产不会被 action 覆盖，会一直挂在 Release 上。
+      # 按本次命名规则保留，其余删掉，免得同一版挂着两份 exe。
+      - name: Prune stale assets
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag  = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $keep = @(
+            "Ra3Copilot-$tag-win-x86.zip",
+            "Ra3Copilot-$tag-win-x86.exe",
+            "SHA256SUMS.txt"
+          )
+          $rel = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          foreach ($a in $rel.assets) {
+            if ($keep -notcontains $a.name) {
+              Write-Host "删除旧资产: $($a.name)"
+              gh api -X DELETE "repos/$repo/releases/assets/$($a.id)"
+            }
+          }
 
       - name: Upload build log on failure
         if: failure()
