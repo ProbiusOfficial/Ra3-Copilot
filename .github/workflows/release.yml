@@ -97,10 +97,10 @@ jobs:
           # 单文件对外发布件也带版本号：下载下来能一眼分清是哪个版本
           $exe = "Ra3Copilot-${{ github.ref_name }}-win-x86.exe"
           Copy-Item -Path stage/Ra3Copilot.exe -Destination $exe -Force
-          @($zip, $exe) | ForEach-Object {
-            Get-FileHash $_ -Algorithm SHA256 |
-              ForEach-Object { "$($_.Hash.ToLower())  $_" }
-          } | Set-Content -Path SHA256SUMS.txt -Encoding ascii
+          $sums = foreach ($f in @($zip, $exe)) {
+            "{0}  {1}" -f (Get-FileHash $f -Algorithm SHA256).Hash.ToLower(), $f
+          }
+          $sums | Set-Content -Path SHA256SUMS.txt -Encoding ascii
           Get-Content SHA256SUMS.txt
 
       # 更新说明取 CHANGELOG.md 里对应 tag 的那一节，避免每次发版都手改 yml。
