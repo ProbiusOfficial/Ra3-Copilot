@@ -59,7 +59,7 @@ if errorlevel 1 (
 
 echo [3/5] Building ra3copilot.dll
 cl /nologo /O2 /MT /EHsc /W3 /utf-8 /LD /Fe:build_out\ra3copilot.dll ^
-    src\dllmain.cpp src\overlay.cpp src\features.cpp src\actions.cpp src\protocol.cpp src\battlefield.cpp src\aicmd.cpp src\symres.cpp src\hook.cpp src\httpapi.cpp src\scriptobj.cpp stubs.obj ^
+    src\dllmain.cpp src\overlay.cpp src\features.cpp src\actions.cpp src\protocol.cpp src\battlefield.cpp src\aicmd.cpp src\symres.cpp src\hook.cpp src\httpapi.cpp src\scriptobj.cpp src\scripttable.cpp src\big4.cpp src\refpack.cpp src\maptbl.cpp stubs.obj ^
     obj_mh\buffer.obj obj_mh\hook.obj obj_mh\trampoline.obj obj_mh\hde32.obj ^
     imgui\imgui.cpp imgui\imgui_draw.cpp imgui\imgui_tables.cpp imgui\imgui_widgets.cpp ^
     imgui\backends\imgui_impl_dx9.cpp imgui\backends\imgui_impl_win32.cpp ^
@@ -109,6 +109,24 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [maptest] Building maptest.exe (offline .map parser check)
+cl /nologo /O2 /MT /EHsc /W3 /utf-8 /Fe:maptest.exe ^
+    src\maptest.cpp src\big4.cpp src\refpack.cpp src\maptbl.cpp ^
+    /I src /link kernel32.lib user32.lib
+if errorlevel 1 (
+    echo [x] maptest build failed
+    exit /b 1
+)
+
+echo [diag] Building ra3diag.exe (standalone diagnostic)
+cl /nologo /O2 /MT /EHsc /W3 /utf-8 /Fe:ra3diag.exe ^
+    src\diag.cpp src\big4.cpp src\refpack.cpp src\maptbl.cpp ^
+    /I src /link shell32.lib user32.lib advapi32.lib ws2_32.lib
+if errorlevel 1 (
+    echo [x] diag build failed
+    exit /b 1
+)
+
 del /q *.obj >nul 2>&1
 if exist obj_mh rmdir /s /q obj_mh >nul 2>&1
 echo.
@@ -116,4 +134,5 @@ echo BUILD_OK
 echo   build_out\Ra3Copilot.exe  - single-file release for players
 echo   ra3copilot.dll            - injected module (dev)
 echo   injector.exe              - command-line injector (dev)
+echo   ra3diag.exe               - standalone diagnostic bundle generator
 exit /b 0

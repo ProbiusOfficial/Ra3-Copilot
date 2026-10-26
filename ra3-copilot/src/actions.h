@@ -202,10 +202,13 @@ int ActScriptFlag(const char* name, int on);     // 便捷版（两段一起跑�
 // 批量 Resolve：一次内存扫描同时定位多个 flag（逐个调会各扫一遍全内存）。
 // nodes 与 names 对齐，0 = 没找到；返回命中的个数。同样只读，可放工作线程。
 int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes);
+// 本局还没出现过的 flag：调引擎 get-or-create 建表项（RVA 0x18A8F0）。返回节点地址。
+// 必须在渲染线程调用。
+uintptr_t ScriptFlagEnsure(const char* name);
 const char* ScriptFlagLastError();
 
 // 按"值"写脚本节点（flag 与 timer 通用）：
-//   mode 0 = 直接写 value（timer 写 0xFFFFFFFF 表示已过期）
+//   mode 0 = 直接写 value（timer 写 0 表示已过期；0xFFFFFFFF 是"建过但没启动"）
 //   mode 1 = 置 bit0（flag 置真）
 //   mode 2 = 清 bit0（flag 置假）
 int ScriptNodeWrite(uintptr_t node, uint32_t value, int mode);

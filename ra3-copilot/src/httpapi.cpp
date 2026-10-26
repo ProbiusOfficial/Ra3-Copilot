@@ -15,7 +15,8 @@
 #include "protocol.h"
 #include "aicmd.h"
 #include "battle_catalog.h"
-#include "scriptobj.h"   // 战役目标表（自动识别关卡 + 一键完成目标）
+#include "scriptobj.h"
+#include "scripttable.h"   // 战役目标表（自动识别关卡 + 一键完成目标）
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -459,6 +460,47 @@ void ExecCmd(CmdSlot& c) {
                  (unsigned)(uint32_t)c.a2, ok ? "ok" : PostProcLastError());
         break;
     }
+    case 43: {  // pmod: 取玩家身上的模块（g_scriptArgs[0]=类名），用于定位任务目标模块
+        const uintptr_t player = LocalPlayerObj();
+        if (!player) { CmdReply("pmod: 本地玩家对象未抓到（进局后点一下资源再试）"); break; }
+        const uintptr_t base = (uintptr_t)GetModuleHandleA(nullptr);
+        uint32_t mgr = 0, key = 0, mod = 0;
+        if (!RdBytes(0x00D07338, &mgr, 4) || !mgr) { CmdReply("pmod: [0xD07338] 不可读"); break; }
+        __try {
+            // 0x98ACB0(this=[0xD07338], const char*) -> 名字 intern 后的 key
+            typedef uint32_t (__thiscall* Intern_t)(void*, const char*);
+            key = ((Intern_t)(base + 0x0098ACB0u))((void*)(uintptr_t)mgr, g_scriptArgs[0]);
+            // 0x6DD950(this, key) -> module*
+            typedef uint32_t (__thiscall* Find_t)(void*, uint32_t);
+            mod = ((Find_t)(base + 0x006DD950u))((void*)(uintptr_t)player, key);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            CmdReply("pmod: 调用抛异常（已拦截）key=%08X", key);
+            break;
+        }
+        if (!mod) {
+            CmdReply("pmod %s: player=%08X key=%08X 无此模块",
+                     g_scriptArgs[0], (unsigned)player, key);
+            break;
+        }
+        uint32_t w[8] = { 0 };
+        for (int i = 0; i < 8; ++i) RdBytes((uintptr_t)mod + 4u * i, &w[i], 4);
+        CmdReply("pmod %s: player=%08X key=%08X mod=%08X\n+00=%08X +04=%08X +08=%08X +0C=%08X"
+                 "\n+10=%08X +14=%08X +18=%08X +1C=%08X",
+                 g_scriptArgs[0], (unsigned)player, key, mod,
+                 w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+        break;
+    }
+    case 42: {  // flagmk: 给还没出现过的 flag 建表项（g_scriptArgs[0]=名字，a1=写值，-1=只建）
+        const uintptr_t node = ScriptFlagEnsure(g_scriptArgs[0]);
+        if (!node) {
+            CmdReply("flagmk %s : %s", g_scriptArgs[0], ScriptFlagLastError());
+            break;
+        }
+        const int wr = (c.a1 < 0) ? -1 : ScriptFlagWrite(node, c.a1 ? 1 : 0);
+        CmdReply("flagmk %s -> node=%08X write=%d %s", g_scriptArgs[0],
+                 (unsigned)node, wr, ScriptFlagLastError());
+        break;
+    }
     case 23: {  // 落点查询：a1=kind(0 视野中心 / 1 选中单位 / 2 光标 / 3 自动)
         char j[320] = { 0 };
         SpawnPointJson(j, sizeof(j), c.a1);
@@ -706,6 +748,47 @@ void HttpSend(SOCKET c, const char* body, int len) {
     if (len > 0) send(c, body, len, 0);
 }
 
+// ---- 脚本变量表：dump 与单点查询的辅助 ----
+// 表是 ScriptEngine 里的 std::map，遍历纯读内存，不碰游戏状态，可以在 HTTP 线程跑。
+struct TblDumpCtx {
+    char*  buf;
+    size_t cap;
+    size_t len;
+    int    n;
+};
+
+static bool TblDumpFn(const ScriptNodeInfo& nd, void* ctx) {
+    TblDumpCtx* d = (TblDumpCtx*)ctx;
+    if (d->len + 160 >= d->cap) return false;
+    const int w = _snprintf_s(d->buf + d->len, d->cap - d->len, _TRUNCATE,
+                              "#%08X scope=%08X hash=%08X raw=%08X bool=%d\n",
+                              (unsigned)nd.addr, nd.scope, nd.hash, nd.value,
+                              (nd.value & 0xFF) ? 1 : 0);
+    if (w > 0) d->len += (size_t)w;
+    ++d->n;
+    return true;
+}
+
+// 简易 URL 解码（只处理 %XX 与 '+'），够查 flag 名用
+static void UrlDecode(char* s) {
+    char* o = s;
+    for (const char* p = s; *p; ++p) {
+        if (*p == '+') { *o++ = ' '; continue; }
+        if (*p == '%' && p[1] && p[2]) {
+            auto hex = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            const int hi = hex(p[1]), lo = hex(p[2]);
+            if (hi >= 0 && lo >= 0) { *o++ = (char)(hi * 16 + lo); p += 2; continue; }
+        }
+        *o++ = *p;
+    }
+    *o = 0;
+}
+
 // ---- 请求处理 ----
 void Handle(SOCKET c, char* req) {
     // 取方法与路径
@@ -719,6 +802,90 @@ void Handle(SOCKET c, char* req) {
 
     if (strcmp(path, "/ping") == 0) {
         HttpSend(c, "pong", 4);
+        return;
+    }
+    // /ui            读面板状态（是否显示 / 呼出键 / 输入是否被拦）
+    // /ui?on=1|0     显示 / 隐藏面板（等价于按呼出键）
+    //
+    // 用途：热重载后 g_cfg.visible 回到默认（隐藏），键盘上又没有呼出键时，
+    // 靠它把面板叫回来，不必再退游戏。写的是本模块自己的配置，不碰引擎状态。
+    if (strcmp(path, "/ui") == 0) {
+        const char* on = strstr(query, "on=");
+        if (on) {
+            const int v = (on[3] == '1') ? 1 : 0;
+            if (v) g_cfg.visible = true;
+            else   g_cfg.visible = false;
+        }
+        char vkName[64] = { 0 };
+        OverlayToggleKeyName(vkName, (int)sizeof(vkName));
+        _snprintf_s(out, sizeof(out), _TRUNCATE,
+                    "visible=%d\ntoggle=%s\nblockInput=%d\n",
+                    g_cfg.visible ? 1 : 0, vkName,
+                    g_cfg.blockInput ? 1 : 0);
+        HttpSend(c, out, (int)strlen(out));
+        return;
+    }
+    // ---- 脚本变量表（ScriptEngine 的 flag / timer map）----
+    // 精确访问：表的位置、节点布局、键比较规则都由静态定位确定，不再靠"搜哈希猜节点"。
+    //   /scripttbl                        健康检查（engine 指针 / 两张表 root / 节点数 / 结构自洽）
+    //   /scripttbl?dump=1[&t=timer]       列全表（作用域 / 名字哈希 / 原始值 / 真值）
+    //   /scripttbl?name=<flag 名>          精确查一个（在不在表里、值、节点地址、作用域）
+    if (strcmp(path, "/scripttbl") == 0) {
+        static char st[24000];
+        size_t w = 0;
+        const char* qn = strstr(query, "name=");
+        const bool dump = strstr(query, "dump=1") != nullptr;
+        const bool wantTimer = strstr(query, "t=timer") != nullptr;
+
+        if (qn) {
+            char nm[192] = { 0 };
+            const char* s0 = qn + 5;
+            size_t i = 0;
+            for (; s0[i] && s0[i] != '&' && i < sizeof(nm) - 1; ++i) nm[i] = s0[i];
+            nm[i] = 0;
+            UrlDecode(nm);
+
+            const uint32_t hv = ObjNameHash(nm);
+            bool isFlag = false;
+            uintptr_t node = 0;
+            uint32_t scope = 0;
+            const bool found = ScriptTblFindByHash(hv, &isFlag, &node, &scope);
+            uint32_t val = 0;
+            if (found) {
+                __try { val = *(const uint32_t*)(node + 0x18); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { val = 0; }
+            }
+            w += _snprintf_s(st + w, sizeof(st) - w, _TRUNCATE,
+                             "name=%s\nhash=%08X\nfound=%d\ntable=%s\nnode=%08X\n"
+                             "scope=%08X\nraw=%08X\nbool=%d\n",
+                             nm, hv, found ? 1 : 0,
+                             found ? (isFlag ? "flag" : "timer") : "-",
+                             (unsigned)node, scope, val,
+                             (val & 0xFF) ? 1 : 0);
+        } else if (dump) {
+            TblDumpCtx d{ st, sizeof(st), 0, 0 };
+            w += _snprintf_s(st + w, sizeof(st) - w, _TRUNCATE, "table=%s\n",
+                             wantTimer ? "timer" : "flag");
+            ScriptTblEnum(!wantTimer, TblDumpFn, &d);
+            w = d.len > w ? d.len : w;
+            if (w + 64 < sizeof(st))
+                w += _snprintf_s(st + w, sizeof(st) - w, _TRUNCATE, "total=%d\n", d.n);
+        } else {
+            ScriptTblHealth hc;
+            ScriptTblCheck(&hc);
+            w += _snprintf_s(st + w, sizeof(st) - w, _TRUNCATE,
+                             "ready=%d\nengine=%08X\nflagRoot=%08X\nflagCount=%d\n"
+                             "timerRoot=%08X\ntimerCount=%d\nbadParent=%d\nunsorted=%d\nnScopes=%d\n"
+                             "flagOff=%05X\ntimerOff=%05X\nlocate=%d\n",
+                             hc.ready ? 1 : 0, hc.engine, hc.flagRoot, hc.flagCount,
+                             hc.timerRoot, hc.timerCount, hc.badParent, hc.unsorted,
+                             hc.nScopes, ScriptTblFlagOff(), ScriptTblTimerOff(),
+                             ScriptTblLocateHow());
+            for (int i = 0; i < hc.nScopes && w + 32 < sizeof(st); ++i)
+                w += _snprintf_s(st + w, sizeof(st) - w, _TRUNCATE,
+                                 "scope[%d]=%08X\n", i, hc.flags[i]);
+        }
+        HttpSend(c, st, (int)w);
         return;
     }
     // ---- 热重载：卸载自身（下一帧拆卸并自卸载；随后可重新编译 + 重新注入）----
@@ -769,6 +936,7 @@ void Handle(SOCKET c, char* req) {
         const char* h =
             "== 只读（HTTP 线程直接答）==\n"
             "GET  /ping\n"
+            "GET  /ui[?on=1|0]              面板显隐状态 / 显示或隐藏（等价按呼出键；热重载后用它叫回面板）\n"
             "GET  /state | /diag            状态+符号+相机+落点+选中单位结构\n"
             "GET  /log?n=40                 输出记录尾部\n"
             "GET  /read?addr=0x..&n=128     内存十六进制转储（RE 用）\n"
@@ -783,6 +951,10 @@ void Handle(SOCKET c, char* req) {
             "POST /objdone?i=&p=            完成第 i 个目标的第 p 条路径（省略 p = 选实体条件最少的那条）\n"
             "POST /flag?name=&on=1|0        按名字拨任意脚本 flag（键 = FNV-1(名字)，自动匹配作用域）\n"
             "GET  /objdbg                   目标表解析结果（排查用）\n"
+            "GET  /flagdbg[?name=][&all=1]  某个依赖的全部内存候选（树指针/作用域/值/区域类型）\n"
+            "GET  /scripttbl[?dump=1][&t=timer][&name=]  脚本变量表：健康检查 / 全表 dump / 单点精确查\n"
+            "POST /flagmk?name=[&on=1|0]   让引擎给本局还没有的 flag 建表项（on=-1 只建不写）\n"
+            "GET  /flageng?name=<名字>     用引擎自己的 GetFlag 读一次，与我们的表查找对照（判是不是读错）\n"
             "GET  /enemy                    仅敌方归属的明细\n"
             "GET  /units?q=&side=&cls=&limit=  单位目录检索（名字/模板名/哈希）\n"
             "GET  /ai/status                脑机接口状态 JSON\n"
@@ -1605,6 +1777,161 @@ void Handle(SOCKET c, char* req) {
         args[0] = GetParamInt(query, "on", 1);
         args[1] = (int)(intptr_t)ScriptFlagResolve(g_scriptArgs[0]);
         na = 2;
+    } else if (strcmp(path, "/pmod") == 0) {
+        // 取玩家身上的模块（?name=MissionObjectives）—— 任务目标模块的入口
+        char tmpm[96] = { 0 };
+        g_scriptArgs[0][0] = 0;
+        if (GetParam(query, "name", tmpm, sizeof(tmpm)))
+            URLDecode(tmpm, g_scriptArgs[0], (int)sizeof(g_scriptArgs[0]));
+        fn = 43;
+        na = 0;
+    } else if (strcmp(path, "/flageng") == 0) {
+        // 走引擎自己的 GetFlag（RVA 0x173B10）读一次，用来对照我们自己遍历表拿到的值。
+        // 两者不一致 = 我们的 map 查找/偏移有问题；一致 = 引擎里就是这个值。
+        char nm[160] = { 0 };
+        if (GetParam(query, "name", nm, sizeof(nm))) {
+            char dec[160];
+            URLDecode(nm, dec, (int)sizeof(dec));
+            const uint32_t eng = ScriptTblEngine();
+            if (!eng) {
+                HttpSend(c, "engine=0（未进对局）", 21);
+                return;
+            }
+            typedef uint32_t* (__thiscall* GetFlag_t)(void*, const char*);
+            const GetFlag_t fn = (GetFlag_t)(uintptr_t)((uintptr_t)GetModuleHandleA(nullptr) + 0x00173B10u);
+            uint32_t* pv = nullptr;
+            __try { pv = fn((void*)(uintptr_t)eng, dec); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { pv = nullptr; }
+            uintptr_t mine = 0;
+            bool isFlag = false;
+            ScriptTblFindByHash(ObjNameHash(dec), &isFlag, &mine, nullptr);
+            char b[320];
+            if (!pv) {
+                _snprintf_s(b, sizeof(b), _TRUNCATE,
+                            "name=%s\nengine 返回空（表里没有这条）\nmine=%s%08X",
+                            dec, mine ? "node=" : "无 ", (unsigned)mine);
+            } else {
+                uint32_t raw = 0;
+                __try { raw = *pv; } __except (EXCEPTION_EXECUTE_HANDLER) { raw = 0; }
+                _snprintf_s(b, sizeof(b), _TRUNCATE,
+                            "name=%s\nengine value@%08X raw=%08X low=%u\n"
+                            "mine node=%08X value@%08X\n一致=%s",
+                            dec, (unsigned)(uintptr_t)pv, raw, raw & 0xFFu,
+                            (unsigned)mine, (unsigned)(mine + 0x18),
+                            (pv == (uint32_t*)(mine + 0x18)) ? "是" : "否");
+            }
+            HttpSend(c, b, (int)strlen(b));
+            return;
+        }
+        HttpSend(c, "用法: /flageng?name=<flag 名>", 26);
+        return;
+    } else if (strcmp(path, "/flagmk") == 0) {
+        // 让引擎给"本局还没出现过的 flag"建表项（内部走 map 的 get-or-create），
+        // 然后默认写 1。这是"节点不存在"的根治办法：脚本没执行过 SET_FLAG 时，
+        // 表里压根没这条记录，只能由引擎自己插。name=<flag 名>[&on=1|0]，on=-1 只建不写。
+        char tmpmk[128] = { 0 };
+        g_scriptArgs[0][0] = 0;
+        if (GetParam(query, "name", tmpmk, sizeof(tmpmk)))
+            URLDecode(tmpmk, g_scriptArgs[0], (int)sizeof(g_scriptArgs[0]));
+        fn = 42;
+        args[0] = GetParamInt(query, "on", 1);
+        na = 1;
+    } else if (strcmp(path, "/flagdbg") == 0) {
+        // 诊断：把当前关卡每个依赖 hash 在内存里的**全部**候选列出来（树指针 / 作用域 / 值 / 上溯到的根）。
+        // 用来判定「节点不存在」「日志写成功但游戏没反应」到底是脚本没写过，还是节点识别挑错了对象。
+        // 真节点都挂在同一棵树上（根一致），假候选的根是散的。只读，可放 HTTP 线程。
+        // ?name=<flag 名> 只看一个；?map=N 指定关卡；?all=1 展开每个候选。
+        static char db[24576];
+        static ScriptNodeCand cands[512];
+        static int cnts[64];
+        const int nMaps = ObjTableMapCount();
+        int score0 = 0;
+        const int mAuto = ObjDetectMap(&score0);
+        const int mreq = GetParamInt(query, "map", -1);
+        const int m = (mreq >= 0 && mreq < nMaps) ? mreq : mAuto;
+        const bool showAll = GetParamInt(query, "all", 0) != 0;
+
+        static char oneName[128];
+        oneName[0] = 0;
+        char rawName[160] = { 0 };
+        if (GetParam(query, "name", rawName, sizeof(rawName) - 1))
+            URLDecode(rawName, oneName, (int)sizeof(oneName));
+
+        uint32_t hs[64];
+        char kinds[64];
+        const char* names[64];
+        int nd = 0;
+        if (oneName[0]) {
+            hs[0] = ObjNameHash(oneName); kinds[0] = 'F'; names[0] = oneName; nd = 1;
+        } else if (m >= 0) {
+            for (int i = 0; i < ObjTableMapObjCount(m) && nd < 64; ++i) {
+                const ObjItemInfo* it = ObjTableMapObj(m, i);
+                for (int k = 0; k < it->pathCount && nd < 64; ++k) {
+                    const ObjPathInfo* pi = ObjTablePath(it->firstPath + k);
+                    if (!pi) continue;
+                    for (int d = 0; d < pi->nDeps && nd < 64; ++d) {
+                        const uint32_t h = ObjNameHash(pi->deps[d].name);
+                        bool dup = false;
+                        for (int j = 0; j < nd; ++j) if (hs[j] == h) { dup = true; break; }
+                        if (dup) continue;
+                        hs[nd] = h;
+                        kinds[nd] = pi->deps[d].kind;
+                        names[nd] = pi->deps[d].name;
+                        ++nd;
+                    }
+                }
+            }
+        }
+        const int nCand = ScriptNodeCandScan(hs, nd, cnts, cands, 6, 512);
+
+        size_t w = 0;
+        w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE,
+                         "deps=%d | map=%s | cands=%d | 每 hash 最多列 6 个\n",
+                         nd, m >= 0 ? ObjTableMapName(m) : "(未识别)", nCand);
+        // 根分布：真节点共享同一个根；分散说明内存里有同名假节点。
+        int shownRoots = 0;
+        for (int i = 0; i < nCand && shownRoots < 8 && w + 96 < sizeof(db); ++i) {
+            bool seen = false;
+            for (int j = 0; j < i; ++j) if (cands[j].root == cands[i].root) { seen = true; break; }
+            if (seen) continue;
+            int c = 0;
+            for (int j = 0; j < nCand; ++j) if (cands[j].root == cands[i].root) ++c;
+            w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE,
+                             "  root=%08X x%d\n", (unsigned)cands[i].root, c);
+            ++shownRoots;
+        }
+        int ci = 0;
+        for (int i = 0; i < nd && w + 200 < sizeof(db); ++i) {
+            int take = (cnts[i] < 6) ? cnts[i] : 6;
+            if (ci + take > nCand) take = nCand - ci;
+            w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE,
+                             "H=%08X %c[%s] c=%d", hs[i], kinds[i], names[i], cnts[i]);
+            // 现行去重逻辑会挑哪个：优先 P 合法（在树里），否则取第一个
+            int pick = -1;
+            for (int k = 0; k < take; ++k) {
+                if (pick < 0) pick = ci + k;
+                if (cands[ci + k].P >= 0x01000000u) { pick = ci + k; break; }
+            }
+            if (pick >= 0)
+                w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE,
+                                 " pick=%08X val=%08X scope=%08X root=%08X d=%d",
+                                 (unsigned)cands[pick].node, cands[pick].value,
+                                 cands[pick].scope, (unsigned)cands[pick].root,
+                                 cands[pick].depth);
+            w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE, "\n");
+            if (showAll || cnts[i] != 1) {
+                for (int k = 0; k < take && w + 160 < sizeof(db); ++k) {
+                    const ScriptNodeCand& c = cands[ci + k];
+                    w += _snprintf_s(db + w, sizeof(db) - w, _TRUNCATE,
+                                     "    #%08X L=%08X P=%08X R=%08X scope=%08X val=%08X root=%08X d=%d\n",
+                                     (unsigned)c.node, c.L, c.P, c.R, c.scope, c.value,
+                                     (unsigned)c.root, c.depth);
+                }
+            }
+            ci += take;
+        }
+        HttpSend(c, db, (int)w);
+        return;
     } else if (strcmp(path, "/objdbg") == 0) {
         // 诊断：目标表解析后的内部索引（排查 map/obj 错位）
         static char ob[8192];
@@ -1631,6 +1958,8 @@ void Handle(SOCKET c, char* req) {
         // 战役目标清单：扫一次脚本节点表 → 自动识别当前关卡 → 列出目标/完成路径/依赖状态。
         // 依赖标记：F=flag(置1) N=取反flag(置0) T=timer(写过期)；ok=已满足 no=未满足 absent=节点不存在
         static char ob[24576];
+        // 先用当前关卡的 .map 现场生成目标表（覆盖内置表没收录的图）。失败就沿用原表。
+        ObjTableUseScript();
         const int nNode = ScriptNodeScan();
         int score = 0;
         const int mAuto = ObjDetectMap(&score);
@@ -1639,9 +1968,12 @@ void Handle(SOCKET c, char* req) {
         const int m = (mreq >= 0 && mreq < ObjTableMapCount()) ? mreq : mAuto;
         size_t w = 0;
         w += _snprintf_s(ob + w, sizeof(ob) - w, _TRUNCATE,
-                         "nodes=%d | map=%s | score=%d%s\n",
+                         "nodes=%d | map=%s | score=%d%s\n"
+                         "table=%s | %s\n",
                          nNode, m >= 0 ? ObjTableMapName(m) : "(未识别)", score,
-                         (mreq >= 0 && mreq != mAuto) ? " [手动指定]" : "");
+                         (mreq >= 0 && mreq != mAuto) ? " [手动指定]" : "",
+                         ObjTableSourceKind() ? "script" : "builtin",
+                         ObjTableSourceNote());
         if (m >= 0) {
             const int nobj = ObjTableMapObjCount(m);
             for (int i = 0; i < nobj && w + 1200 < sizeof(ob); ++i) {
@@ -1724,7 +2056,7 @@ void Handle(SOCKET c, char* req) {
                 continue;
             }
             const int mode = (kind == 'N') ? 2 : ((kind == 'T') ? 0 : 1);
-            const int val = (kind == 'T') ? (int)0xFFFFFFFF : 0;
+            const int val = 0;   // flag 置 0 / timer 写 0 = 已过期
             int a3[3];
             a3[0] = (int)(intptr_t)node;
             a3[1] = val;

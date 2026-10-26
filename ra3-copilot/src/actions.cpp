@@ -18,6 +18,8 @@
 #include "overlay.h"
 #include "symres.h"
 #include "units_corona.h"
+#include "scriptobj.h"
+#include "scripttable.h"   // 节点校验要问"这个哈希是不是 flag 名"
 #include "aicmd.h"        // OrderAttack / OrderMoveTo / OrderIdle（/order 指挥单位）
 #include "battlefield.h"  // ScanLiveObjects（自动摆放的样本来源）
 #include <windows.h>
@@ -1649,27 +1651,42 @@ static uint32_t Fnv1Name(const char* s) {
     return h;
 }
 
-// 节点头 +0x00 L / +0x04 P / +0x08 R —— 都是 0 或用户态堆地址（>= 0x01000000）。
-// 低于 0x01000000 的是可执行模块（ImageBase 0x400000），不可能是树节点。
+// 节点头 +0x00 L / +0x04 P / +0x08 R —— 都是 0 或用户态堆地址。低于 0x00010000 的是小整数。
 // 返回值：0 = 不像；1 = 弱（P==0，SAGE 自有树的根 / 游离节点）；2 = 强（P 合法，在树中）。
+//
+// 与 scriptobj.cpp 的 NodeGrade 同一套判据：只认 MEM_PRIVATE 区域（模块映像里命中的一定
+// 是别的东西 —— 包括本模块自己存着全部依赖哈希的数组），且 scope/value 都不能等于某个
+// flag 名哈希（那是 {scope,hash,value} 数组错位读出来的样子）。
 static int LooksLikeFlagNode(uintptr_t node, uint32_t hash) {
     if (node < 0x01000000u) return 0;
+    if (ScriptIsThreadStack(node)) return 0;   // 栈上的"哈希副本"不是节点
     __try {
         const uint32_t* w = (const uint32_t*)node;
         if (w[5] != hash) return 0;
         const uint32_t L = w[0], P = w[1], R = w[2];
-        const bool okL = (L == 0) || (L >= 0x01000000u && L < 0x7F000000u);
-        const bool okR = (R == 0) || (R >= 0x01000000u && R < 0x7F000000u);
-        if (!okL || !okR) return 0;
-        const bool okP = (P >= 0x01000000u && P < 0x7F000000u);
+        if (L && (L < 0x00010000u || L >= 0xFFF00000u)) return 0;
+        if (R && (R < 0x00010000u || R >= 0xFFF00000u)) return 0;
+        if (P && (P < 0x00010000u || P >= 0xFFF00000u)) return 0;
+        if (ObjIsDepHash(w[4]) || ObjIsDepHash(w[6])) return 0;
+        if (w[4] == 0) return 0;          // 作用域恒非 0，0 是错位读
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((LPCVOID)node, &mbi, sizeof(mbi)) != sizeof(mbi)) return 0;
+        if (mbi.Type != MEM_PRIVATE) return 0;
+        // 值指向节点自己这块分配 = 链表自引用字段，不是 flag 值
+        const uintptr_t rb = (uintptr_t)mbi.BaseAddress;
+        if ((uintptr_t)w[6] >= rb && (uintptr_t)w[6] < rb + (uintptr_t)mbi.RegionSize) return 0;
+        const uintptr_t vv = (uintptr_t)w[6];
+        const uintptr_t dd = (vv > node) ? (vv - node) : (node - vv);
+        if (vv && dd < 0x10000u) return 0;   // 紧邻节点 = 名字表自引用，不是值
         // P 不合法（含 P==0）：SAGE 自有树的根或游离节点，仍然接受（弱）
-        return 1;
+        return (P >= 0x01000000u) ? 2 : 1;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
     }
 }
 
 static uintptr_t FindFlagNode(uint32_t hash) {
+    ScriptCollectStacks();
     // 按 DWORD 线性扫描；hash 是随机值，误命中极少，命中后再做结构校验。
     // 分 8MB 一块，避免单次 __try 覆盖过大的块（也便于跨过不可读页）。
     // 优先返回"在树里"（P 合法）的候选；只有在扫完全程都没更强候选时才用弱候选。
@@ -1720,16 +1737,15 @@ int ScriptFlagWrite(uintptr_t node, int on) {
     g_lastErr[0] = 0;
     if (!node) { SetErr("节点地址为空"); return -1; }
     uint32_t old = 0;
-    __try {
-        uint32_t* val = (uint32_t*)(node + 0x18);
-        old = *val;
-        const uint32_t nv = on ? (old | 1u) : (old & ~1u);
-        if (nv != old) *val = nv;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    // 引擎自己按 bool 写这个字段（0x489C10 `cmp byte ptr [eax],0`），高位是分配器残留。
+    // 所以只动最低字节，高位原样保留 —— 写整个 dword 虽然也生效，但会把残留清成 0，
+    // 看不出"这个值本来是不是垃圾"，排查时会误导。
+    if (!ScriptTblWriteValue(node, 0, on ? 1u : 0u)) {
         SetErr("写 flag 异常（目标地址不可写）");
         return -1;
     }
-    R3_LOG(0, "[flag] node=%08X 0x%08X -> bit0=%d", (unsigned)node, old, on ? 1 : 0);
+    __try { old = *(const uint32_t*)(node + 0x18); } __except (EXCEPTION_EXECUTE_HANDLER) { old = 0; }
+    R3_LOG(0, "[flag] node=%08X -> low=%d（原值 0x%08X）", (unsigned)node, on ? 1 : 0, old);
     return 1;
 }
 
@@ -1737,14 +1753,58 @@ uintptr_t ScriptFlagResolve(const char* name) {
     g_lastErr[0] = 0;
     if (!name || !*name) { SetErr("flag 名为空"); return 0; }
     const uint32_t h = Fnv1Name(name);
-    const uintptr_t node = FindFlagNode(h);
-    if (!node) SetErr("没找到这个 flag —— 检查拼写，或本局脚本里没有它");
+    // 首选：直接查 ScriptEngine 的 flag 表（结构确定，不受内存布局影响）
+    uintptr_t node = 0;
+    bool isFlag = false;
+    if (ScriptTblFindByHash(h, &isFlag, &node, nullptr) && isFlag && node) return node;
+    // 兜底：表不可用（未进关 / 读不到 engine 指针）时退回全内存扫描
+    node = FindFlagNode(h);
+    if (!node) SetErr("本局脚本从未写过这个 flag（判定链没触发）；表里也确实没有它");
     return node;
 }
 
 uintptr_t ScriptFlagResolveHash(uint32_t hash) {
     if (!hash) return 0;
+    uintptr_t node = 0;
+    bool isFlag = false;
+    if (ScriptTblFindByHash(hash, &isFlag, &node, nullptr) && isFlag && node) return node;
     return FindFlagNode(hash);
+}
+
+// 调引擎自己的 get-or-create（RVA 0x18A8F0）——本局还没出现过的 flag 由它建表项。
+//
+// 为什么必须调引擎而不是自己拼节点：
+//   * 节点必须用引擎的分配器分配（map 析构时会 free，自己 VirtualAlloc 的会崩）；
+//   * 插入要走红黑树旋转与着色，结构语义错一点，之后引擎的查找就会走岔。
+// 0x18A8F0 的语义（反汇编确认）：thiscall，一个 const char* 参数，ret 4，
+// 内部算 FNV-1(scope) 与 FNV-1(name)，对 flag 表做 get-or-create，返回 &node->value。
+// 必须在渲染线程调用（会改 ScriptEngine 的 map）。
+typedef void* (__thiscall* PFN_ScriptFlagEnsure)(void* self, const char* name);
+
+uintptr_t ScriptFlagEnsure(const char* name) {
+    g_lastErr[0] = 0;
+    if (!name || !*name) { SetErr("flag 名为空"); return 0; }
+    const uint32_t eng = ScriptTblEngine();
+    if (!eng) { SetErr("读不到 TheScriptEngine（未进对局？）"); return 0; }
+
+    // 已有就直接给地址，不重复插入
+    uintptr_t node = 0;
+    bool isFlag = false;
+    if (ScriptTblFindByHash(Fnv1Name(name), &isFlag, &node, nullptr) && isFlag && node)
+        return node;
+
+    const uintptr_t base = GameBase();
+    const PFN_ScriptFlagEnsure fn = (PFN_ScriptFlagEnsure)(base + 0x0018A8F0u);
+    uint32_t* pv = nullptr;
+    __try {
+        pv = (uint32_t*)fn((void*)(uintptr_t)eng, name);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        SetErr("调用引擎 SetFlag 抛异常（已拦截，游戏未受影响）");
+        return 0;
+    }
+    if (!pv) { SetErr("引擎 SetFlag 返回空"); return 0; }
+    R3_LOG(0, "[flag] 新建表项 %s -> value@%08X", name, (unsigned)(uintptr_t)pv);
+    return (uintptr_t)pv - 0x18;
 }
 
 int ActScriptFlag(const char* name, int on) {
@@ -1757,6 +1817,7 @@ int ActScriptFlag(const char* name, int on) {
 // 候选 hash 一起带进同一轮遍历。只读，可放工作线程；写入仍需回渲染线程。
 int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes) {
     if (!names || !nodes || n <= 0) return 0;
+    ScriptCollectStacks();
     if (n > 8) n = 8;
     uint32_t hashes[8];
     uintptr_t weak[8];
@@ -1765,6 +1826,18 @@ int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes) {
         nodes[i] = 0;
         weak[i] = 0;
     }
+    // 先走脚本变量表：命中就不必再扫内存（表是唯一真相，内存扫描只是兜底）
+    int remaining0 = 0;
+    for (int i = 0; i < n; ++i) {
+        bool isFlag = false;
+        uintptr_t node = 0;
+        if (ScriptTblFindByHash(hashes[i], &isFlag, &node, nullptr) && isFlag && node) {
+            nodes[i] = node;
+        } else {
+            ++remaining0;
+        }
+    }
+    if (remaining0 == 0) return n;
 
     SYSTEM_INFO si;
     GetSystemInfo(&si);
@@ -1773,7 +1846,7 @@ int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes) {
     const DWORD readMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
                            PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
     const size_t step = 8u << 20;
-    int remaining = n;
+    int remaining = remaining0;
     MEMORY_BASIC_INFORMATION mbi;
     while (cur < end && remaining > 0 &&
            VirtualQuery((LPCVOID)cur, &mbi, sizeof(mbi)) == sizeof(mbi)) {
@@ -1818,17 +1891,26 @@ int ScriptFlagResolveBatch(const char* const* names, int n, uintptr_t* nodes) {
 
 const char* ScriptFlagLastError() { return g_lastErr[0] ? g_lastErr : "ok"; }
 
-// 通用节点写入：flag 改 bit0，timer 整体覆盖（0xFFFFFFFF = 已过期）。
+// 通用节点写入：flag 改 bit0，timer 整体覆盖（0 = 已过期）。
 int ScriptNodeWrite(uintptr_t node, uint32_t value, int mode) {
     g_lastErr[0] = 0;
     if (!node) { SetErr("节点地址为空"); return -1; }
     uint32_t old = 0, nv = 0;
+    if (mode == 1 || mode == 2) {
+        // flag：引擎按 bool 写（只占最低字节），高位是分配器残留，不能当数据动
+        if (!ScriptTblWriteValue(node, 0, (mode == 1) ? 1u : 0u)) {
+            SetErr("写节点异常（目标地址不可写）");
+            return -1;
+        }
+        __try { old = *(const uint32_t*)(node + 0x18); } __except (EXCEPTION_EXECUTE_HANDLER) { old = 0; }
+        R3_LOG(0, "[node] %08X mode=%d -> low=%d（现 0x%08X）",
+               (unsigned)node, mode, (mode == 1) ? 1 : 0, old);
+        return 1;
+    }
     __try {
         uint32_t* val = (uint32_t*)(node + 0x18);
         old = *val;
-        if (mode == 1)      nv = old | 1u;
-        else if (mode == 2) nv = old & ~1u;
-        else                nv = value;
+        nv = value;
         if (nv != old) *val = nv;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         SetErr("写节点异常（目标地址不可写）");

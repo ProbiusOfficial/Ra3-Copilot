@@ -3,17 +3,21 @@
 // 表格式（见 generated/objectives_data.h）：
 //   "M|<map 名>"
 //   "O|<目标名>|<other 条件数>|<依赖1>|<依赖2>|..."   同一目标多行 = 多条完成路径
-// 依赖前缀：F=FLAG(置1)  N=取反FLAG(置0)  T=TIMER(写 0xFFFFFFFF=已过期)
+// 依赖前缀：F=FLAG(置1)  N=取反FLAG(置0)  T=TIMER(写 0=已过期)
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 #include "scriptobj.h"
+#include "scripttable.h"
 #include "generated/objectives_data.h"
+#include "maptbl.h"
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // ---- 解析结果 ----
 #define OBJ_MAX_MAP   32
@@ -66,12 +70,18 @@ static int SplitPipe(char* s, char* seg[], int maxSeg) {
     return n;
 }
 
-void ObjTableInit() {
-    if (g_inited) return;
-    g_inited = 1;
+// ---- 表来源 --------------------------------------------------------------
+// 内置表只覆盖导出过的那批战役图；进关后用关卡 .map 现场解析，覆盖 mod 图与
+// 其他版本。两者行格式相同，消费端不区分。
+static const char* const* g_srcLines = kObjTableData;
+static int  g_srcKind = 0;            // 0=内置 1=脚本解析
+static char g_srcMap[128];            // 脚本表对应的地图名
+static char g_srcNote[220];           // 来源说明 / 失败原因
+
+static void ObjTableParse(const char* const* lines) {
     int curMap = -1;
-    for (int i = 0; kObjTableData[i]; ++i) {
-        const char* line = kObjTableData[i];
+    for (int i = 0; lines[i]; ++i) {
+        const char* line = lines[i];
         const int len = (int)strlen(line);
         if (len < 2) continue;
         char* buf = PoolDup(line, len);
@@ -112,6 +122,7 @@ void ObjTableInit() {
         for (int d = 3; d < ns && pi.nDeps < 12; ++d) {
             const char* dep = seg[d];
             if (!dep || !dep[0]) continue;
+            if (dep[0] == 'X' && dep[1] == 0) break;   // X 之后是"其他条件"原文，不是依赖
             const char k = dep[0];
             if (k != 'F' && k != 'N' && k != 'T') continue;
             pi.deps[pi.nDeps].kind = k;
@@ -122,6 +133,12 @@ void ObjTableInit() {
         ++g_mapPathCount[curMap];
         ++g_objs[g_mapObjFirst[curMap] + objIdx].pathCount;
     }
+}
+
+void ObjTableInit() {
+    if (g_inited) return;
+    g_inited = 1;
+    ObjTableParse(g_srcLines);
 }
 
 int ObjTableMapCount() { ObjTableInit(); return g_mapCount; }
@@ -223,17 +240,119 @@ static void BuildWantSet() {
     }
 }
 
-// 节点头 +0x00 L / +0x04 P / +0x08 R 必须为 0 或堆地址；hash 在 +0x14，value 在 +0x18。
+// 依赖哈希集合查询（节点校验用）。首次调用会建表，之后是二分。
+bool ObjIsDepHash(uint32_t h) {
+    ObjTableInit();
+    if (g_wantCount == 0) BuildWantSet();
+    return WantIndex(h) >= 0;
+}
+
+// ---- 线程栈排除 ----
+// 扫描时的散列值本身就在栈上：找 hash 必然命中"参数变量自己"，把它的 -0x14 当成节点，
+// 周围全是栈帧里的局部变量与返回地址（看起来正好是像指针的字段）。写入就落在栈上 ——
+// 日志报成功、游戏毫无反应。栈上永远不可能有脚本节点，整段排除。
+struct StackRange { uintptr_t lo, hi; };
+static StackRange g_stack[64];
+static int g_nstack = 0;
+
+typedef struct _THREAD_BASIC_INFO {
+    LONG ExitStatus;
+    PVOID TebBaseAddress;
+    ULONG_PTR UniqueProcessId;
+    ULONG_PTR UniqueThreadId;
+    ULONG_PTR AffinityMask;
+    LONG Priority;
+    LONG BasePriority;
+} THREAD_BASIC_INFO_;
+
+void ScriptCollectStacks() {
+    g_nstack = 0;
+    HMODULE nt = GetModuleHandleA("ntdll.dll");
+    if (!nt) return;
+    typedef LONG(WINAPI * PFN_QIT)(HANDLE, int, PVOID, ULONG, PULONG);
+    PFN_QIT qit = (PFN_QIT)GetProcAddress(nt, "NtQueryInformationThread");
+    if (!qit) return;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    THREADENTRY32 te;
+    te.dwSize = sizeof(te);
+    const DWORD me = GetCurrentProcessId();
+    if (Thread32First(snap, &te)) {
+        do {
+            if (te.th32OwnerProcessID != me) continue;
+            if (g_nstack >= (int)(sizeof(g_stack) / sizeof(g_stack[0]))) break;
+            HANDLE th = OpenThread(THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+            if (!th) continue;
+            THREAD_BASIC_INFO_ tbi;
+            memset(&tbi, 0, sizeof(tbi));
+            ULONG got = 0;
+            if (qit(th, 0, &tbi, sizeof(tbi), &got) == 0 && tbi.TebBaseAddress) {
+                __try {
+                    const uint32_t* teb = (const uint32_t*)tbi.TebBaseAddress;
+                    const uintptr_t base = (uintptr_t)teb[1];    // StackBase
+                    const uintptr_t lim = (uintptr_t)teb[2];     // StackLimit
+                    if (base > lim && lim) {
+                        g_stack[g_nstack].lo = lim;
+                        g_stack[g_nstack].hi = base;
+                        ++g_nstack;
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                }
+            }
+            CloseHandle(th);
+        } while (Thread32Next(snap, &te));
+    }
+    CloseHandle(snap);
+}
+
+bool ScriptIsThreadStack(uintptr_t addr) {
+    for (int i = 0; i < g_nstack; ++i)
+        if (addr >= g_stack[i].lo && addr < g_stack[i].hi) return true;
+    return false;
+}
+
+// 节点头 +0x00 L / +0x04 P / +0x08 R 必须为 0 或用户态堆地址；hash 在 +0x14，value 在 +0x18。
 // 返回 0=不像 / 1=弱（P 为空：树根或游离） / 2=强（P 合法：真在树里，优先采信）
+//
+// 三个判据（缺一不可）：
+//   1. 命中必须落在 MEM_PRIVATE 区域。脚本节点是引擎堆上的独立结构，永远不会在模块映像里；
+//      而"全内存搜 4 字节哈希"必然命中所有**存着这些哈希的数组**——包括本模块自己的
+//      依赖哈希表。实测一张图 450 个候选里 405 个落在 ra3copilot.dll 自己的映像中。
+//   2. scope(+0x10) 与 value(+0x18) 都不能等于某个 flag 名哈希。错位读出来的"节点"
+//      （把 {scope,hash,value} 数组读偏 4/8 字节）字段正好是相邻的哈希；真节点的 scope
+//      是脚本作用域哈希、value 是标志值，都不会是名字哈希。
+//   3. 指针上限放到 0xFFF00000：游戏是 LAA，堆能到 0xFFxxxxxx，旧上限 0x7F000000 会把
+//      高地址的父/子节点整个判死，真节点反而被筛掉。
+// value 还要排除"指向节点自己这块分配"的情况：那是链表/索引里的自引用字段
+// （实测一整片私有堆里存着 {hash, 指针, hash, 指针...} 的记录，凭 scope/hash 完全
+//  像节点，写进去游戏毫无反应 —— 用户那边的"写成功但不生效"就是这种）。
+static bool NodeRegionPrivate(uintptr_t node, uint32_t val) {
+    if (ScriptIsThreadStack(node) || ScriptIsThreadStack(node + 0x1C)) return false;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery((LPCVOID)node, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+    if (mbi.Type != MEM_PRIVATE) return false;
+    const uintptr_t b = (uintptr_t)mbi.BaseAddress;
+    if ((uintptr_t)val >= b && (uintptr_t)val < b + (uintptr_t)mbi.RegionSize) return false;
+    // 与之相邻（同一块分配的另一段）也算自引用：名字表就是
+    // {hash, 名字指针} 紧邻排列，指针常常刚好越过分段边界。
+    const uintptr_t v = (uintptr_t)val;
+    const uintptr_t d = (v > node) ? (v - node) : (node - v);
+    if (v && d < 0x10000u) return false;
+    return true;
+}
+
 static int NodeGrade(uintptr_t node, uint32_t hash, uint32_t* outVal) {
     if (node < 0x01000000u) return 0;
     __try {
         const uint32_t* w = (const uint32_t*)node;
         if (w[5] != hash) return 0;
         const uint32_t L = w[0], P = w[1], R = w[2];
-        if (L && (L < 0x01000000u || L >= 0x7F000000u)) return 0;
-        if (R && (R < 0x01000000u || R >= 0x7F000000u)) return 0;
-        if (P && (P < 0x01000000u || P >= 0x7F000000u)) return 0;
+        if (L && (L < 0x00010000u || L >= 0xFFF00000u)) return 0;
+        if (R && (R < 0x00010000u || R >= 0xFFF00000u)) return 0;
+        if (P && (P < 0x00010000u || P >= 0xFFF00000u)) return 0;
+        if (ObjIsDepHash(w[4]) || ObjIsDepHash(w[6])) return 0;
+        if (w[4] == 0) return 0;          // 作用域恒非 0（无前缀是 0x811C9DC5），0 是错位读
+        if (!NodeRegionPrivate(node, w[6])) return 0;
         const uint32_t v = w[6];
         if (v == 0xCCCCCCCCu || v == 0xCDCDCDCDu) return 0;   // 调试填充，不是真值
         if (outVal) *outVal = v;
@@ -247,6 +366,7 @@ static volatile LONG g_scanAbort = 0;
 
 int ScriptNodeScan() {
     ObjTableInit();
+    ScriptCollectStacks();
     if (g_wantCount == 0) BuildWantSet();
     g_hitCount = 0;
     InterlockedExchange(&g_scanAbort, 0);
@@ -312,7 +432,29 @@ int ScriptNodeScan() {
     return g_hitCount;
 }
 
+// 统一的"按名字哈希找节点"入口：先查脚本变量表（结构确定），
+// 表不可用（没进关 / 读不到 TheScriptEngine）时才退回旧的全内存扫描。
+static bool TblFindNode(uint32_t hash, uintptr_t* outNode, uint32_t* outVal) {
+    uintptr_t node = 0;
+    bool isFlag = false;
+    if (!ScriptTblFindByHash(hash, &isFlag, &node, nullptr) || !node) return false;
+    uint32_t v = 0;
+    __try {
+        v = *(const uint32_t*)(node + 0x18);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    if (outNode) *outNode = node;
+    if (outVal) *outVal = v;
+    return true;
+}
+
 bool ScriptNodeValue(uint32_t hash, uint32_t* outValue) {
+    uint32_t v = 0;
+    if (TblFindNode(hash, nullptr, &v)) {
+        if (outValue) *outValue = v;
+        return true;
+    }
     for (int i = 0; i < g_hitCount; ++i) {
         if (g_hits[i].hash != hash) continue;
         // 实时读 + 核对 hash：缓存地址可能在换关/脚本重载后被别的数据占用，
@@ -340,6 +482,8 @@ void ScriptNodeRefresh() {
 }
 
 bool ScriptNodeAddr(uint32_t hash, uintptr_t* outNode) {
+    uintptr_t node = 0;
+    if (TblFindNode(hash, &node, nullptr)) { if (outNode) *outNode = node; return true; }
     for (int i = 0; i < g_hitCount; ++i)
         if (g_hits[i].hash == hash) { if (outNode) *outNode = g_hits[i].node; return true; }
     return false;
@@ -349,6 +493,8 @@ bool ScriptNodeAddr(uint32_t hash, uintptr_t* outNode) {
 // 写入前用它核对：地址还读得通，且 +0x14 仍是同一个 hash。
 // 失败时调用方应改用 ScriptFlagResolveHash() 重新扫一遍。
 bool ScriptNodeAddrLive(uint32_t hash, uintptr_t* outNode) {
+    uintptr_t t = 0;
+    if (TblFindNode(hash, &t, nullptr) && t) { if (outNode) *outNode = t; return true; }
     uintptr_t n = 0;
     if (!ScriptNodeAddr(hash, &n) || !n) return false;
     __try {
@@ -364,32 +510,45 @@ bool ScriptNodeAddrLive(uint32_t hash, uintptr_t* outNode) {
 // 实测形如 data\maps\official\CAMP_S09_NewYork_Rao\CAMP_S09_NewYork_Rao.map。
 // 按地图文件名认关卡是唯一可靠的方式 —— 靠脚本节点命中率会被跨关卡同名的
 // TIMER - Objective Buffer 带偏（A01 曾经永远是「最像」的那张）。
-static int MapFromGamePath() {
+// 当前地图的相对路径，原样返回（'\\' 分隔）。读不到返回 false。
+static bool GameMapRelPath(char* out, int cap) {
+    out[0] = 0;
     uintptr_t gl = 0;
-    __try { gl = *(const uintptr_t*)0x00CD8CE4; } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
-    if (!gl) return -1;
+    __try { gl = *(const uintptr_t*)0x00CD8CE4; } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    if (!gl) return false;
     const char* path = nullptr;
-    __try { path = *(const char**)(gl + 0x98); } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
-    if (!path || (uintptr_t)path < 0x01000000u) return -1;
-    char buf[260];
+    __try { path = *(const char**)(gl + 0x98); } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    if (!path || (uintptr_t)path < 0x01000000u) return false;
     int n = 0;
     __try {
-        for (; n < (int)sizeof(buf) - 1 && path[n]; ++n) buf[n] = path[n];
+        for (; n < cap - 1 && path[n]; ++n) out[n] = path[n];
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return -1;
+        out[0] = 0;
+        return false;
     }
-    buf[n] = 0;
+    out[n] = 0;
+    return n > 0;
+}
 
-    const char* base = buf;
-    for (const char* s = buf; *s; ++s)
+// 从路径取小写、不含扩展名的文件名
+static void BaseNameFromPath(const char* path, char* out, int cap) {
+    out[0] = 0;
+    const char* base = path;
+    for (const char* s = path; *s; ++s)
         if (*s == '\\' || *s == '/') base = s + 1;
-    char name[128];
     int k = 0;
-    for (; base[k] && base[k] != '.' && k < (int)sizeof(name) - 1; ++k) {
-        char c = base[k];
-        name[k] = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+    for (; base[k] && base[k] != '.' && k < cap - 1; ++k) {
+        const char c = base[k];
+        out[k] = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
     }
-    name[k] = 0;
+    out[k] = 0;
+}
+
+static int MapFromGamePath() {
+    char rel[260];
+    if (!GameMapRelPath(rel, (int)sizeof(rel))) return -1;
+    char name[128];
+    BaseNameFromPath(rel, name, (int)sizeof(name));
     if (!name[0]) return -1;
     for (int m = 0; m < g_mapCount; ++m)
         if (_stricmp(g_mapName[m], name) == 0) return m;
@@ -423,7 +582,7 @@ int ObjDetectMap(int* scoreOut) {
                     uint32_t v = 0;
                     if (!ScriptNodeValue(h, &v)) continue;
                     const char kind = g_paths[p].deps[d].kind;
-                    const bool sat = (kind == 'T') ? (v == 0xFFFFFFFFu)
+                    const bool sat = (kind == 'T') ? (v == 0u)
                                    : (kind == 'N') ? !(v & 1u) : (v & 1u) != 0;
                     if (sat) ++hit;
                 }
@@ -439,6 +598,52 @@ int ObjDetectMap(int* scoreOut) {
     return best;
 }
 
+// 用当前关卡的 .map 现场生成目标表，替换内置表。
+//
+// 读盘 + 两层解压 + 脚本树解析约 30-60ms，只能在 HTTP / 后台线程调用；
+// 渲染线程只读已有结果。失败时保持原表不动，原因记在 g_srcNote 里。
+bool ObjTableUseScript() {
+    char rel[260];
+    if (!GameMapRelPath(rel, (int)sizeof(rel))) {
+        _snprintf_s(g_srcNote, sizeof(g_srcNote), _TRUNCATE,
+                    "读不到当前地图路径（还在载入或未进对局）");
+        return false;
+    }
+    char base[128];
+    BaseNameFromPath(rel, base, (int)sizeof(base));
+    if (!base[0]) {
+        _snprintf_s(g_srcNote, sizeof(g_srcNote), _TRUNCATE, "地图路径里没有文件名");
+        return false;
+    }
+    if (g_srcKind == 1 && _stricmp(base, g_srcMap) == 0) return true;   // 已经是这张图
+
+    MapTblResult r;
+    if (!MapTblBuild(rel, base, &r)) {
+        _snprintf_s(g_srcNote, sizeof(g_srcNote), _TRUNCATE, "脚本表不可用：%s", r.err);
+        return false;
+    }
+
+    g_srcLines = r.lines;
+    g_srcKind = 1;
+    strncpy_s(g_srcMap, sizeof(g_srcMap), base, _TRUNCATE);
+    _snprintf_s(g_srcNote, sizeof(g_srcNote), _TRUNCATE,
+                "%d 脚本 -> %d 目标 / %d 路径", r.scriptCount, r.objCount, r.pathCount);
+
+    // 整表重建：行格式与内置表相同，重置池后按新来源解析
+    g_poolCur = g_pool;
+    g_mapCount = 0;
+    g_pathCount = 0;
+    g_objCount = 0;
+    g_wantCount = 0;
+    g_hitCount = 0;
+    g_inited = 0;
+    ObjTableInit();
+    return true;
+}
+
+int         ObjTableSourceKind() { return g_srcKind; }
+const char* ObjTableSourceNote() { return g_srcNote; }
+
 int ObjPathWrites(int pathIdx, uint32_t* outHash, uint32_t* outValue,
                   int* outMode, int maxN) {
     const ObjPathInfo* p = ObjTablePath(pathIdx);
@@ -447,7 +652,7 @@ int ObjPathWrites(int pathIdx, uint32_t* outHash, uint32_t* outValue,
     for (int d = 0; d < p->nDeps && n < maxN; ++d) {
         outHash[n] = Fnv1(p->deps[d].name);
         outMode[n] = (p->deps[d].kind == 'N') ? 2 : ((p->deps[d].kind == 'T') ? 0 : 1);
-        outValue[n] = (p->deps[d].kind == 'T') ? 0xFFFFFFFFu : 0u;
+        outValue[n] = 0u;   // flag 写 0=假；timer 写 0=已过期
         ++n;
     }
     return n;
@@ -457,9 +662,119 @@ int ObjDepState(const char* name, char kind) {
     if (!name) return -1;
     uint32_t v = 0;
     if (!ScriptNodeValue(Fnv1(name), &v)) return -1;
-    if (kind == 'T') return (v == 0xFFFFFFFFu) ? 1 : 0;   // timer: 0xFFFFFFFF = 已过期
-    if (kind == 'N') return (v & 1u) ? 0 : 1;             // 取反 flag
-    return (v & 1u) ? 1 : 0;                              // flag: bit0
+    // timer：存的是"剩余帧数"，倒计时到 0 就是过期。0xFFFFFFFF = 建过但从未启动。
+    // 反证：A02 开场 `TIMER - Objective 01/4 - Complete` 都是 0xFFFFFFFF，而这两个目标
+    // 显然没完成；A01 全程 110 个 timer 也全是 0xFFFFFFFF。若 -1 算过期，目标会自己打勾。
+    if (kind == 'T') return (v == 0u) ? 1 : 0;
+    // flag 只有最低字节有效（引擎按 bool 写，0x489C10 `cmp byte ptr [eax],0`）。
+    // 表里出现 0x08107F01 / 0x94000F00 这类怪值就是高位残留，不能整 dword 判真假。
+    const bool on = (v & 0xFFu) != 0;
+    if (kind == 'N') return on ? 0 : 1;                   // 取反 flag
+    return on ? 1 : 0;
 }
 
 uint32_t ObjNameHash(const char* name) { return name ? Fnv1(name) : 0u; }
+
+// ---- 诊断：全候选扫描 ----
+// 与 ScriptNodeScan 同一条内存遍历，但不去重：同一个名字哈希在内存里可能撞到
+// 好几个长得像节点的位置（任意 4 字节等于哈希、后面跟几个像指针的字段就过校验），
+// 现行逻辑只留一个"最强"的，可能留错 —— 表现就是「日志写成功、游戏没反应」。
+static uintptr_t NodeRootOf(uintptr_t node, int* depthOut) {
+    uintptr_t cur = node;
+    int d = 0;
+    __try {
+        for (; d < 64; ++d) {
+            const uint32_t P = *(const uint32_t*)(cur + 0x04);
+            if (!P || P < 0x01000000u || P >= 0x7F000000u) break;
+            if ((uintptr_t)P == node) break;
+            cur = (uintptr_t)P;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (depthOut) *depthOut = 0;
+        return 0;
+    }
+    if (depthOut) *depthOut = d;
+    return cur;
+}
+
+int ScriptNodeCandScan(const uint32_t* hashes, int n, int* countOut,
+                       ScriptNodeCand* out, int keepPerHash, int maxTotal) {
+    if (!hashes || n <= 0 || n > 64 || !countOut || !out || keepPerHash <= 0) return 0;
+    ScriptCollectStacks();
+    for (int i = 0; i < n; ++i) countOut[i] = 0;
+
+    static uint32_t bits[1u << 15];        // 低 20 位预筛，假阳性后面会精确核对
+    for (int i = 0; i < (1 << 15); ++i) bits[i] = 0;
+    for (int i = 0; i < n; ++i) {
+        const uint32_t k = hashes[i] & 0xFFFFFu;
+        bits[k >> 5] |= (1u << (k & 31));
+    }
+
+    int stored = 0;
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    uintptr_t cur = (uintptr_t)si.lpMinimumApplicationAddress;
+    const uintptr_t end = (uintptr_t)si.lpMaximumApplicationAddress;
+    const DWORD readMask = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    const size_t step = 8u << 20;
+    MEMORY_BASIC_INFORMATION mbi;
+
+    while (cur < end && VirtualQuery((LPCVOID)cur, &mbi, sizeof(mbi)) == sizeof(mbi)) {
+        if (g_scanAbort) break;
+        const uintptr_t base = (uintptr_t)mbi.BaseAddress;
+        const size_t size = mbi.RegionSize;
+        if (mbi.State == MEM_COMMIT && base >= 0x01000000u &&
+            !(mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) && (mbi.Protect & readMask)) {
+            for (size_t off = 0; off < size; off += step) {
+                const size_t nb = (size - off) < step ? (size - off) : step;
+                __try {
+                    const uintptr_t start = (base + off + 3) & ~(uintptr_t)3;
+                    const uint32_t* w = (const uint32_t*)start;
+                    const size_t cnt = (nb > (start - (base + off)))
+                                           ? (nb - (start - (base + off))) / 4 : 0;
+                    for (size_t i = 0; i < cnt; ++i) {
+                        const uint32_t hv = w[i];
+                        if (!bits[(hv & 0xFFFFFu) >> 5]) continue;
+                        if (!((bits[(hv & 0xFFFFFu) >> 5] >> (hv & 31)) & 1u)) continue;
+                        int k = -1;
+                        for (int j = 0; j < n; ++j) if (hashes[j] == hv) { k = j; break; }
+                        if (k < 0) continue;
+                        const uintptr_t node = (uintptr_t)(w + i) - 0x14;
+                        if (node < 0x01000000u) continue;
+                        __try {
+                            const uint32_t* q = (const uint32_t*)node;
+                            if (q[5] != hv) continue;
+                            const uint32_t L = q[0], P = q[1], R = q[2];
+                            if (L && (L < 0x00010000u || L >= 0xFFF00000u)) continue;
+                            if (R && (R < 0x00010000u || R >= 0xFFF00000u)) continue;
+                            if (P && (P < 0x00010000u || P >= 0xFFF00000u)) continue;
+                            if (ObjIsDepHash(q[4]) || ObjIsDepHash(q[6])) continue;
+                            if (q[4] == 0) continue;      // 作用域恒非 0，0 是错位读
+                            if (!NodeRegionPrivate(node, q[6])) continue;
+                            const uint32_t val = q[6];
+                            if (val == 0xCCCCCCCCu || val == 0xCDCDCDCDu) continue;
+                            const int slot = countOut[k];
+                            ++countOut[k];
+                            if (slot >= keepPerHash || stored >= maxTotal) continue;
+                            ScriptNodeCand& c = out[stored++];
+                            c.node = node;
+                            c.L = L; c.P = P; c.R = R;
+                            c.scope = q[4];
+                            c.hash = hv;
+                            c.value = val;
+                            c.depth = 0;
+                            c.root = NodeRootOf(node, &c.depth);
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {
+                        }
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                }
+            }
+        }
+        const uintptr_t next = base + size;
+        if (next <= cur) break;
+        cur = next;
+    }
+    return stored;
+}

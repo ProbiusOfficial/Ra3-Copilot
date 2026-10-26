@@ -31,8 +31,14 @@ struct ObjItemInfo {
     int pathCount;
 };
 
-void ObjTableInit();                        // 幂等；解析内置表
+void ObjTableInit();                        // 幂等；解析当前来源（内置表或关卡脚本）
 int  ObjTableMapCount();
+
+// 用当前关卡的 .map 现场生成目标表（覆盖 mod 图 / 未导出的版本）。
+// 读盘 + 解压 + 解析约几十毫秒，只能在 HTTP / 后台线程调；失败时保持原表。
+bool ObjTableUseScript();
+int  ObjTableSourceKind();                  // 0=内置表 1=关卡脚本
+const char* ObjTableSourceNote();           // 来源摘要或失败原因
 const char* ObjTableMapName(int m);
 int  ObjTableMapObjCount(int m);
 const ObjItemInfo* ObjTableMapObj(int m, int i);
@@ -65,5 +71,30 @@ int  ObjPathWrites(int pathIdx, uint32_t* outHash, uint32_t* outValue,
 // 某个依赖当前是否已满足：1=满足 0=未满足 -1=节点不存在（等于未满足）
 int  ObjDepState(const char* name, char kind);
 
+// ---- 诊断：列出某个 hash 在内存里的**全部**候选（不做"每 hash 只留一个"的去重） ----
+// 用途：判断「节点不存在 / 写了不生效」是脚本没写过，还是节点识别挑错了对象。
+struct ScriptNodeCand {
+    uintptr_t node;
+    uint32_t  L, P, R;      // 树指针
+    uint32_t  scope;        // +0x10 作用域哈希（真节点只有少数几种取值）
+    uint32_t  hash;         // +0x14 名字哈希
+    uint32_t  value;        // +0x18 值
+    uintptr_t root;         // 沿 P 上溯到的根（P 非法 / 成环时给 0）
+    int       depth;        // 上溯步数
+};
+
+// 单次全内存扫描，收集 hashes[] 每个 hash 最多 keepPerHash 个候选。
+// countOut[i] = 该 hash 命中的候选总数（可能大于实际存下的条数）。
+// 返回实际存下的候选数。只读。
+int ScriptNodeCandScan(const uint32_t* hashes, int n, int* countOut,
+                       ScriptNodeCand* out, int keepPerHash, int maxTotal);
+
 // 脚本 flag / timer 的键哈希：FNV-1（先乘 16777619 再异或字节）
 uint32_t ObjNameHash(const char* name);
+
+// 该哈希是否是目标表里的依赖名（节点校验用：真节点的 scope/value 不可能是 flag 名哈希）
+bool ObjIsDepHash(uint32_t h);
+
+// 线程栈范围快照（扫描前调一次）：哈希值本身就在栈上，"找 hash"必然命中参数变量自己。
+void ScriptCollectStacks();
+bool ScriptIsThreadStack(uintptr_t addr);

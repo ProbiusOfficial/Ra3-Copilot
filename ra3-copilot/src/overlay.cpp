@@ -99,6 +99,9 @@ static DWORD WINAPI FixStuckThreadProc(LPVOID) {
 }
 
 static DWORD WINAPI ObjScanThreadProc(LPVOID) {
+    // 先用当前关卡的 .map 生成目标表（读盘 + 解压 + 解析，几十毫秒；在这里做不影响画面）。
+    // 失败就沿用内置表 —— 内置表覆盖官方战役图，脚本表额外覆盖 mod 图与其他版本。
+    ObjTableUseScript();
     const int n = ScriptNodeScan();
     int sc = 0;
     const int m = ObjDetectMap(&sc);
@@ -960,8 +963,18 @@ ULONGLONG g_keysStamp     = 0;       // ini 上次读写的写时间戳，外部
 void KeyName(int vk, char* out, int n) {
     if (vk >= VK_F1 && vk <= VK_F24) { _snprintf_s(out, n, _TRUNCATE, "F%d", vk - VK_F1 + 1); return; }
     if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) { out[0] = (char)vk; out[1] = 0; return; }
+    // 小键盘：75 配列等键盘没 Insert，呼出键常被改到小键盘上，这里要能读出来
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
+        _snprintf_s(out, n, _TRUNCATE, "Num%d", vk - VK_NUMPAD0);
+        return;
+    }
     const char* s = nullptr;
     switch (vk) {
+    case VK_MULTIPLY:   s = "Num*";     break;
+    case VK_ADD:        s = "Num+";     break;
+    case VK_SUBTRACT:   s = "Num-";     break;
+    case VK_DECIMAL:    s = "Num.";     break;
+    case VK_DIVIDE:     s = "Num/";     break;
     case VK_OEM_MINUS:  s = "-";        break;
     case VK_OEM_PLUS:   s = "+";        break;
     case VK_OEM_4:      s = "[";        break;
@@ -2673,6 +2686,14 @@ DWORD WINAPI InputThread(LPVOID) {
 }
 
 } // namespace
+
+// 呼出键的名字（"Ctrl+Insert" 形式）—— 调试接口 /ui 与「面板怎么叫不出来」这类排查用。
+// g_toggleVk 在匿名命名空间里（内部链接），只能通过这个口子对外。
+void OverlayToggleKeyName(char* out, int n) {
+    char key[32] = { 0 };
+    KeyName(g_toggleVk, key, (int)sizeof(key));
+    _snprintf_s(out, (size_t)n, _TRUNCATE, "%s%s", g_toggleCtrl ? "Ctrl+" : "", key);
+}
 
 // ===================== 对外：召唤 / 空投 =====================
 void RequestUnload() {

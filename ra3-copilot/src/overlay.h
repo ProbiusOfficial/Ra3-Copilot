@@ -34,6 +34,9 @@ extern HMODULE g_hSelf;   // DLL 自身句柄（dllmain 保存；热重载自卸
 // 热重载：受理卸载请求（/unload 调用）—— 渲染线程在下一个 Present 内拆卸并自卸载
 void RequestUnload();
 
+// 呼出键名（"Ctrl+Insert" 形式）。热重载后面板回到隐藏态，排查「按什么键能叫出来」用。
+void OverlayToggleKeyName(char* out, int n);
+
 // ---- 日志桥（供 actions.cpp 写进界面「输出记录」）----
 enum { OVLOG_INFO = 0, OVLOG_OK, OVLOG_WARN, OVLOG_ERR };
 void OverlayLogLine(int kind, const char* text);
