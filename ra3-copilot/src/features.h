@@ -72,7 +72,16 @@ extern uint32_t g_retClanGate;   // 可用对象集合判定桩返回地址（0x
 extern uint32_t g_retBtnProbe;   // 建造页按钮对象探针返回地址（0xAB7070 + 5）
 extern uint32_t g_retCsProbe;    // CommandSet 探针返回地址（0xACB352 + 8）
 extern uint32_t g_retBtnEnable;  // 建造按钮强制可用桩返回地址（0xABB6F0 + 6）
-extern uint32_t g_extFixCount;   // 建造页补全扩展建筑：生效次数
+extern uint32_t g_btnForceCount; // 0x1E 命中扩展建筑模板的累计次数（演练也记）
+extern uint32_t g_btnForceReal;  // 0 = 只计数（安全）；1 = 真调 setEnabled
+extern uint32_t g_btnLastObj;    // 最近命中的按钮对象指针（只读取证）
+extern uint32_t g_btnLastHash;   // 最近命中的模板哈希（只读取证）
+extern uint32_t g_retBuildability; // Buildability hook 跳回点（站 + 8）
+extern uint32_t g_retSetDis;       // setDisabled hook 跳回点（站 + 5）
+extern uint32_t g_extCallCount;    // BuildExtCs hook 被调用次数
+extern uint32_t g_extFixCount;   // 建造页补全扩展建筑：生效次数（真写）
+extern uint32_t g_extDryCount;   // 演练：本会替换但未写的次数
+extern bool     g_extApply;      // true = 真写内存（默认 false，先演练）
 extern uint32_t g_extLastCs;     // 最近一次被修正的 CommandSet（0 = 从未）
 extern uint32_t g_extLastDst;    // 换到的 inner（= 扩展完整版）
 extern uint32_t g_extScanMs;     // 全内存扫描耗时（ms）
@@ -118,7 +127,10 @@ void ScienceCaveStub();     // 建造前置科技判定桩（g_flags[0x1A] 打�
 void ClanGateCaveStub();    // 可用对象集合判定桩（g_flags[0x1B] 打开时对本机玩家恒「可用」）
 void BuildBtnProbeCaveStub(); // 建造页按钮对象探针（g_flags[0x1C] 打开时记录 ecx）
 void CommandSetProbeCaveStub(); // CommandSet 探针（g_flags[0x1C] 打开时记录 ebx）
-void BtnEnableCaveStub();       // 建造按钮强制可用（g_flags[0x1E] 打开时对扩展建筑强制 setEnabled）
+void SetDisCaveStub();          // 0x1E：setDisabled 入口对扩展建筑改走 setEnabled
+void BuildableCaveStub();       // 0x1E：Buildability 层对扩展建筑放行（不碰按钮对象）
+void BtnEnableCaveStub();       // 0x1E 旧实现（已停用，站点=0）       // 建造按钮强制可用（g_flags[0x1E] 打开时对扩展建筑强制 setEnabled）
+void BuildExtCsStub();          // 建造页构建器：把战役版 CommandSet 句柄换成同族完整版（不改对象，只换句柄）
 }
 
 // 战役建造页补全扩展建筑：由 CommandSetProbeCaveStub 在每次取到建造者 CommandSet 时调用。
@@ -127,6 +139,7 @@ void BtnEnableCaveStub();       // 建造按钮强制可用（g_flags[0x1E] 打�
 extern "C" uint32_t Ra3BuildExtFix(uint32_t cs);
 // 供 HTTP /buildext 查询用：导出扫描统计与建造者类 CommandSet 摘要。
 uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries);
+uint32_t ReplaceBuildExtCs(uint32_t cs);   // 建造页构建期的句柄替换（只换句柄，不改对象）
 // 诊断：对所有「建造者类但缺扩展建筑」的 CommandSet 跑一次修正，返回改了几个。
 // 不依赖建造页构建器时机，只用于验证配对数据能否被选中（GET /buildext?fixall=1）。
 uint32_t BuildExtFixAll();

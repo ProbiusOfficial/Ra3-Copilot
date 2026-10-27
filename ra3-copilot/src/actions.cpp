@@ -15,6 +15,7 @@
 //             body+0x418 = 归属玩家对象
 #include "actions.h"
 #include "features.h"
+#include "hook.h"
 #include "overlay.h"
 #include "symres.h"
 #include "units_corona.h"
@@ -61,8 +62,16 @@ void SetSummonPlace(int mode) {
 
 namespace {
 
-constexpr uint32_t R_CURSORPOS   = 0x8DAEFC;
-constexpr uint32_t R_CURTEMPLATE = 0x8E9838;
+// 两个构建的全局地址不同（Steam 版为重编译产物，布局整体错位）。
+// 零售值来自 CE 表，Steam 值由「引用指纹 + 邻域指令」配对得出（tools/map_steam_misc.py）：
+//   R_CURSORPOS   : 零售 0xCDAEFC ← 同一条 `mov edx,[0xCDAEF0]; mov ecx,[0xCDAEFC]` 序列 → 0xCE009C
+//   R_CURTEMPLATE : 零售 0xCE9838 ← `mov eax,[CT]; test; jz; mov ecx,[ThingFactory]` 唯一命中 → 0x8EE9C8
+#define R_CURSORPOS   (::ra3::IsSteamBuild() ? 0x8E009CU : 0x8DAEFCU)
+#define R_CURTEMPLATE (::ra3::IsSteamBuild() ? 0x8EE9C8U : 0x8E9838U)
+
+// 主模块可寻址上界（判 vtable/对象指针是否落在模块内）。零售 SizeOfImage=0x940000，
+// Steam 版是 0x950000 —— 写死会把这 64KB 内的真对象误判成"假对象"，故取实际值。
+#define MOD_END (::ra3::MainModuleBase() + ::ra3::MainModuleSize())
 
 constexpr uint32_t OFF_BODY      = 0x138;
 constexpr uint32_t OFF_HPBODY    = 0x33c;
@@ -696,7 +705,7 @@ int LockSelectedHealth() {
 
 int ActSetOwner() {
     SetErr("");
-    uint32_t localPlayer = g_localPlayerObj;
+    uint32_t localPlayer = static_cast<uint32_t>(LocalPlayerObj());   // 含 ctx 链兜底
     if (!localPlayer) { SetErr("本地队伍对象为 0（还没抓到玩家；进局后随便点一下资源再试）"); return 0; }
     uint32_t base = static_cast<uint32_t>(GameBase());
     uint32_t curTmpl = 0;
@@ -1200,8 +1209,12 @@ int AmmoTargetCount() { return g_ammoTargetN; }
 //   ⚠️ ret 是"被调用方清栈"，参数个数错一个 → esp 失衡 → 必崩。故用 __fastcall 仿真 thiscall
 //      且**参数个数严格写死**（fastcall 也是被调用方清栈，正好配 ret 8 / ret 0xC）。
 namespace {
-const uint32_t R_POSTA = 0x44A0B0;      // 0x84A0B0 - 0x400000
-const uint32_t R_POSTB = 0x438AB0;      // 0x838AB0 - 0x400000
+// Steam 版：PostA 0x4880E0（入口 24 字节唯一命中）、PostB 0x476C50（指令骨架 14/14 全同，
+// 另一候选在 mov edi,[esp+..] 处分叉）。两者的 ret 语义在原版重编译后仍然一致（栈参数个数未变），
+// 但这属于"必须实测"的项：/postproc 默认关闭，只有显式开启才会走到。
+// 用宏而非全局常量：构建决议在 OverlayInit 完成，静态初始化期求值会拿到"未决议"。
+#define R_POSTA (::ra3::Pick(0x44A0B0u, 0x4880E0u))
+#define R_POSTB (::ra3::Pick(0x438AB0u, 0x476C50u))
 bool  g_postProcOn = false;             // ⚠️ 默认关。2026-10-15 实机结论：
                                         //   ① 它**不解决**"召唤物隐形/小地图半透明"（当帧调、延迟 1.2s 调都无效）；
                                         //   ② 它会调游戏内部函数（PostA 摘 pending 列表）→ 有"反复摘坏队伍链表"的嫌疑，
@@ -1247,7 +1260,7 @@ void PostProcPump() {
         // 到期：先校验对象此刻仍合法（可能已被摧毁/回收 → 指针已失效，绝不能再调）
         uint32_t vt = 0, nowOwner = 0;
         const uintptr_t base = GameBase();
-        const bool vtOk = SafeRead32(p.obj, vt) && base && vt >= base && vt < base + 0x940000;
+        const bool vtOk = SafeRead32(p.obj, vt) && base && vt >= base && vt < MOD_END;
         const bool ownOk = SafeRead32(p.obj + OFF_OWNER, nowOwner) && nowOwner == (uint32_t)p.team;
         if (vtOk && ownOk) {
             PostProcessCall(p.team, p.obj, true, true);            // 内部自带 SEH + 入口字节校验
@@ -1459,7 +1472,8 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
     // 归属：**固定本地玩家**（基于 CE 的 Copy For Me / We Need Back：team = 本地玩家对象）。
     //       之前优先取"选中单位的 owner"→ 复制敌方单位时副本会归敌方，已修正。
     uint32_t team = 0, teamMember = 0;
-    team = teamOverride ? static_cast<uint32_t>(teamOverride) : g_localPlayerObj;
+    team = teamOverride ? static_cast<uint32_t>(teamOverride)
+                        : static_cast<uint32_t>(LocalPlayerObj());   // 含 ctx 链兜底
     if (!team) {                                  // 本地玩家还没抓到 → 才退回选中单位的归属
         SelIter it;
         if (SelBegin(it)) {
@@ -1496,7 +1510,7 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
     {
         uint32_t tvt = 0; SafeRead32((uintptr_t)tmpl, tvt);
         R3_LOG(0, "[召唤] 模板=%08X vtable=%08X (模块内:%s)", (unsigned)(uintptr_t)tmpl, tvt,
-               (tvt >= base && tvt < base + 0x940000) ? "是" : "否!");
+               (tvt >= base && tvt < MOD_END) ? "是" : "否!");
     }
     __try {
         for (int i = 0; i < count; ++i) {
@@ -1527,7 +1541,7 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
         SafeRead32(firstObj + 0x3A0, s3a0);
         SafeRead32(firstObj + 0x3AC, s3ac);
         R3_LOG(0, "[召唤] obj vtable=%08X (%s) body=%08X [BC]=%08X [C8]=%08X",
-               vt, (vt >= base && vt < base + 0x940000) ? "模块内 ✓" : "模块外 ✗(假对象)", body, bc, c8);
+               vt, (vt >= base && vt < MOD_END) ? "模块内 ✓" : "模块外 ✗(假对象)", body, bc, c8);
         R3_LOG(0, "[召唤] obj 状态位 390=%08X 394=%08X 3A0=%08X 3AC=%08X (%s)",
                s390, s394, s3a0, s3ac, (s390 | s394 | s3a0 | s3ac) ? "有状态 ✓" : "全 0 ✗");
         if (body) {
@@ -2016,7 +2030,7 @@ static void DiagCore() {
         else                     DiagPrintf("[诊断] 选中单位坐标: 失败");
     }
     DiagPrintf("[诊断] 本地队伍 obj=%08X id=%u  资金对象=%08X",
-           g_localPlayerObj, g_localPlayerId, g_moneyObj);
+           (unsigned)LocalPlayerObj(), g_localPlayerId, g_moneyObj);
     if (store) {
         uint32_t vt = 0; SafeRead32(store, vt);
         DiagPrintf("[诊断] ThingFactory vtable=%08X", vt);
@@ -2024,8 +2038,8 @@ static void DiagCore() {
     // 试用一个已知哈希（青龙战斗核心 0xC33C66E7）
     void* t = FindTemplate(0xC33C66E7u);
     DiagPrintf("[诊断] Find(0xC33C66E7) = %08X", (unsigned)(uintptr_t)t);
-    if (g_localPlayerObj) {
-        uint32_t tm = 0; SafeRead32(g_localPlayerObj + 0x10, tm);
+    if (LocalPlayerObj()) {
+        uint32_t tm = 0; SafeRead32((uint32_t)LocalPlayerObj() + 0x10, tm);
         DiagPrintf("[诊断] 队伍+0x10 = %08X", tm);
     }
     {
@@ -2084,8 +2098,10 @@ const char* BuildableLastError() { return g_baErr[0] ? g_baErr : "ok"; }
 
 int BuildableAt(float x, float y, float z, uint32_t tmplHash, float angle, uint32_t options) {
     g_baErr[0] = 0;
-    constexpr uint32_t R_BA_SLOT   = 0x8DBBCC;   // TheBuildAssistant 全局槽
-    constexpr uint32_t R_BA_LEGAL  = 0x1535F0;   // isLocationLegalToBuild
+    // 零售 1.12 / Steam TUC 1.12 两套值（后者由 AOB 唯一命中 + 引用指纹配对定位，
+    // 槽 = 135 处 `mov ecx,[abs]` 引用指纹唯一匹配）
+    const uint32_t R_BA_SLOT   = IsSteamBuild() ? 0x8E0D6C : 0x8DBBCC;   // TheBuildAssistant 全局槽
+    const uint32_t R_BA_LEGAL  = IsSteamBuild() ? 0x194C20 : 0x1535F0;   // isLocationLegalToBuild
     // AOB 预检：sub esp,0x12c; push ebx; push ebp; push esi; push edi
     static const uint8_t kPro[] = { 0x81,0xEC,0x2C,0x01,0x00,0x00,0x53,0x55,0x56,0x57 };
 
@@ -2578,7 +2594,7 @@ int SelectedDiagText(char* buf, int n) {
         SafeRead32(thing + 4, tmpl);               // +0x04 = 对象模板指针
         if (tmpl) SafeRead32(tmpl + 8, hash);      // 模板 +0x08 = 类型哈希
 
-        const bool vtOk = (vt >= base && vt < base + 0x940000);
+        const bool vtOk = (vt >= base && vt < MOD_END);
         DiagAdd(buf, static_cast<size_t>(n), w,
                 "\n#%d  thing %08X   vtable %08X %s",
                 idx, (unsigned)thing, (unsigned)vt, vtOk ? "(模块内)" : "(模块外!)");

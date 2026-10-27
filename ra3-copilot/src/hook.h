@@ -4,12 +4,17 @@
 #include <cstdint>
 #include <vector>
 #include "sdk.h"
+#include "buildinfo.h"   // 构建决议与 Pick 双列取值：调用方经 hook.h 即可见
 
 namespace ra3 {
 
 // 主模块（exe）基址与大小：进程内 GetModuleHandle(NULL) + PE 头解析
 uintptr_t MainModuleBase();
 size_t    MainModuleSize();
+
+// 当前构建是否为 Steam TUC 版。识别与决议见 buildinfo.h —— 这里只是便捷谓词，
+// 读的是已决议的全局值（自动判定或玩家强制），不再自己算 SizeOfImage。
+bool IsSteamBuild();
 
 // AOB fail-closed：先读后比对，不符绝不碰
 bool VerifyBytes(uintptr_t at, const uint8_t* expect, size_t n);

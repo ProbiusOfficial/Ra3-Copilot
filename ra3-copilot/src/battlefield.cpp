@@ -11,6 +11,7 @@
 #include "battle_catalog.h"
 #include "actions.h"
 #include "features.h"
+#include "hook.h"        // IsSteamBuild：Thing vtable 按构建取
 #include "overlay.h"
 #include <windows.h>
 #include <cstdio>
@@ -30,7 +31,12 @@
 namespace ra3 {
 namespace {
 
-const uint32_t kThingVtFallback = 0x00C4DB60;   // 1.12 日冕 实测（运行时优先从选中单位推导）
+const uint32_t kThingVtFallback  = 0x00C4DB60;   // 零售 1.12 日冕 实测
+// Steam 版：vtable 内容指纹定位（tools/map_thing_vtable.py）。逐项函数重定位后，
+// [0] 与 [5] 落在 0x854BB0/0x854BC4（正好隔 5 个 dword），且 [1]==[2]、[3]==[4] 的
+// 重复模式与 [8]=0xFFFFFFFC / [9]=0x490 的元数据都与零售同构。
+const uint32_t kThingVtFallbackS = 0x00C54BB0;
+inline uint32_t VtFallback() { return ::ra3::IsSteamBuild() ? kThingVtFallbackS : kThingVtFallback; }
 const int      kMaxOwners = 24;
 const int      kMaxStacks = 48;                 // 每个 owner 记录的种类上限
 const int      kMaxThings = 40000;              // 单次扫描收集的候选上限
@@ -118,7 +124,7 @@ uint32_t DeriveThingVt() {
             && Rd32(d + 0x418, owner) && LooksLikeTeam(owner))
             return vt;
     }
-    return kThingVtFallback;
+    return VtFallback();
 }
 
 // 找一个对齐 dword 序列：返回命中地址数（写入 g_hits）
@@ -205,10 +211,10 @@ bool ScanBattlefield(BattleSummary* out, bool fresh) {
     CollectThings(vt);
     // 命中数兜底：候选 vtable 若是错的（典型：选中了刚召唤出来的半初始化单位），
     //   命中数会从数千暴跌到几十 → 用已知常量重扫，取命中更多的那个。
-    if (vt != kThingVtFallback && g_nHits < 200) {
+    if (vt != VtFallback() && g_nHits < 200) {
         const int a = g_nHits;
-        CollectThings(kThingVtFallback);
-        if (g_nHits > a) vt = kThingVtFallback;
+        CollectThings(VtFallback());
+        if (g_nHits > a) vt = VtFallback();
     }
     g_thingVt = vt;
 
@@ -452,7 +458,7 @@ void BattlefieldPump() {
     ScanBattlefield(&s, false);         // 走 TTL：请求再密也不会比 3s 更频繁地真扫
 }
 
-uint32_t BattleThingVtable() { return g_thingVt ? g_thingVt : kThingVtFallback; }
+uint32_t BattleThingVtable() { return g_thingVt ? g_thingVt : VtFallback(); }
 const char* BattleScanNote() { return g_note; }
 
 } // namespace ra3

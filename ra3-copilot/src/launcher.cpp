@@ -23,6 +23,7 @@
 #include <cctype>
 #include <algorithm>
 #include "injectcore.h"
+#include "buildinfo.h"
 #include "resource.h"
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
@@ -45,7 +46,7 @@ namespace {
 
 const wchar_t* const kWindowClass = L"Ra3CopilotLauncher";
 const wchar_t* const kAppName = L"Ra3-Copilot";
-const wchar_t* const kVersion = L"1.3.1";
+const wchar_t* const kVersion = L"1.3.2";
 
 enum { WM_APP_WORK_DONE = WM_APP + 1 };
 enum { LOG_INFO = 0, LOG_OK, LOG_WARN, LOG_ERR };
@@ -80,6 +81,12 @@ std::wstring g_launcherPath;
 std::wstring g_configPath;
 std::wstring g_keysPath;
 std::wstring g_presetPath;
+std::wstring g_buildIniPath;    // 与局内修改器共用：DLL 注入时读同一份
+
+// 目标构建。0=自动判定 1=零售 2=Steam —— 落 ra3copilot_build.ini，
+// 切换后必须重新注入才生效（hook 的双列地址在注入那一刻取定）。
+int g_buildMode = 0;
+ra3::BuildKind g_buildDetected = ra3::BuildKind::Unknown;   // 从游戏 exe 的 PE 头读出
 
 // 呼出菜单的键（与局内修改器共用 ra3copilot_keys.ini 的 toggle= 行）。
 // 75 配列等没有 INSERT 键的键盘靠这里改 —— 局内面板打不开时，这是唯一入口。
@@ -596,6 +603,36 @@ void SaveConfig() {
     if (!g_launcherPath.empty()) WriteConfig(L"game_launcher", g_launcherPath);
 }
 
+// ===== 目标构建 =====
+// 与局内修改器共用 ra3copilot_build.ini：启动器写，DLL 注入时读，
+// 两边认同一份配置才不会出现"启动器以为走 Steam、DLL 按零售取地址"。
+void LoadBuildMode() {
+    g_buildMode = 0;
+    ra3::BuildKind force = ra3::BuildKind::Unknown;
+    if (g_buildIniPath.empty()) return;
+    if (!ra3::LoadBuildIni(g_buildIniPath.c_str(), &force)) return;
+    if (force == ra3::BuildKind::Retail) g_buildMode = 1;
+    else if (force == ra3::BuildKind::Steam) g_buildMode = 2;
+}
+
+void SaveBuildMode() {
+    if (g_buildIniPath.empty()) return;
+    const char* mode = g_buildMode == 1 ? "retail" : (g_buildMode == 2 ? "steam" : "auto");
+    ra3::SaveBuildIni(g_buildIniPath.c_str(), mode);
+}
+
+// 从游戏 exe 的 PE 头判构建。读磁盘文件而不是进程内存：游戏运行中 exe 不会被写锁，
+// 且 PE 头的 SizeOfImage 就是代码布局的判据（零售 0x93B000 / Steam 0x950000）。
+void DetectGameBuild() {
+    g_buildDetected = ra3::BuildKind::Unknown;
+    if (!g_pid) return;
+    const std::wstring p = inj::ProcessPath(g_pid);
+    if (p.empty()) return;
+    ra3::BuildProbe probe;
+    if (!ra3::ProbeFile(p.c_str(), &probe)) return;
+    g_buildDetected = ra3::ClassifyBuild(probe);
+}
+
 bool EnsureRuntime() {
     if (g_runtimeDir.empty()) {
         g_runtimeDir = Join(LocalAppData(), L"Ra3Copilot");
@@ -604,10 +641,12 @@ bool EnsureRuntime() {
     }
     g_keysPath = Join(g_runtimeDir, L"ra3copilot_keys.ini");
     g_presetPath = Join(g_runtimeDir, L"ra3copilot_preset.ini");
+    g_buildIniPath = Join(g_runtimeDir, L"ra3copilot_build.ini");
     EnsureDir(g_runtimeDir);
     EnsureDir(Join(g_runtimeDir, L"mcp"));
     if (!DirExists(g_runtimeDir)) return false;
     LoadConfig();
+    LoadBuildMode();
 
     const std::wstring oldKeys = Join(g_exeDir, L"ra3copilot_keys.ini");
     const std::wstring newKeys = Join(g_runtimeDir, L"ra3copilot_keys.ini");
@@ -776,6 +815,18 @@ void OnFolder() {
     ShellExecuteW(g_wnd, L"open", g_runtimeDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+// 一行摘要：检测值 / 玩家指定值 / 实际生效值
+std::wstring BuildLine() {
+    const ra3::BuildKind det = g_buildDetected;
+    const ra3::BuildKind eff = g_buildMode == 0
+        ? det
+        : (g_buildMode == 1 ? ra3::BuildKind::Retail : ra3::BuildKind::Steam);
+    std::wstring s = L"检测 " + FromUtf8(ra3::BuildName(det));
+    if (g_buildMode != 0) s += L"，指定 " + FromUtf8(ra3::BuildName(eff));
+    s += L"，生效 " + FromUtf8(ra3::BuildName(eff));
+    return s;
+}
+
 void RefreshStatus(bool pollHttp) {
     const DWORD pid = inj::FindGamePid();
     const bool changed = (pid != g_pid);
@@ -817,9 +868,11 @@ void RefreshStatus(bool pollHttp) {
     }
 
     if (changed) {
+        DetectGameBuild();
         if (g_pid) {
             const std::wstring p = inj::ProcessPath(g_pid);
             AppendLog(L"检测到游戏进程：" + (p.empty() ? std::wstring(L"ra3_1.12.game") : p), LOG_OK);
+            AppendLog(BuildLine(), g_buildDetected == ra3::BuildKind::Unknown ? LOG_WARN : LOG_INFO);
         } else if (!g_busy) {
             AppendLog(L"游戏已退出", LOG_INFO);
         }
@@ -1054,6 +1107,42 @@ void DrawMainPage() {
     if (ImGui::Checkbox("注入后最小化", &g_minimizeAfter)) SaveConfig();
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("注入完成后把启动器最小化，不挡游戏");
+
+    ImGui::Separator();
+    {
+        const ra3::BuildKind eff = g_buildMode == 0
+            ? g_buildDetected
+            : (g_buildMode == 1 ? ra3::BuildKind::Retail : ra3::BuildKind::Steam);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("构建");
+        ImGui::SameLine(0, 16 * s);
+        ImGui::SetNextItemWidth(118 * s);
+        const char* modes[] = { "自动判定", "零售 1.12", "Steam 1.12" };
+        if (ImGui::Combo("##build", &g_buildMode, modes, IM_ARRAYSIZE(modes))) {
+            SaveBuildMode();
+            AppendLog(std::wstring(L"目标构建 → ") + FromUtf8(ra3::BuildName(eff)), LOG_INFO);
+            if (g_loaded) AppendLog(L"构建切换需重新注入才生效：点「重载」", LOG_WARN);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("自动判定读游戏 exe 的 PE 头（SizeOfImage）区分零售 / Steam。\n"
+                              "两份二进制版本号相同、代码布局不同，取错会 patch 到无关指令上。\n"
+                              "切换后需重新注入，局内修改器每次注入都重读这份配置。");
+        ImGui::SameLine(0, 12 * s);
+        ImGui::AlignTextToFramePadding();
+        const char* det = !g_pid
+            ? "游戏未运行"
+            : (g_buildDetected == ra3::BuildKind::Unknown
+                   ? "无法识别"
+                   : ra3::BuildName(g_buildDetected));
+        if (g_buildMode != 0 && g_pid && g_buildDetected != ra3::BuildKind::Unknown &&
+            eff != g_buildDetected) {
+            ImGui::TextColored(kWarn, "检测 %s · 与指定不符", det);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("照旧注入：各 hook 会逐条做 AOB 字节校验，不符即跳过，不会写错字节。");
+        } else {
+            ImGui::TextDisabled("检测 %s", det);
+        }
+    }
 
     ImGui::Separator();
     DrawLogPanel();

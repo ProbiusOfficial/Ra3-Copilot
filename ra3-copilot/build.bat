@@ -59,7 +59,7 @@ if errorlevel 1 (
 
 echo [3/5] Building ra3copilot.dll
 cl /nologo /O2 /MT /EHsc /W3 /utf-8 /LD /Fe:build_out\ra3copilot.dll ^
-    src\dllmain.cpp src\overlay.cpp src\features.cpp src\actions.cpp src\protocol.cpp src\battlefield.cpp src\aicmd.cpp src\symres.cpp src\hook.cpp src\httpapi.cpp src\scriptobj.cpp src\scripttable.cpp src\big4.cpp src\refpack.cpp src\maptbl.cpp stubs.obj ^
+    src\dllmain.cpp src\overlay.cpp src\features.cpp src\actions.cpp src\protocol.cpp src\battlefield.cpp src\aicmd.cpp src\symres.cpp src\hook.cpp src\httpapi.cpp src\scriptobj.cpp src\scripttable.cpp src\big4.cpp src\refpack.cpp src\maptbl.cpp src\buildinfo.cpp stubs.obj ^
     obj_mh\buffer.obj obj_mh\hook.obj obj_mh\trampoline.obj obj_mh\hde32.obj ^
     imgui\imgui.cpp imgui\imgui_draw.cpp imgui\imgui_tables.cpp imgui\imgui_widgets.cpp ^
     imgui\backends\imgui_impl_dx9.cpp imgui\backends\imgui_impl_win32.cpp ^
@@ -84,7 +84,7 @@ if errorlevel 1 (
     exit /b 1
 )
 cl /nologo /O2 /MT /EHsc /W3 /utf-8 /DUNICODE /D_UNICODE ^
-    /Fe:build_out\Ra3Copilot.exe src\launcher.cpp src\injectcore.cpp build_out\launcher.res ^
+    /Fe:build_out\Ra3Copilot.exe src\launcher.cpp src\injectcore.cpp src\buildinfo.cpp build_out\launcher.res ^
     imgui\imgui.cpp imgui\imgui_draw.cpp imgui\imgui_tables.cpp imgui\imgui_widgets.cpp ^
     imgui\backends\imgui_impl_dx9.cpp imgui\backends\imgui_impl_win32.cpp ^
     /I src /I res /I imgui /I imgui\backends ^

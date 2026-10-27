@@ -2073,31 +2073,101 @@ void Handle(SOCKET c, char* req) {
                          nOk, nMiss);
         HttpSend(c, ob, (int)w);
         return;
+    } else if (strcmp(path, "/btnprobe") == 0) {
+        // 0x1C 探针结果：建造页按钮对象指针清单（去重）。配合 /read 读 +0x18(Template) /
+        // +0x1C / +0x3D(enabled 位)，用来判定「灰」到底由哪一层写下去。
+        static char pb[2048];
+        size_t w = 0;
+        const uint32_t n = g_bpCount > 64 ? 64 : g_bpCount;
+        w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "btnprobe on=%d n=%u\n",
+                         GetFeature(0x1C) ? 1 : 0, n);
+        for (uint32_t i = 0; i < n && w + 40 < sizeof(pb); i++)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE, "  [%2u] %08X\n", i, g_bpBuf[i]);
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
     } else if (strcmp(path, "/buildext") == 0) {
         // 战役建造页补全扩展建筑（g_flags[0x1D]）状态 + 建造者类 CommandSet 摘要。
         // 首次调用会触发一次全内存扫描（数百 ms），结果按局缓存。
         static char pb[4096];
         static uint32_t dump[512];
         size_t w = 0;
+        // ?apply=1 才真写内存；默认演练（只记账），防止候选选错直接写坏游戏对象
+        {
+            char ab[8];
+            if (GetParam(query, "apply", ab, sizeof(ab))) g_extApply = (ab[0] == '1');
+        }
+        // ?fixone=0x0DCCDCD0：只修这一个 cs（逐步验证用，崩了也只影响这一处）
+        {
+            char cb[16];
+            if (GetParam(query, "fixone", cb, sizeof(cb))) {
+                const uint32_t one = (uint32_t)strtoul(cb, nullptr, 0);
+                g_extApply = true;
+                const uint32_t r = Ra3BuildExtFix(one);
+                w += _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                                 "fixone cs=%08X -> %s (%08X) | 生效=%u 演练=%u\n",
+                                 one, r ? "已替换" : "未替换", r, g_extFixCount, g_extDryCount);
+                HttpSend(c, pb, (int)strlen(pb));
+                return;
+            }
+        }
         // ?fixall=1：立刻对内存里所有建造者 cs 跑一次修正（诊断用，不依赖建造页构建时机）
         if (GetParamInt(query, "fixall", 0)) {
             uint32_t ch = BuildExtFixAll();
-            w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "fixall changed=%u | 生效=%u 最近 cs=%08X -> inner=%08X\n",
-                             ch, g_extFixCount, g_extLastCs, g_extLastDst);
+            w += _snprintf_s(pb, sizeof(pb), _TRUNCATE, "fixall changed=%u | 生效=%u 演练=%u 最近 cs=%08X -> inner=%08X\n",
+                             ch, g_extFixCount, g_extDryCount, g_extLastCs, g_extLastDst);
             HttpSend(c, pb, (int)strlen(pb));
             return;
         }
+        // ?repl=0xCS：手动对单个 cs 跑一次「换句柄」匹配（不写内存），用于定位匹配失败
+        {
+            char db[16];
+            if (GetParam(query, "repl", db, sizeof(db))) {
+                const uint32_t one = (uint32_t)strtoul(db, nullptr, 0);
+                const uint32_t r = ReplaceBuildExtCs(one);
+                w += _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                                 "repl cs=%08X -> %08X %s | 调用=%u 生效=%u 最近 %08X -> %08X\n",
+                                 one, r, (r != one) ? "已换" : "未换（同族完整版没匹配上，或它本身已是完整版）",
+                                 g_extCallCount, g_extFixCount, g_extLastCs, g_extLastDst);
+                HttpSend(c, pb, (int)strlen(pb));
+                return;
+            }
+        }
+        // ?btnreal=1 才真调 setEnabled；默认只计数（0x1E 的两级开关，防再崩）
+        {
+            char rb[8];
+            if (GetParam(query, "btnreal", rb, sizeof(rb))) g_btnForceReal = (rb[0] == '1');
+        }
         uint32_t n = BuildExtDump(dump, 512);
         w += _snprintf_s(pb, sizeof(pb), _TRUNCATE,
-                         "buildext on=%d | cs=%u 建造者=%u 含扩展=%u 扫描=%ums | 生效=%u 最近 cs=%08X -> inner=%08X\n",
-                         GetFeature(FID_BUILDEXT) ? 1 : 0,
+                         "buildext on=%d apply=%d | cs=%u 建造者=%u 含扩展=%u 扫描=%ums | 生效=%u 演练=%u 最近 cs=%08X -> inner=%08X\n",
+                         GetFeature(FID_BUILDEXT) ? 1 : 0, g_extApply ? 1 : 0,
                          n >= 4 ? dump[0] : 0, n >= 4 ? dump[1] : 0,
                          n >= 4 ? dump[2] : 0, n >= 4 ? dump[3] : 0,
-                         g_extFixCount, g_extLastCs, g_extLastDst);
-        for (uint32_t i = 4; i + 3 <= n && w + 96 < sizeof(pb); i += 3) {
+                         g_extFixCount, g_extDryCount, g_extLastCs, g_extLastDst);
+        {
+            // 只读取证：最近命中的按钮对象 —— 读它的 Template(+0x18) 与启用位(+0x3D)。
+            // +0x3D=1 亮/可点，0 灰。用于判定 0x1E 到底有没有把扩展建筑放行。
+            uint32_t tpl = 0;
+            int en = -1;
+            if (g_btnLastObj) {
+                uint32_t v = 0;
+                if (RdBytes(g_btnLastObj + 0x18, &v, 4)) tpl = v;
+                uint8_t b = 0xFF;
+                if (RdBytes(g_btnLastObj + 0x3D, &b, 1)) en = (int)b;
+            }
+            char tplName[48] = "-";
+            (void)tplName;
             w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
-                             "  cs=%08X inner=%08X count=%u%s\n",
-                             dump[i], dump[i + 1], dump[i + 2] & 0xFFFFu,
+                             "btn1E on=%d real=%d 命中=%u | 最近按钮=%08X tpl=%08X hash=%08X 启用位=%d | hook调用=%u\n",
+                             GetFeature(FID_BTNENABLE) ? 1 : 0, g_btnForceReal ? 1 : 0,
+                             g_btnForceCount, g_btnLastObj, tpl, g_btnLastHash,
+                             en, g_extCallCount);
+        }
+        for (uint32_t i = 4; i + 6 <= n && w + 128 < sizeof(pb); i += 6) {
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  cs=%08X inner=%08X vt=%08X count=%u grp=%d%s\n",
+                             dump[i], dump[i + 1], dump[i + 4], dump[i + 2] & 0xFFFFu,
+                             (int)dump[i + 3],
                              (dump[i + 2] & 0x80000000u) ? "  含扩展" : "");
         }
         HttpSend(c, pb, (int)strlen(pb));

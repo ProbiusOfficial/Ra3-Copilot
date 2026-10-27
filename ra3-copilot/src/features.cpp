@@ -55,7 +55,18 @@ uint32_t g_retClanGate = 0;
 uint32_t g_retBtnProbe = 0;
 uint32_t g_retCsProbe = 0;
 uint32_t g_retBtnEnable = 0;
-uint32_t g_extFixCount = 0;   // 建造页补全扩展建筑：生效次数
+// 0x1E 的两级开关：先「只计数」确认判定与结构正确，再放行真正的 setEnabled。
+// 这样即使命中逻辑有偏差也不会改坏按钮对象 —— 前四次崩溃就是没分这两步。
+uint32_t g_btnForceCount = 0;   // 命中扩展建筑模板的累计次数（演练也记）
+uint32_t g_btnForceReal  = 0;   // 0 = 只计数（安全）；1 = 真调 setEnabled
+uint32_t g_btnLastObj    = 0;   // 最近命中的按钮对象（只读取证：验 +0x18/+0x3D）
+uint32_t g_btnLastHash   = 0;   // 最近命中的模板哈希（只读取证）
+uint32_t g_retBuildability = 0; // Buildability hook 跳回点（站 + 8）
+uint32_t g_retSetDis = 0;       // setDisabled hook 跳回点（站 + 5）
+uint32_t g_extCallCount = 0;    // BuildExtCs hook 被调用次数（进局构建建造页时触发）
+uint32_t g_extFixCount = 0;   // 建造页补全扩展建筑：生效次数（真写）
+uint32_t g_extDryCount = 0;   // 演练：本会替换、但没写内存的次数
+bool     g_extApply    = false;  // 默认演练（只报告）；显式 /buildext?apply=1 才真写
 uint32_t g_extLastCs   = 0;   // 最近一次被修正的 CommandSet
 uint32_t g_extLastDst  = 0;   // 换到的 inner（= 扩展完整版）
 uint32_t g_extScanMs   = 0;   // 全内存扫描耗时（ms）
@@ -71,6 +82,13 @@ uint32_t g_retEnemyCantBuild = 0, g_retSuperPower = 0, g_retDisableAllSP = 0;
 uint32_t g_retZoom = 0, g_retOneKill = 0, g_retOKData1 = 0, g_retOKData2 = 0;
 uint32_t g_retZoomPost = 0;
 uint32_t g_retZoomEntry = 0;
+uint32_t g_retBuildExtCs = 0;            // BuildExtCsStub 的跳回点（site + 8）
+uint32_t g_extReplaceFn  = 0;            // → ra3::ReplaceBuildExtCs（InstallHooks 里赋值）
+// stub 里需要"绝对地址"的三处：两个构建不一致，运行期按 IsSteamBuild() 覆写
+uint32_t g_buildVer      = 0;            // 0 = 零售 1.12，1 = Steam TUC 1.12
+uint32_t g_zoomEntrySrc  = 0x00CDB750;   // ZoomEntry 原指令 mov eax,[abs] 的 abs
+uint32_t g_lockProbeCall = 0x00AD9EC0;   // 技能锁定探针 call 的目标
+uint32_t g_btnSetEnabled = 0;             // 建造按钮 setEnabled(true)，InstallHooks 里按构建填 VA（0=未就绪）
 }
 
 // ---- overlay 侧遥测 ----
@@ -109,6 +127,8 @@ const uint8_t AOB_PROTOCLICK[7] = { 0x8B,0x46,0x14, 0x85,0xC0, 0x74,0x39 };
 const uint8_t AOB_ZOOM[7]     = { 0xF3,0x0F,0x11,0x46,0x44,0x74,0x39 };
 const uint8_t AOB_ZOOMPOST[11] = { 0x88,0x9E,0x54,0x26,0x00,0x00,0xE8,0xB8,0xEA,0xFF,0xFF };
 const uint8_t AOB_ZOOMENTRY[14] = { 0xA1,0x50,0xB7,0xCD,0x00,0x53,0x33,0xDB,0x38,0x98,0xBC,0x00,0x00,0x00 };
+// Steam TUC 版同一函数：mov eax,[0xCE08F0]（零售是 [0xCDB750]，绝对地址随布局变）
+const uint8_t AOB_ZOOMENTRY_STEAM[14] = { 0xA1,0xF0,0x08,0xCE,0x00,0x53,0x33,0xDB,0x38,0x98,0xBC,0x00,0x00,0x00 };
 const uint8_t AOB_ONEKILL[7]  = { 0xF3,0x0F,0x11,0x46,0x04,0x74,0x20 };
 const uint8_t AOB_OKDATA1[8]  = { 0x8B,0x8E,0x3C,0x03,0x00,0x00,0x8B,0x95 };
 const uint8_t AOB_OKDATA2[10] = { 0x8B,0x89,0x3C,0x03,0x00,0x00,0x85,0xC9,0x74,0x0C };
@@ -140,11 +160,19 @@ const uint8_t AOB_CMDSET[8] = { 0x8B,0xD8, 0x85,0xDB, 0x89,0x5C,0x24,0x18 };
 //   返回 0 → 调 0xAB7040(setDisabled) 画灰；返回 1 → 调 0xAB7000(setEnabled)。
 // 桩在入口对扩展建筑直接 setEnabled(true) 并返回，绕开整条判定链。
 // 重放 6 字节 = sub esp,8 / push esi / mov esi,ecx，边界在 +6（call 0xABB360）。
+// Buildability(Player*,Template*) 入口 8 字节（到 mov edi,ecx 之前）：两版逐字节相同
+// setDisabled 入口 10 字节（两版逐字节相同，全 exe 唯一；只 patch 前 5 字节）
+const uint8_t AOB_SETDIS[10] = { 0x80,0x79,0x3D,0x00, 0x56, 0x8D,0x71,0x08, 0x74,0x0F };
+const uint8_t AOB_BUILDABLE[8] = { 0x56, 0x8B,0x74,0x24,0x08, 0x85,0xF6, 0x57 };
 const uint8_t AOB_BTNENABLE[11] = { 0x83,0xEC,0x08, 0x56, 0x8B,0xF1, 0xE8,0x65,0xFC,0xFF,0xFF };
+// 建造页构建器里「拿到 CommandSet 句柄」那三条指令（两版字节相同，各 3 处命中，按 RVA 校验定位）：
+//   mov ebx,eax / test ebx,ebx / mov [esp+18h],ebx
+const uint8_t AOB_BUILDEXT_CS[8] = { 0x8B,0xD8, 0x85,0xDB, 0x89,0x5C,0x24,0x18 };
 
 struct HookDef {
     const char*    name;
-    uint32_t       rva;
+    uint32_t       rva;         // 零售 1.12（SizeOfImage 0x93B000）
+    uint32_t       rvaSteam;    // Steam TUC 1.12（SizeOfImage 0x950000）；0 = 该构建不装
     const uint8_t* aob;
     uint32_t       aobLen;
     void*          stub;
@@ -152,32 +180,48 @@ struct HookDef {
     uint32_t       replayLen;   // 需重放的完整指令字节数（= 跳回偏移）
 };
 
+// 当前构建下该 hook 的站点 RVA（0 = 不适用）
+inline uint32_t SiteRva(const HookDef& h) {
+    return IsSteamBuild() ? h.rvaSteam : h.rva;
+}
+
+// 校验/回写用的 AOB：默认两构建共用；个别站点的签名里自带绝对地址，需按构建换
+inline const uint8_t* AobFor(const HookDef& h) {
+    if (IsSteamBuild() && h.aob == AOB_ZOOMENTRY) return AOB_ZOOMENTRY_STEAM;
+    return h.aob;
+}
+
+// 第三列 = Steam TUC 1.12 版 RVA（重新编译的同版本二进制，布局整体错位）。
+// 定位方法见 tools/map_steam_rva.py（AOB 候选 + capstone 指令指纹比对），
+// 每个站点均校验 replayLen 落在指令边界上；0 = 该构建无对应站点，跳过不装。
 const HookDef kHooks[] = {
-    { "PlayerID",   0x0FF95B, AOB_PLAYERID,  6, (void*)&PlayerIdCaveStub,   &g_retPlayerId,    6 },
-    { "Money",      0x6CFDFE, AOB_MONEY,     5, (void*)&MoneyCaveStub,      &g_retMoney,       5 },
-    { "Power",      0x6CFD0D, AOB_POWER,     9, (void*)&PowerCaveStub,      &g_retPower,       9 },
-    { "SCPoint",    0x6CFE6C, AOB_SCPOINT,   6, (void*)&SCPointCaveStub,    &g_retSCPoint,     6 },
-    { "HaveAllSC",  0x6CFEB5, AOB_HAVEALLSC, 5, (void*)&HaveAllSCCaveStub,  &g_retHaveAllSC,   5 },
-    { "FastBuild1", 0x30F42E, AOB_FASTBUILD1,5, (void*)&FastBuild1CaveStub, &g_retFastBuild1,  5 },
-    { "FastBuild2", 0x30F38C, AOB_FASTBUILD2,6, (void*)&FastBuild2CaveStub, &g_retFastBuild2,  6 },
-    { "FastBuild3", 0x2F6CFF, AOB_FASTBUILD3,6, (void*)&FastBuild3CaveStub, &g_retFastBuild3,  6 },
-    { "Map",        0x3C226C, AOB_MAP,       8, (void*)&MapCaveStub,        &g_retMap,         8 },
-    { "UnitAmmo",   0x128735, AOB_UNITAMMO,  5, (void*)&UnitAmmoCaveStub,   &g_retUnitAmmo,    5 },
-    { "DangerLevel",0x438ED0, AOB_DANGER,    6, (void*)&DangerLevelCaveStub,&g_retDangerLevel, 6 },
-    { "OreMine",    0x2D4933, AOB_OREMINE,   6, (void*)&OreMineCaveStub,    &g_retOreMine,     6 },
-    { "GodMode",    0x12EEDF, AOB_GODMODE,   5, (void*)&GodModeCaveStub,    &g_retGodMode,     5 },
-    { "EnemyCantBuild",0x30F530,AOB_ENEMYBUILD,5,(void*)&EnemyCantBuildCaveStub,&g_retEnemyCantBuild,5 },
-    { "SuperPower", 0x2EBB69, AOB_SUPERPOWER,6, (void*)&SuperPowerCaveStub,  &g_retSuperPower,  6 },
-    { "DisableAllSP",0x43ECA6,AOB_DISABLEALLSP,6,(void*)&DisableAllSPCaveStub,&g_retDisableAllSP,6 },
-    { "ProtoAll",   0x69A9B3,AOB_PROTOALL,    6,(void*)&ProtoAllCaveStub,   &g_retProtoAll,   5 },
-    { "ProtoClick", 0x69AB03,AOB_PROTOCLICK,  7,(void*)&ProtoClickCaveStub, &g_retProtoClick, 5 },
-    { "Zoom",       0x1EC7CD, AOB_ZOOM,    7, (void*)&ZoomCaveStub,       &g_retZoom,    5 },
-    { "ZoomPost",   0x1EC82D, AOB_ZOOMPOST,11,(void*)&ZoomPostStub,       &g_retZoomPost,6 },
-    { "ZoomEntry",  0x1EC730, AOB_ZOOMENTRY,14,(void*)&ZoomEntryStub,     &g_retZoomEntry,5 },
-    { "OneKill",    0x3651AE, AOB_ONEKILL, 7, (void*)&OneKillCaveStub,    &g_retOneKill, 5 },
-    { "OKData1",    0x3FE714, AOB_OKDATA1, 8, (void*)&OKData1CaveStub,    &g_retOKData1, 6 },
-    { "OKData2",    0x2E24E3, AOB_OKDATA2, 10,(void*)&OKData2CaveStub,    &g_retOKData2, 6 },
-    { "PowerLockProbe",0x67E9AB,AOB_LOCKPROBE, 5,(void*)&LockProbeCaveStub, &g_retLockProbe, 5 },   // VA 0xA7E9AB - 0x400000
+    { "PlayerID",   0x0FF95B, 0x14119B, AOB_PLAYERID,  6, (void*)&PlayerIdCaveStub,   &g_retPlayerId,    6 },
+    { "Money",      0x6CFDFE, 0x664E9E, AOB_MONEY,     5, (void*)&MoneyCaveStub,      &g_retMoney,       5 },
+    { "Power",      0x6CFD0D, 0x664DAD, AOB_POWER,     9, (void*)&PowerCaveStub,      &g_retPower,       9 },
+    { "SCPoint",    0x6CFE6C, 0x664F0C, AOB_SCPOINT,   6, (void*)&SCPointCaveStub,    &g_retSCPoint,     6 },
+    { "HaveAllSC",  0x6CFEB5, 0x664F55, AOB_HAVEALLSC, 5, (void*)&HaveAllSCCaveStub,  &g_retHaveAllSC,   5 },
+    { "FastBuild1", 0x30F42E, 0x34D81E, AOB_FASTBUILD1,5, (void*)&FastBuild1CaveStub, &g_retFastBuild1,  5 },
+    { "FastBuild2", 0x30F38C, 0x34D77C, AOB_FASTBUILD2,6, (void*)&FastBuild2CaveStub, &g_retFastBuild2,  6 },
+    { "FastBuild3", 0x2F6CFF, 0x33511F, AOB_FASTBUILD3,6, (void*)&FastBuild3CaveStub, &g_retFastBuild3,  6 },
+    { "Map",        0x3C226C, 0x4005BC, AOB_MAP,       8, (void*)&MapCaveStub,        &g_retMap,         8 },
+    { "UnitAmmo",   0x128735, 0x169D85, AOB_UNITAMMO,  5, (void*)&UnitAmmoCaveStub,   &g_retUnitAmmo,    5 },
+    { "DangerLevel",0x438ED0, 0x477070, AOB_DANGER,    6, (void*)&DangerLevelCaveStub,&g_retDangerLevel, 6 },
+    { "OreMine",    0x2D4933, 0x312EB3, AOB_OREMINE,   6, (void*)&OreMineCaveStub,    &g_retOreMine,     6 },
+    { "GodMode",    0x12EEDF, 0x1705DF, AOB_GODMODE,   5, (void*)&GodModeCaveStub,    &g_retGodMode,     5 },
+    { "EnemyCantBuild",0x30F530,0x34D920,AOB_ENEMYBUILD,5,(void*)&EnemyCantBuildCaveStub,&g_retEnemyCantBuild,5 },
+    { "SuperPower", 0x2EBB69, 0x329F19, AOB_SUPERPOWER,6, (void*)&SuperPowerCaveStub,  &g_retSuperPower,  6 },
+    { "DisableAllSP",0x43ECA6,0x47CC16, AOB_DISABLEALLSP,6,(void*)&DisableAllSPCaveStub,&g_retDisableAllSP,6 },
+    { "ProtoAll",   0x69A9B3, 0x62F473, AOB_PROTOALL,    6,(void*)&ProtoAllCaveStub,   &g_retProtoAll,   5 },
+    { "ProtoClick", 0x69AB03, 0x62F5C3, AOB_PROTOCLICK,  7,(void*)&ProtoClickCaveStub, &g_retProtoClick, 5 },
+    { "Zoom",       0x1EC7CD, 0x22B82D, AOB_ZOOM,    7, (void*)&ZoomCaveStub,       &g_retZoom,    5 },
+    { "ZoomPost",   0x1EC82D, 0x22B88D, AOB_ZOOMPOST,11,(void*)&ZoomPostStub,       &g_retZoomPost,6 },
+    { "ZoomEntry",  0x1EC730, 0x22B790, AOB_ZOOMENTRY,14,(void*)&ZoomEntryStub,     &g_retZoomEntry,5 },
+    { "OneKill",    0x3651AE, 0x3A366E, AOB_ONEKILL, 7, (void*)&OneKillCaveStub,    &g_retOneKill, 5 },
+    { "OKData1",    0x3FE714, 0x43C964, AOB_OKDATA1, 8, (void*)&OKData1CaveStub,    &g_retOKData1, 6 },
+    { "OKData2",    0x2E24E3, 0x320963, AOB_OKDATA2, 10,(void*)&OKData2CaveStub,    &g_retOKData2, 6 },
+    // Steam 版未定位：签名是纯 rel32（call 目标随布局变），需先解出目标函数新地址再构造签名。
+    // 探针性质、默认关，跳过不影响任何功能。
+    { "PowerLockProbe",0x67E9AB,0x000000,AOB_LOCKPROBE, 5,(void*)&LockProbeCaveStub, &g_retLockProbe, 5 },
     // ✗ 已撤（2026-10-22 10:42 崩溃根因）：replayLen=4 < 5 字节 patch，跳回 site+4 正好落在
     //   E9 的第 5 字节上 → 指令错位 → ecx 不是 [0xCE2FB8] → call 0x20C4A0 的 this 是垃圾
     //   → [esi+0x28] 野指针 → 0x20C4FB c0000005。且两局实测 n=0（黑锁不走这条），无诊断价值。
@@ -186,11 +230,28 @@ const HookDef kHooks[] = {
     // ✗ 已撤：0x6C5D90 是通用 tooltip 构造器（不止禁用原因），抓到的是鼠标悬停的任意按钮
     //   （本局抓到 SovietRefinery，玩家已有 2 个），锁格并不走这里。
     // { "BuildTip",   0x6C5D90, AOB_BUILDTIP,   10,(void*)&BuildTipCaveStub,  &g_retBuildTip,   6 },
-    { "Science",    0x4451F0, AOB_SCIENCE,    11,(void*)&ScienceCaveStub,   &g_retScience,    6 }, // 建造前置科技判定（可强开，默认关）
-    { "ClanGate",   0x43EA70, AOB_CLANGATE,   10,(void*)&ClanGateCaveStub,  &g_retClanGate,  10 }, // 可用对象集合判定（0x1B，默认关）
-    { "BuildBtn",   0x6B7070, AOB_BTNPROBE,   10,(void*)&BuildBtnProbeCaveStub, &g_retBtnProbe, 5 }, // 建造页按钮对象探针（0x1C，默认关；VA 0xAB7070）
-    { "CmdSet",     0x6CB352, AOB_CMDSET,      8,(void*)&CommandSetProbeCaveStub, &g_retCsProbe, 8 }, // CommandSet 探针（0x1C，默认关；VA 0xACB352）
-    { "BtnEnable",  0x6BB6F0, AOB_BTNENABLE,  11,(void*)&BtnEnableCaveStub, &g_retBtnEnable, 6 }, // 扩展建筑按钮强制可用（0x1E，默认关；VA 0xABB6F0）
+    { "Science",    0x4451F0, 0x483260, AOB_SCIENCE,    11,(void*)&ScienceCaveStub,   &g_retScience,    6 }, // 建造前置科技判定（可强开，默认关）
+    { "ClanGate",   0x43EA70, 0x47C9E0, AOB_CLANGATE,   10,(void*)&ClanGateCaveStub,  &g_retClanGate,  10 }, // 可用对象集合判定（0x1B，默认关）
+    { "BuildBtn",   0x6B7070, 0x64BCF0, AOB_BTNPROBE,   10,(void*)&BuildBtnProbeCaveStub, &g_retBtnProbe, 5 }, // 建造页按钮对象探针（0x1C，默认关）
+    { "CmdSet",     0x6CB352, 0x000000, AOB_CMDSET,      8,(void*)&CommandSetProbeCaveStub, &g_retCsProbe, 8 }, // CommandSet 探针（0x1C，默认关）
+    //   ⚠ Steam 版此站让给 BuildExtCs：两者同址（Steam 0x662422），抢同一 8 字节会互相覆盖。
+    //     零售仍走这条（旧路径=改 cs+4，已被实机验证）；Steam 走「换句柄」。
+    // ⛔ BtnEnable 站点两版一律不装（=0）：它靠「手动调 setEnabled」改按钮状态，
+    //    Steam 上 setEnabled 内部还有两层虚调用，17:25 实测把栈弹坏（EIP 落到栈上、EBP=0x206）。
+    //    0x1E 已改到 Buildability 层实现（见 Buildable 项），走游戏自己的 UI 流程。
+    { "BtnEnable",  0x000000, 0x000000, AOB_BTNENABLE,  11,(void*)&BtnEnableCaveStub, &g_retBtnEnable, 6 },
+    // 建造页灰/亮唯一门：Buildability(Player*, Template*) —— 只对扩展建筑放行
+    { "Buildable",  0x445250, 0x4832C0, AOB_BUILDABLE,   8,(void*)&BuildableCaveStub, &g_retBuildability, 8 },
+    // 0x1E 的正解：setDisabled 入口把「扩展建筑」改走 setEnabled（jmp，栈平衡）
+    { "SetDisable", 0x6B7040, 0x64BCC0, AOB_SETDIS,     10,(void*)&SetDisCaveStub, &g_retSetDis, 5 },
+    // 建造页构建器：eax = 查表得到的 CommandSet 句柄 → 换成同族扩展完整版句柄（0x1D）
+    // 零售 0x6CB352 / Steam 0x662422，重放 8 字节（= AOB 长度，落在指令边界上）
+    { "BuildExtCs", 0x000000, 0x662422, AOB_BUILDEXT_CS, 8, (void*)&BuildExtCsStub, &g_retBuildExtCs, 8 },
+    //   Steam 走「换句柄」：hook 构建器查表返回值，把战役版 cs 句柄换成同族完整版 —— 不写任何对象。
+    //   零售不装（=0）：那里已有 CmdSet+Ra3BuildExtFix 的旧路径（改 cs+4），实机验证过，不换。
+    //   ⚠ 2026-10-26 16:45：先前「换句柄崩」的归因**作废**。那四次崩溃的真凶是 0x1E 的 stub
+    //      命中扩展建筑时 `mov al,1; ret` 跳过按钮构造函数（见 BtnEnable 处注释），与本站点无关。
+    //      0x1E 已默认关，本路径重验中。
 };
 
 // 已装站表（卸载回写用）：InstallHooks 记录，RemoveHooks 逆操作
@@ -207,21 +268,81 @@ HookStatus InstallHooks() {
     if (!st.moduleBase || !st.moduleSize)
         return st;
 
+    // ── 诊断模式：exe 同目录存在 ra3copilot_diag.flag 时，**一个功能 hook 都不装** ──
+    // 只保留 d3d9 overlay + HTTP 端点（/buildext、/read、/peek、/objects 全是只读）。
+    // 用途：在不想让任何 patch 落地的情况下做内存取证（对局崩怕了的时候用）。
+    {
+        // 用 DLL 自身路径（不是 exe 路径）—— flag 放 ra3-copilot 目录里，绝不往游戏目录写东西
+        HMODULE hSelf = nullptr;
+        if (::GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                 reinterpret_cast<LPCSTR>(&InstallHooks), &hSelf) && hSelf) {
+            char p[MAX_PATH] = { 0 };
+            if (::GetModuleFileNameA(hSelf, p, MAX_PATH)) {
+                char* slash = strrchr(p, '\\');
+                if (slash) {
+                    *(slash + 1) = 0;
+                    strncat_s(p, sizeof(p) - strlen(p) - 1, "ra3copilot_diag.flag", _TRUNCATE);
+                    if (::GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES) {
+                        strncpy_s(st.failed, "DIAG-MODE(no functional hooks)", _TRUNCATE);
+                        return st;
+                    }
+                }
+            }
+        }
+    }
+
     // 默认开启的「建造页扩展」两项（其余开关一律默认关，与历史行为一致）：
     //   0x1D 补全扩展建筑 —— 构建器 0xACB330 只在「进对局」那一刻跑一次，
     //        必须在那之前就是开的状态；让用户进局后再去勾，100% 会错过时机。
     //   0x1E 解除灰色     —— 与 0x1D 配套，否则补出来的两格是灰的、点不动。
     // 用户在 UI 里取消勾选仍然有效（只是重注入/重开游戏后会回到默认开）。
+    // ✅ 2026-10-26 18:33 实测通过（Steam 战役苏联）：生效=2（构建期换句柄），
+    //    0x1E 命中 4700+ 次无崩溃；同一按钮 A/B 对照 —— 关=启用位0（灰）/ 开=启用位1（亮）。
     g_flags[FID_BUILDEXT]  = 1;
+    // ⛔ 0x1E 两版一律默认关（2026-10-26 16:45 定因）。
+    //    BtnEnableCaveStub 命中扩展建筑时走 be_force：调完 setEnabled 就 `mov al,1; ret`
+    //    —— 它跳过的是**建造按钮的构造函数**本身（零售 0xABB6F0 / Steam 0x650320 的
+    //    `sub esp,8; push esi; mov esi,ecx; call ...` 就是按钮对象初始化）。被跳过 ⇒
+    //    调用方拿到一个半初始化按钮对象，之后访问其字段时 EAX=0 → `call [eax+x]` →
+    //    跳到堆上执行 → c0000005，且栈已毁（WER 报 StackHash_*，崩点无法反查）。
+    //    四次崩溃（15:59 / 16:08 / 16:26 / 16:32）寄存器形态完全一致：
+    //      EAX=0 EBX=0 ECX=EBP=按钮对象 EDI=0x2B(43)，出错地址在堆、模块=?
+    //    16:32 那次 0x1D 已关仍崩 —— 因为那是扩展模式苏联局，建造页里本来就有
+    //    SovietHeavyAntiAirMissileTurret / DualPurposeCruiseMissileTurret 两个按钮，
+    //    0x1E 一看到就跳过构造。⇒ 与 0x1D 的替换逻辑无关，是 0x1E 这个 stub 写错了。
+    //    要做「强制可点」，hooks 必须挂在「按钮构造完成之后」，不能在构造入口劫持。
+    // ✅ 2026-10-26 18:33 起默认开：走的是 setDisabled 入口 `jmp setEnabled`（栈平衡、
+    //    上下文是游戏自己的），已实测 4700+ 次命中无崩溃。旧的「在 0x650320 入口手动
+    //    call setEnabled」永远不要再启用（那才是历史上连崩 6 次的路径）。
     g_flags[FID_BTNENABLE] = 1;
+
+    // stub 内联的绝对地址按构建切换。ZoomEntry 的原指令是 `mov eax,[0xCDB750]`
+    // （Steam 版为 [0xCE08F0]），读错地址会让后续 `cmp [eax+0xBC],bl` 直接空指针崩。
+    //
+    // ⛔ 2026-10-26 18:05 定因：这两个必须是**运行时绝对地址**（stub 里直接 call/jmp/mov）。
+    //    历史 bug：Steam 侧 setEnabled 写成了 RVA 0x64BC80（零售那个 0xAB7000 是 VA），
+    //    `jmp eax` 于是落到映像内 RVA 0x24BC80 那个不相干的函数上。
+    //    崩溃现场：EIP=0x64BC81 / EAX=0x64BC80 / ECX=按钮 / EBP=炮塔模板 ——
+    //    四次崩溃（15:59 / 16:08 / 16:26 / 16:32）和 17:25、18:05 全部由它导致。
+    //    统一口径：moduleBase + RVA，两个构建同一套写法，不再混用。
+    const bool steam = IsSteamBuild();
+    const uint32_t mb = static_cast<uint32_t>(st.moduleBase);
+    g_buildVer      = steam ? 1 : 0;
+    g_zoomEntrySrc  = mb + (steam ? 0x008E08F0u : 0x008DB750u);
+    g_btnSetEnabled = mb + (steam ? 0x0064BC80u : 0x006B7000u);
+    g_extReplaceFn  = reinterpret_cast<uint32_t>(&ReplaceBuildExtCs);   // BuildExtCsStub 的替换入口
+    // g_lockProbeCall 保持零售值：该站点在 Steam 版未定位，不做安装
 
     char* fp = st.failed;
     size_t remain = sizeof(st.failed);
 
     int idx = 0;
     for (const auto& h : kHooks) {
-        const uintptr_t site = st.moduleBase + h.rva;
-        if (!VerifyBytes(site, h.aob, h.aobLen)) {
+        const uint32_t siteRva = SiteRva(h);
+        if (!siteRva) { ++idx; continue; }   // 该构建无对应站点（如 Steam 版未定位的探针）
+        const uintptr_t site = st.moduleBase + siteRva;
+        if (!VerifyBytes(site, AobFor(h), h.aobLen)) {
             int n = _snprintf_s(fp, remain, _TRUNCATE, "%s ", h.name);
             if (n > 0) { fp += n; remain -= static_cast<size_t>(n); }
             ++idx;
@@ -254,8 +375,10 @@ int RemoveHooks() {
     int ok = 0;
     for (int k = 0; k < g_installedCount; ++k) {
         const HookDef& h = kHooks[g_installedIdx[k]];
-        const uintptr_t site = MainModuleBase() + h.rva;
-        if (WriteRaw(site, h.aob, 5) && VerifyBytes(site, h.aob, 5))
+        const uint32_t siteRva = SiteRva(h);
+        if (!siteRva) continue;
+        const uintptr_t site = MainModuleBase() + siteRva;
+        if (WriteRaw(site, AobFor(h), 5) && VerifyBytes(site, AobFor(h), 5))
             ++ok;
     }
     return ok;
@@ -315,15 +438,20 @@ bool GetFreeBuild() {
 // 实测：改完后摧毁对方阵营建造场，技能按钮仍为可释放态。
 static const uint8_t  kProtoUnlockOff[2] = { 0x32, 0xC0 };
 static const uint8_t  kProtoUnlockOn[2]  = { 0xB0, 0x01 };
-static const uint32_t kProtoUnlockRva    = 0x43B81B;   // VA 0x83B81B - ImageBase
+// 补丁点（零售 VA 0x83B81B / Steam VA 0x8798CB，Steam 值由其前 34 字节上下文唯一命中确认）
+constexpr uint32_t kProtoUnlockRvaRetail = 0x43B81B;
+constexpr uint32_t kProtoUnlockRvaSteam  = 0x4798CB;
+static uintptr_t ProtoUnlockSite() {
+    return MainModuleBase() + (IsSteamBuild() ? kProtoUnlockRvaSteam : kProtoUnlockRvaRetail);
+}
 
 bool GetProtoUnlock() {
-    const uintptr_t at = MainModuleBase() + kProtoUnlockRva;
+    const uintptr_t at = ProtoUnlockSite();
     return VerifyBytes(at, kProtoUnlockOn, 2);
 }
 
 bool SetProtoUnlock(bool on) {
-    const uintptr_t at = MainModuleBase() + kProtoUnlockRva;
+    const uintptr_t at = ProtoUnlockSite();
     if (!at) return false;
     const uint8_t* want   = on ? kProtoUnlockOn : kProtoUnlockOff;
     const uint8_t* expect = on ? kProtoUnlockOff : kProtoUnlockOn;
@@ -354,7 +482,11 @@ bool SetProtoUnlock(bool on) {
 // ============================================================================
 namespace {
 
-const uint32_t CS_VTABLE = 0x00BE9178;
+// CommandSet 的 vtable。Steam 版 0xBF0838 由 vtable 内容指纹定位（tools/map_thing_vtable.py）：
+// 可重定位的 [0][1][2][3][7] 五项全部落在 0x7F0838 起始的连续位置（+0/+4/+8/+0xC/+0x1C），
+// 且两版夹在中间的字符串/元数据字节（"paus" / "ed=" / "Paus" / "veEn"）完全一致 —— 双重印证。
+// 用函数而非全局常量：构建决议发生在 OverlayInit，静态初始化期读会拿到"未决议"。
+inline uint32_t CsVtable() { return ::ra3::Pick(0x00BE9178, 0x00BF0838); }
 
 // 各阵营「战役版缺、扩展版有」的额外建筑。Ra3BuildExtFix 用它判定某个 cs
 // 是否已经是完整版；Ra3IsExtTpl 用它在按钮层强制可用（BtnEnableCaveStub）。
@@ -392,6 +524,8 @@ const uint32_t MAX_HASH     = 48;
 
 struct CsNode {
     uint32_t cs, inner, count, base;
+    uint32_t innerVt;      // inner 对象的 vtable（inner+0）—— 同族判定用
+    int      grp;          // 命中的建造者签名组下标（-1 = 不是建造者）
     uint32_t nhash;
     uint32_t hash[MAX_HASH];
     bool     builder;
@@ -410,7 +544,8 @@ bool ReadCsNode(uint32_t cs, CsNode& n) {
         uint32_t base = *reinterpret_cast<const uint32_t*>(static_cast<uintptr_t>(inner + 8));
         if (cnt == 0 || cnt > MAX_HASH || base < 0x00010000) return false;
         n.cs = cs; n.inner = inner; n.count = cnt; n.base = base;
-        n.nhash = 0; n.builder = false; n.hasExt = false;
+        n.nhash = 0; n.builder = false; n.hasExt = false; n.grp = -1;
+        n.innerVt = *reinterpret_cast<const uint32_t*>(static_cast<uintptr_t>(inner));
         for (uint32_t i = 0; i < cnt; i++) {
             uint32_t def = *reinterpret_cast<const uint32_t*>(static_cast<uintptr_t>(base + i * 4));
             if (def < 0x00010000) continue;
@@ -429,7 +564,7 @@ bool ReadCsNode(uint32_t cs, CsNode& n) {
             bool f[4] = { false, false, false, false };
             for (uint32_t i = 0; i < n.nhash; i++)
                 for (int k = 0; k < 4; k++) if (n.hash[i] == SIG_BLD[g][k]) f[k] = true;
-            n.builder = f[0] && f[1] && f[2] && f[3];
+            if (f[0] && f[1] && f[2] && f[3]) { n.builder = true; n.grp = g; }
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -449,6 +584,7 @@ int FindNode(uint32_t cs) {
 void ScanRange(uintptr_t lo, uintptr_t hi) {
     if (hi > 0x7FFF0000) hi = 0x7FFF0000;
     if (lo < 0x10000) lo = 0x10000;
+    const uint32_t csVt = CsVtable();   // 循环外取一次：内层是逐 4 字节比较
     uintptr_t addr = lo;
     while (addr < hi && s_nodeN < MAX_CS_NODES) {
         MEMORY_BASIC_INFORMATION mbi;
@@ -465,7 +601,7 @@ void ScanRange(uintptr_t lo, uintptr_t hi) {
             uintptr_t e = next < hi ? next : hi;
             s = (s + 3) & ~(uintptr_t)3;
             for (uintptr_t a = s; a + 4 <= e && s_nodeN < MAX_CS_NODES; a += 4) {
-                if (*reinterpret_cast<const uint32_t*>(a) != CS_VTABLE) continue;
+                if (*reinterpret_cast<const uint32_t*>(a) != csVt) continue;
                 if (FindNode(static_cast<uint32_t>(a)) >= 0) continue;   // 已收录，去重
                 CsNode nd;
                 if (ReadCsNode(static_cast<uint32_t>(a), nd))
@@ -491,7 +627,55 @@ void ScanNear(uint32_t cs) {
     ScanRange(static_cast<uintptr_t>(cs) - 0x40000, static_cast<uintptr_t>(cs) + 0x40000);
 }
 
+// BuildExtCsStub 调用的替换函数：把「战役版建造者句柄」换成「同族扩展完整版句柄」。
+// ★ 只返回另一个已存在的句柄，**不修改任何游戏对象** —— 这是与「直接改 cs+4」的关键区别：
+//   cs 对象只有 0x10 字节（+0 外层vtable / +4 引用计数 / +8 内层vtable / +0xC inner），
+//   构造时还会把句柄注册进 manager+0x40 的 map（key = *(inner+0)+4）并调整 inner 侧引用计数。
+//   直接写 inner 会绕过这两条约束，点开建造列表时在容器路径上崩（StackHash）。
+uint32_t ReplaceCsImpl(uint32_t cs) {
+    g_extCallCount++;                              // 先记账：能区分「hook 没触发」与「匹配失败」
+    if (!g_flags[FID_BUILDEXT]) return cs;
+    if (!cs || cs < 0x00010000) return cs;
+    int idx = FindNode(cs);
+    if (idx < 0) { ScanNear(cs); idx = FindNode(cs); }
+    if (idx < 0) return cs;
+    // ★ cs 与它的 inner 常分属两个堆簇（实测 2026-10-22 战役局：战役版 cs=0x0CCC71E0，
+    //   inner=0x08E21280，而同族完整版 cs=0x08E21270 就贴在 inner 旁边）。
+    //   只扫 cs 邻域会一路扫到本簇里的中间变体，永远看不到完整版 ⇒ best 恒为空、生效=0。
+    //   所以必须再按 inner 邻域补扫一次（毫秒级；ScanRange 内部已去重）。
+    if (!s_nodes[idx].hasExt) {
+        ScanNear(s_nodes[idx].inner);
+        idx = FindNode(cs);
+        if (idx < 0) return cs;
+    }
+    const CsNode* x = &s_nodes[idx];
+    if (!x->builder || x->hasExt) return cs;       // 不是建造者，或本来就是完整版
+    const CsNode* best = nullptr;
+    for (uint32_t i = 0; i < s_nodeN; i++) {
+        const CsNode& y = s_nodes[i];
+        if (&y == x || !y.builder || !y.hasExt) continue;
+        if (y.grp != x->grp) continue;             // 必须同族（同阵营建造者签名组）
+        if (y.count < x->count) continue;
+        bool all = true;
+        for (uint32_t k = 0; k < x->nhash && all; k++) {
+            bool found = false;
+            for (uint32_t m = 0; m < y.nhash; m++)
+                if (y.hash[m] == x->hash[k]) { found = true; break; }
+            if (!found) all = false;
+        }
+        if (all && (!best || y.count > best->count)) best = &y;
+    }
+    if (!best) return cs;
+    g_extFixCount++;
+    g_extLastCs  = cs;
+    g_extLastDst = best->cs;                        // 采纳的是完整版的「句柄」，不是 inner
+    return best->cs;
+}
+
 }  // namespace
+
+// 给 InstallHooks 取址用（namespace 内的实现不能跨作用域取址）
+uint32_t ReplaceBuildExtCs(uint32_t cs) { return ReplaceCsImpl(cs); }
 
 uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries) {
     if (!s_fullScanned) ScanAllMemory();
@@ -506,11 +690,14 @@ uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries) {
         out[n++] = ext;
         out[n++] = g_extScanMs;
     }
-    for (uint32_t i = 0; i < s_nodeN && n + 3 <= maxEntries; i++) {
+    for (uint32_t i = 0; i < s_nodeN && n + 6 <= maxEntries; i++) {
         if (!s_nodes[i].builder) continue;
         out[n++] = s_nodes[i].cs;
         out[n++] = s_nodes[i].inner;
         out[n++] = (s_nodes[i].count & 0xFFFF) | (s_nodes[i].hasExt ? 0x80000000u : 0);
+        out[n++] = static_cast<uint32_t>(s_nodes[i].grp);   // 建造者签名组（同族判定）
+        out[n++] = s_nodes[i].innerVt;                      // inner 的 vtable（同类判定）
+        out[n++] = s_nodes[i].base;                         // 按钮定义数组基址
     }
     return n;
 }
@@ -538,6 +725,14 @@ uint32_t BuildExtFixAll() {
 
 extern "C" uint32_t Ra3BuildExtFix(uint32_t cs) {
     if (!g_flags[FID_BUILDEXT]) return 0;
+    // ⛔ Steam 版禁用（2026-10-26 两次实测崩：均 c0000005 + StackHash_2beb，栈已损坏）。
+    //   崩点固定是「点开建造列表那一刻」，说明确实命中了 CommandSet，但把 cs+4 换成
+    //   另一个对象的 inner 后，游戏按对方的 count/base 走列表时读到不兼容数据。
+    //   结论：Steam 版的 CommandSet 除了 (vtable, inner) 之外还有别的耦合（缓存引用/
+    //   类型标签），单纯换 inner 不成立。要做得先摸清 Steam 版 CommandSet 的完整结构，
+    //   在没有安全对局可崩之前不再尝试写。
+    //   扫描与演练报告（/buildext）不受影响 —— 那条路径只读不写。
+    if (IsSteamBuild()) return 0;
     if (!cs || cs < 0x00010000) return 0;
     // 先查缓存 → 再扫邻域（毫秒级）→ 最后才全内存兜底（几百 ms，罕见）
     int idx = FindNode(cs);
@@ -563,6 +758,10 @@ extern "C" uint32_t Ra3BuildExtFix(uint32_t cs) {
     for (uint32_t i = 0; i < s_nodeN; i++) {
         const CsNode& y = s_nodes[i];
         if (&y == x || !y.builder || !y.hasExt) continue;
+        // ★ 必须同族：同一个建造者签名组（SIG_BLD 的四格特征）。
+        //   ⚠ 不要用 inner+0 当"类型"判据 —— 实测它指向的是同簇的另一个对象（0x09Exxxxx 堆地址），
+        //   每个对象都不同，加这条会把所有候选筛光（演练=0）。
+        if (y.grp != x->grp) continue;
         if (y.count < x->count) continue;
         bool all = true;
         for (uint32_t k = 0; k < x->nhash && all; k++) {
@@ -574,6 +773,14 @@ extern "C" uint32_t Ra3BuildExtFix(uint32_t cs) {
         if (all && (!best || y.count > best->count)) best = &y;
     }
     if (!best) return 0;
+
+    // 演练模式：只记账，不写内存（默认走这里 —— 验证候选对不对之前不动游戏里的对象）
+    if (!g_extApply) {
+        g_extDryCount++;
+        g_extLastCs  = cs;
+        g_extLastDst = best->inner;
+        return 0;
+    }
 
     __try {
         uint32_t* p = reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(cs + 4));
@@ -597,8 +804,29 @@ bool LocalPlayerReady() {
     return g_localPlayerId != 0;
 }
 
+// 单值安全读（SEH）。static 函数而不是 lambda：lambda 里放 __try 会触发 C2712。
+static bool RdU32Safe(uint32_t at, uint32_t& out) {
+    __try {
+        out = *reinterpret_cast<const uint32_t*>(static_cast<uintptr_t>(at));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 uintptr_t LocalPlayerObj() {
-    return static_cast<uintptr_t>(g_localPlayerObj);
+    if (g_localPlayerObj) return static_cast<uintptr_t>(g_localPlayerObj);
+    // hook 没抓到时用静态链兜底：ctx = [[0xCxxxx] + 0x28]，验证方式是 [player+0x20] 必须是
+    // 合法玩家索引（0..7）且 [player+0x10] 是 team 指针。这条链在两局实测都指向同一个对象。
+    const uint32_t ctxAddr = IsSteamBuild() ? 0xCEDE2CU : 0x00CE8C9CU;
+    uint32_t ctx = 0, pl = 0, ix = 0xFFFF, team = 0;
+    if (!RdU32Safe(ctxAddr, ctx) || !ctx) return 0;
+    if (!RdU32Safe(ctx + 0x28, pl) || !pl) return 0;
+    if (!RdU32Safe(pl + 0x20, ix) || ix >= 8) return 0;
+    if (!RdU32Safe(pl + 0x10, team) || !team) return 0;
+    g_localPlayerObj = pl;         // 记住，后续不必再走这条链
+    if (!g_localPlayerId) g_localPlayerId = ix;
+    return static_cast<uintptr_t>(pl);
 }
 
 } // namespace ra3

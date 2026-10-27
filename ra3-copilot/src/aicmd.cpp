@@ -1,6 +1,7 @@
 // aicmd.cpp - P2 指挥层实现（AIUpdateInterface 直调）
 #include "aicmd.h"
 #include "actions.h"      // GameBase()
+#include "hook.h"         // IsSteamBuild：按构建取 RVA
 #include <windows.h>
 #include <cstdio>
 #include <cstdarg>
@@ -21,8 +22,12 @@ void SetErr(const char* fmt, ...) {
 }
 
 // 运行时 VA → RVA（ImageBase 0x400000，无 ASLR）。用 GameBase()+RVA 比硬编码 VA 稳。
-const uintptr_t RVA_ATTACK = 0x76E690u - 0x400000u;   // privateAttackObject
-const uintptr_t RVA_MOVE   = 0x6EFF70u - 0x400000u;   // privateMoveToPosition
+// Steam 版：privateAttackObject 0x3ACB70（入口 20 字节唯一命中）、
+//           privateMoveToPosition 0x32E320（指令骨架 18/18 全同，另一候选在 xor eax,eax 处分叉）。
+// ⚠️ ret 语义（na 栈参数个数）按原版写死在此处；重编译若改了调用约定会崩，故 /order 属"必须实测"功能。
+// 用宏而非全局常量：构建决议在 OverlayInit 完成，静态初始化期求值会拿到"未决议"。
+#define RVA_ATTACK (::ra3::Pick(0x76E690u - 0x400000u, 0x3ACB70u))
+#define RVA_MOVE   (::ra3::Pick(0x6EFF70u - 0x400000u, 0x32E320u))
 
 // OrderMoveTo 用的持久 Coord3D（游戏会读这块内存，必须是静态存储、不能是调用者栈）
 float g_moveScratch[3] = { 0, 0, 0 };

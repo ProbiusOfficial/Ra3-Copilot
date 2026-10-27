@@ -22,6 +22,7 @@
 #include "scriptobj.h"   // 战役目标表：自动识别关卡 + 一键完成目标
 #include "symres.h"
 #include "httpapi.h"
+#include "buildinfo.h"
 #include "battlefield.h"
 #include "protocol.h"
 #include "units_corona.h"
@@ -620,10 +621,17 @@ void* __fastcall HookFind(void* self, void* edx, uint32_t hash) {
 void InstallLearnHooks() {
     uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
     if (!base) return;
-    void* tgt = reinterpret_cast<void*>(base + 0x3E4230);
+    // ⚠️ 不能写死 RVA：Steam 版的重编译产物里 Find 在 0x422510（零售 0x3E4230）。
+    // 挂错地址等于把别的函数换成我们的 hook，会静默改坏游戏行为。走符号解析取。
+    uintptr_t fn = SymTmplFind();
+    if (!fn) {
+        AddLog(LOG_WARN, "[学习] Find 未解析，跳过学习 hook");
+        return;
+    }
+    void* tgt = reinterpret_cast<void*>(fn);
     if (HookFunction(tgt, reinterpret_cast<void*>(&HookFind),
                      reinterpret_cast<void**>(&g_origFind), "ThingFactory::Find(学习)"))
-        AddLog(LOG_INFO, "[学习] 已挂 Find；造一个单位就能记下创建路径");
+        AddLog(LOG_INFO, "[学习] 已挂 Find @ %08X；造一个单位就能记下创建路径", (unsigned)fn);
 }
 
 void InstallRenderHooks() {
@@ -2421,6 +2429,9 @@ void BuildUI() {
     ImGui::SetNextWindowSize(ImVec2(210, 0), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Ra3-Copilot##main", &g_pMain, ImGuiWindowFlags_AlwaysAutoResize)) {
         MarkPanelRect();
+        ImGui::TextDisabled("构建：%s%s", BuildName(GetBuild()),
+                            BuildOverridden() ? "（指定）" : "（自动）");
+        ImGui::Separator();
         ImGui::TextDisabled("面板显隐");
         ImGui::Checkbox("资源科技", &g_pRes);
         ImGui::Checkbox("单位操作", &g_pUnit);
@@ -2719,6 +2730,19 @@ const char* DllDir() {
     return dir;
 }
 
+// 构建配置与 DLL 同目录：启动器把 DLL 释放到运行目录，dev 场景就是仓库根目录。
+// 用宽字符取路径 —— 用户名含中文时窄字符路径会随代码页翻车。
+void BuildIniPathW(wchar_t* out, size_t n) {
+    if (!out || !n) return;
+    out[0] = L'\0';
+    wchar_t p[MAX_PATH] = { 0 };
+    if (!g_hSelf || !GetModuleFileNameW(g_hSelf, p, MAX_PATH)) return;
+    wchar_t* slash = wcsrchr(p, L'\\');
+    if (!slash) return;
+    slash[1] = L'\0';
+    _snwprintf_s(out, n, _TRUNCATE, L"%sra3copilot_build.ini", p);
+}
+
 int OverlayLogDump(char* buf, int n, int maxLines) {
     if (!buf || n <= 0) return 0;
     int w = 0;
@@ -2794,6 +2818,22 @@ HWND GameWindow() {
 void OverlayInit() {
     // 先装崩溃捕获（崩溃现场落盘，无视日志开关）；旧过滤器保存，卸载时还原
     g_oldFilter = SetUnhandledExceptionFilter(Ra3CrashFilter);
+
+    // 构建决议必须先于一切取值：feature 表的双列 RVA、符号解析的兜底地址、
+    // 各动作模块的 Pick 都读这个全局值。决议前 GetBuild() 恒为 Unknown，
+    // Pick() 落零售列 —— 放到后面就等于把 Steam 版按零售地址装 hook。
+    wchar_t buildIni[MAX_PATH] = { 0 };
+    BuildIniPathW(buildIni, MAX_PATH);
+    ra3::BuildProbe bp;
+    const ra3::BuildKind bk = ra3::ResolveBuildForSelf(buildIni, &bp);
+    if (bk == ra3::BuildKind::Unknown) {
+        AddLog(LOG_WARN, "未能识别的游戏构建（SizeOfImage 0x%X）：按零售地址尝试，"
+                         "各 hook 走 AOB 逐条校验，不符即跳过", bp.sizeOfImage);
+    } else {
+        AddLog(LOG_INFO, "目标构建：%s%s（SizeOfImage 0x%X）", BuildName(bk),
+               BuildOverridden() ? "，玩家指定" : "，自动判定", bp.sizeOfImage);
+    }
+
     g_hookSt = InstallHooks();
     SymInit();                          // 符号解析（特征码+结构推导，先于任何动作）
     LoadKeyBinds();                     // 快捷键绑定（读 <DLL 目录>\ra3copilot_keys.ini，缺失则用默认）

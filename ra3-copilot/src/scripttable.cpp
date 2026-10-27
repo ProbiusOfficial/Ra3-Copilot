@@ -5,6 +5,7 @@
 // 这里只按结构走。读不通就报"读不通"，绝不退化成"猜一个候选"。
 
 #include "scripttable.h"
+#include "hook.h"        // IsSteamBuild：按构建取 RVA
 
 #include <windows.h>
 #include <string.h>
@@ -15,13 +16,15 @@
 // 是唯一的全局实例指针。exe 无 ASLR，地址固定。
 // 绝对 VA 0x00CDD190 = ImageBase(0x400000) + RVA 0x8DD190。
 // 本进程无 ASLR，实际基址恒 0x400000；但仍按"模块基址 + RVA"算，换了包装/重定位也不会错。
-static const uint32_t kTheScriptEngineRva = 0x008DD190u;
+static const uint32_t kTheScriptEngineRva  = 0x008DD190u;   // 零售（VA 0xCDD190）
+static const uint32_t kTheScriptEngineRvaS = 0x008E2330u;   // Steam（VA 0xCE2330，引用指纹唯一配对）
 
 static uint32_t TheScriptEngineAddr() {
     static uint32_t s_engAddr = 0;
     if (!s_engAddr) {
         const uintptr_t base = (uintptr_t)GetModuleHandleA(nullptr);
-        s_engAddr = (uint32_t)(base + kTheScriptEngineRva);
+        const uint32_t rva = ::ra3::IsSteamBuild() ? kTheScriptEngineRvaS : kTheScriptEngineRva;
+        s_engAddr = (uint32_t)(base + rva);
     }
     return s_engAddr;
 }

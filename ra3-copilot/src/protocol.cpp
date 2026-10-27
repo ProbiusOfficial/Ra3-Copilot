@@ -1,6 +1,30 @@
 // protocol.cpp - 秘密协议：协议点 / 全协议 / 授予（实验）
 #include "protocol.h"
 #include "features.h"
+#include "hook.h"        // IsSteamBuild：按构建取 RVA
+
+// ---- 引擎侧全局（两个构建的绝对地址不同，这里是 VA 不是 RVA）----
+// Steam 值由「引用指纹唯一配对」得出，并用结构间距交叉验证：
+//   ScriptEngine 与 LuaState 槽在零售里相差 0x14，Steam 版同样是 0x231C→0x2330 = 0x14。
+// 写错这个会让 SetScriptContext 静默失败 → 所有 Lua/协议动作全部无效（不报错、只是不生效）。
+#define G_CTX         (::ra3::IsSteamBuild() ? 0xCEDE2CU  : 0x00CE8C9CU)  // 脚本 ctx
+#define G_LUAENG_SLOT (::ra3::IsSteamBuild() ? 0xCE231CU  : 0x00CDD17CU)  // LuaScriptEngine 指针槽
+#define G_SCRIPT_ENG  (::ra3::IsSteamBuild() ? 0xCE2330U  : 0x00CDD190U)  // TheScriptEngine
+
+// ---- Lua 5.x C API 段（RVA）----
+// Steam 版整段 +0x20：四个函数的入口字节在 Steam 版唯一命中，偏移完全一致
+// （gettop 0xA3D0→0xA3F0、settop 0xA3E0→0xA400、pushstr 0xA980→0xA9A0、tostring 0xA5D0→0xA5F0，
+//  连 jl 的相对位移都相同）。用错会让压栈/取栈乱写内存 —— 表现为参数串首字符被改写、调用抛异常。
+#define LUA_GETTOP  (::ra3::IsSteamBuild() ? 0x00A3F0U : 0x00A3D0U)
+#define LUA_SETTOP  (::ra3::IsSteamBuild() ? 0x00A400U : 0x00A3E0U)
+#define LUA_PUSHSTR (::ra3::IsSteamBuild() ? 0x00A9A0U : 0x00A980U)
+#define LUA_TOSTR   (::ra3::IsSteamBuild() ? 0x00A5F0U : 0x00A5D0U)
+#define LUA_TYPE    (::ra3::IsSteamBuild() ? 0x00A540U : 0x00A520U)
+
+// Upgrade 注册表查询 / team 侧函数（入口 20 字节在两版唯一命中）
+#define G_UPG_LOOKUP (::ra3::IsSteamBuild() ? 0x00186CF0U : 0x001456F0U)
+#define G_UPG_REG    (::ra3::IsSteamBuild() ? 0xCE0D90U   : 0x00CDBBF0U)  // Upgrade 注册表全局
+#define G_TEAM_FN    (::ra3::IsSteamBuild() ? 0x0048B800U : 0x0044D7C0U)
 #include "protocols_corona.h"
 #include "aicmd.h"
 
@@ -41,7 +65,7 @@ bool WrF32(uintptr_t at, float v) {
 // Thing→owner 拿到的其实就是同一个对象，但 hook 没抓到时会为空，所以这里做兜底。
 static uintptr_t RealPlayer() {
     uint32_t ctx = 0, pl = 0;
-    if (!Rd32(0x00CE8C9C, ctx) || !ctx) return 0;
+    if (!Rd32(G_CTX, ctx) || !ctx) return 0;
     if (!Rd32(ctx + 0x28, pl)) return 0;
     return pl;
 }
@@ -54,7 +78,7 @@ uintptr_t PlayerObj() {
 // LuaScriptEngine 对象 → +0x24 = lua_State*
 uintptr_t LuaState() {
     uint32_t eng = 0;
-    if (!Rd32(0x00CDD17C, eng) || !eng) return 0;
+    if (!Rd32(G_LUAENG_SLOT, eng) || !eng) return 0;
     uint32_t L = 0;
     if (!Rd32(eng + 0x24, L) || !L) return 0;
     return L;
@@ -75,14 +99,13 @@ typedef int  (__cdecl* Top_t)(uintptr_t);
 //     ebx = [edx + 0x20]               ; 玩家序号（实测 =2，与 /snapshot 一致）
 //     call 0x839170([0xCE8C9C], ebx, kind)       ; 按 序号+种类 取出参数对象
 // 旧代码写的是 +0x17D68/+0x17D70（猜的，偏移错 0x20），所以此前一直解析成 NULL。
-static constexpr uintptr_t kScriptEngine  = 0x00CDD190;
 static constexpr uintptr_t kCurPlayerOff  = 0x17D88;
 
 bool SetScriptContext() {
     const uintptr_t pl = PlayerObj();
     if (!pl) { g_lastErr = "本地玩家对象不可用（先进对局）"; return false; }
     uint32_t eng = 0;
-    if (!Rd32(kScriptEngine, eng) || !eng) { g_lastErr = "脚本引擎不可用"; return false; }
+    if (!Rd32(G_SCRIPT_ENG, eng) || !eng) { g_lastErr = "脚本引擎不可用"; return false; }
     if (!Wr32(eng + kCurPlayerOff, static_cast<uint32_t>(pl))) {
         g_lastErr = "写当前玩家上下文失败";
         return false;
@@ -93,7 +116,7 @@ bool SetScriptContext() {
 // 读回当前上下文，用于自检（0 = 没设上，<This Player> 必然解析失败）
 uintptr_t CurrentScriptPlayer() {
     uint32_t eng = 0, pl = 0;
-    if (!Rd32(kScriptEngine, eng) || !eng) return 0;
+    if (!Rd32(G_SCRIPT_ENG, eng) || !eng) return 0;
     if (!Rd32(eng + kCurPlayerOff, pl)) return 0;
     return pl;
 }
@@ -108,8 +131,8 @@ static int g_fakeStrIdx = 0;
 void PushEngineStr(uintptr_t L, const char* text) {
     typedef int  (__cdecl* Top_t)(uintptr_t);
     typedef void (__cdecl* SetTop_t)(uintptr_t, int);
-    Top_t gettop  = reinterpret_cast<Top_t>(GameBase() + 0xA3D0);
-    SetTop_t settop = reinterpret_cast<SetTop_t>(GameBase() + 0xA3E0);
+    Top_t gettop  = reinterpret_cast<Top_t>(GameBase() + LUA_GETTOP);
+    SetTop_t settop = reinterpret_cast<SetTop_t>(GameBase() + LUA_SETTOP);
     FakeEngineStr* fs = &g_fakeStr[g_fakeStrIdx = (g_fakeStrIdx + 1) & 15];
     fs->a = 0; fs->b = 0; fs->len = static_cast<uint32_t>(strlen(text)); fs->p = text;
     const int n = gettop(L);
@@ -132,11 +155,11 @@ int LuaPushAndCall(uintptr_t fnaddr, const char* const* strs, int nstr,
         return -1;
     }
     const uintptr_t base = GameBase();
-    SetTop_t settop = reinterpret_cast<SetTop_t>(base + 0xA3E0);
-    PushStr_t push  = reinterpret_cast<PushStr_t>(base + 0xA980);
-    Top_t gettop    = reinterpret_cast<Top_t>(base + 0xA3D0);
+    SetTop_t settop = reinterpret_cast<SetTop_t>(base + LUA_SETTOP);
+    PushStr_t push  = reinterpret_cast<PushStr_t>(base + LUA_PUSHSTR);
+    Top_t gettop    = reinterpret_cast<Top_t>(base + LUA_GETTOP);
     typedef const char* (__cdecl* ToStr_t)(uintptr_t, int);
-    ToStr_t tostr   = reinterpret_cast<ToStr_t>(base + 0xA5D0);
+    ToStr_t tostr   = reinterpret_cast<ToStr_t>(base + LUA_TOSTR);
     Exec_t fn       = reinterpret_cast<Exec_t>(fnaddr);
     int r = -1;
     __try {
@@ -175,7 +198,9 @@ int LuaPushAndCall(uintptr_t fnaddr, const char* const* strs, int nstr,
 // 旧常识里的 0x178670 实测是 **ObjectDescription**（把对象信息格式化成描述串），
 // 这也是「调 0x178670 只得到字符串、无状态写入」的真正原因。详见
 // research/protocol-skills/findings/引擎Lua脚本接口.md §八。
-static constexpr uint32_t kRvaLuaExecuteAction = 0x182C50;
+// 零售 0x182C50 / Steam 0x1C4370（入口 14 字节唯一命中，指令骨架 16/16 全同）。
+// 这个入口的实参全从 Lua 栈取，所以只要地址对、参数序列对就能用。
+#define kRvaLuaExecuteAction (::ra3::IsSteamBuild() ? 0x1C4370U : 0x182C50U)
 
 int LuaAction(const char* action, const char* a1, const char* a2, const char* a3) {
     const char* strs[4] = { action, a1, a2, a3 };
@@ -276,10 +301,10 @@ int LuaSelfTest(const char* text, char* out, size_t outsz) {
     typedef int  (__cdecl* Top_t)(uintptr_t);
     typedef const char* (__cdecl* ToStr_t)(uintptr_t, int);
     typedef int  (__cdecl* Type_t)(uintptr_t, int);
-    SetTop_t settop = reinterpret_cast<SetTop_t>(base + 0xA3E0);
-    Top_t gettop    = reinterpret_cast<Top_t>(base + 0xA3D0);
-    ToStr_t tostr   = reinterpret_cast<ToStr_t>(base + 0xA5D0);
-    Type_t  ltype   = reinterpret_cast<Type_t>(base + 0xA520);
+    SetTop_t settop = reinterpret_cast<SetTop_t>(base + LUA_SETTOP);
+    Top_t gettop    = reinterpret_cast<Top_t>(base + LUA_GETTOP);
+    ToStr_t tostr   = reinterpret_cast<ToStr_t>(base + LUA_TOSTR);
+    Type_t  ltype   = reinterpret_cast<Type_t>(base + LUA_TYPE);
     if (!text || !text[0]) text = "SELFTEST";
     // 压 4 个引擎串，逐个取回：验证「第 2/3/4 个参数」在引擎取值器里是否可见。
     char buf[4][40];
@@ -574,7 +599,7 @@ int ActionIndexByName(const char* name, char* out, size_t outsz) {
         return -1;
     }
     uint32_t eng = 0;
-    if (!Rd32(0x00CDD190, eng) || !eng) {
+    if (!Rd32(G_SCRIPT_ENG, eng) || !eng) {
         if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "脚本引擎不可用");
         return -1;
     }
@@ -640,14 +665,14 @@ int ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz) {
     const uint32_t hash = SageHash(lower);
 
     uint32_t reg = 0;
-    if (!Rd32(0x00CDBBF0, reg) || !reg) {
+    if (!Rd32(G_UPG_REG, reg) || !reg) {
         g_lastErr = "Upgrade 注册表不可用（先进对局）";
         if (out && outsz) _snprintf_s(out, outsz, _TRUNCATE, "%s", g_lastErr);
         return -1;
     }
 
     struct LookupCtx { uint32_t reserved; uint32_t hash; } key = { 0u, hash };
-    const uintptr_t tpl = CallThisFn(GameBase() + 0x1456F0, reg,
+    const uintptr_t tpl = CallThisFn(GameBase() + G_UPG_LOOKUP, reg,
                                      reinterpret_cast<uintptr_t>(&key), 0, 0, 1);
     if (tpl == 0xDEADDEADu) {
         g_lastErr = "模板查找异常";
@@ -669,7 +694,7 @@ int ProtoGrantUpgrade(const char* name, int mode, char* out, size_t outsz) {
         return -1;
     }
 
-    const uintptr_t r = CallThisFn(GameBase() + 0x44D7C0, team, tpl,
+    const uintptr_t r = CallThisFn(GameBase() + G_TEAM_FN, team, tpl,
                                    static_cast<uintptr_t>(mode), 1, 3);
     if (r == 0xDEADDEADu) {
         uintptr_t ea = 0; uint32_t ec = 0;
@@ -1263,7 +1288,7 @@ void HeapPageDetail(char* out, size_t outsz) {
 // 诊断一行：引擎 / 当前脚本玩家（0 = <This Player> 解析不了）/ 玩家对象 / 序号
 void ProtocolDiag(char* out, size_t outsz) {
     uint32_t eng = 0, cur = 0;
-    Rd32(kScriptEngine, eng);
+    Rd32(G_SCRIPT_ENG, eng);
     if (eng) Rd32(eng + kCurPlayerOff, cur);
     const uintptr_t pl = PlayerObj();
     const char* nm = LocalPlayerName();

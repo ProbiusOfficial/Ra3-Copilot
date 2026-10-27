@@ -70,17 +70,25 @@ def parse_src(src_path):
         vals = re.findall(r"0x[0-9A-Fa-f]{1,2}", body)
         aobs[name] = bytes(int(v, 16) & 0xFF for v in vals)
     hooks = []
+    # kHooks 行：{ "Name", 0xRETAIL, 0xSTEAM, AOB_X, len, stub, ret, replay },
     for line in txt.splitlines():
-        m = re.match(r'\s*\{\s*"(\w+)"\s*,\s*(0x[0-9A-Fa-f]+)\s*,\s*(AOB_\w+)\s*,', line)
+        m = re.match(r'\s*\{\s*"(\w+)"\s*,\s*(0x[0-9A-Fa-f]+)\s*,\s*(0x[0-9A-Fa-f]+)\s*,'
+                     r'\s*(AOB_\w+)\s*,', line)
         if m:
-            hooks.append((m.group(1), int(m.group(2), 16), m.group(3)))
+            hooks.append((m.group(1), int(m.group(2), 16), int(m.group(3), 16), m.group(4)))
     return aobs, hooks
+
+
+# 少数站点的签名里自带绝对地址，两构建不一致（对应 C++ 侧 AobFor()）
+STEAM_AOB_OVERRIDE = {"ZoomEntry": "AOB_ZOOMENTRY_STEAM"}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--game", default=DEFAULT_GAME)
     ap.add_argument("--src", default=os.path.normpath(DEFAULT_SRC))
+    ap.add_argument("--build", default="auto", choices=["auto", "retail", "steam"],
+                    help="目标构建：auto 按 SizeOfImage 判断（零售 0x93B000 / Steam 0x950000）")
     args = ap.parse_args()
 
     if not os.path.exists(args.game):
@@ -94,14 +102,26 @@ def main():
     image_base, size_of_image, secs = parse_pe(data)
     aobs, hooks = parse_src(args.src)
 
+    build = args.build
+    if build == "auto":
+        build = "steam" if size_of_image == 0x950000 else "retail"
+
     print("游戏: %s" % args.game)
-    print("ImageBase=0x%08X SizeOfImage=0x%08X 节数=%d" % (image_base, size_of_image, len(secs)))
+    print("ImageBase=0x%08X SizeOfImage=0x%08X 节数=%d  构建=%s" %
+          (image_base, size_of_image, len(secs), build))
     print("源码: %s" % args.src)
     print("抓到 AOB 常量 %d 个 / kHooks 条目 %d 个" % (len(aobs), len(hooks)))
     print("-" * 68)
 
-    ok = bad = 0
-    for name, rva, aobname in hooks:
+    ok = bad = skipped = 0
+    for name, rva_retail, rva_steam, aobname in hooks:
+        rva = rva_steam if build == "steam" else rva_retail
+        if build == "steam" and name in STEAM_AOB_OVERRIDE:
+            aobname = STEAM_AOB_OVERRIDE[name]
+        if not rva:
+            print("  %-16s [SKIP] 该构建无对应站点" % name)
+            skipped += 1
+            continue
         aob = aobs.get(aobname)
         if aob is None:
             print("  %-16s [x] 找不到 AOB 定义 %s" % (name, aobname))
@@ -125,7 +145,7 @@ def main():
             bad += 1
 
     print("-" * 68)
-    print("结果: %d/%d 通过" % (ok, ok + bad))
+    print("结果: %d/%d 通过（跳过 %d 个该构建无对应的站点）" % (ok, ok + bad, skipped))
     if bad:
         print("[!] 有 %d 处不匹配 —— 游戏加载时这些 hook 会被 fail-closed 跳过" % bad)
     else:

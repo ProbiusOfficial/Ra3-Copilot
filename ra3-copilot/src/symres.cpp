@@ -11,6 +11,7 @@
 //     **vtable 落在主模块内** 的候选，多候选取离已知 RVA 最近者（本机实测仅 2 个候选）。
 #include "symres.h"
 #include "overlay.h"
+#include "hook.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -36,6 +37,28 @@ constexpr uint32_t R_SETSTATUS  = 0x3274C0;   // Object::SetStatus              
 constexpr uint32_t R_APPLYMOD   = 0x3181F0;   // 施加 modifier                  (VA 0x7181F0)
 constexpr uint32_t R_REMOVEMOD  = 0x318300;   // 解除 modifier                  (VA 0x718300)
 constexpr uint32_t R_MODFIND    = 0x0A6BE0;   // modifier 库查表                    (VA 0x4A6BE0)
+
+// ---- Steam TUC 版（Data\ra3_1.12.game）对应值 ----
+// 同版本号 1.12.3444.25830，但为重新编译的二进制：代码布局整体错位（非平移），
+// 且没有零售版的 4GB patch 与 ID 上限扩展。定位方法见 tools/map_steam_syms.py
+// （签名逐级截短 + capstone 指令指纹确认，全部 14/14 条对齐）。
+constexpr uint32_t R_CREATEUNIT_S = 0x2440F0;
+constexpr uint32_t R_LEVELUP_S    = 0x39A840;
+constexpr uint32_t R_KILLUNIT_S   = 0x3DCDF0;
+constexpr uint32_t R_TMPLFIND_S   = 0x422510;
+constexpr uint32_t R_MOUSEMAP_S   = 0x22C500;
+constexpr uint32_t R_THINGFACT_S  = 0x8EBDE8;
+constexpr uint32_t R_SELMGR_S     = 0x8E08DC;
+constexpr uint32_t R_FREEBUILD_S  = 0x128DF5;
+constexpr uint32_t R_DRAWSETMC_S  = 0x170A60;
+constexpr uint32_t R_DRAWSETTINT_S= 0x16F7F0;
+constexpr uint32_t R_SETSTATUS_S  = 0x3658C0;
+constexpr uint32_t R_APPLYMOD_S   = 0x356640;
+constexpr uint32_t R_REMOVEMOD_S  = 0x356750;
+constexpr uint32_t R_MODFIND_S    = 0x0A6F50;
+
+// 按当前构建取 RVA（"就近兜底"必须用同构建的旧地址，否则多命中时会挑偏）
+#define RV(retail, steam) (::ra3::IsSteamBuild() ? (steam) : (retail))
 
 // ---- 特征码（取自 1.12 实测字节；'x'=精确, '?'=通配）----
 const uint8_t SIG_CREATE[] = { 0x8B,0x4C,0x24,0x08,0x83,0xEC,0x3C,0x53,0x33,0xDB,0x33,0xC0,0x3B,0xCB,0x0F,0x84 };
@@ -177,7 +200,7 @@ uintptr_t DeriveSelMgr() {
     }
     if (nCand == 0) return 0;
     // 多候选取离 1.12 已知 RVA 最近者
-    return PickNearest(cands, nCand, R_SELMGR);
+    return PickNearest(cands, nCand, RV(R_SELMGR, R_SELMGR_S));
 }
 
 // ---- 缓存与来源 ----
@@ -217,23 +240,23 @@ void SymInit() {
     snprintf(buf, sizeof(buf), "[符号] 主模块 %p size=%X，开始解析…", g_img, (unsigned)g_imgSize);
     OverlayLogLine(OVLOG_INFO, buf);
 
-    ResolveBySig(SIG_CREATE, MSK_CREATE, sizeof(SIG_CREATE), R_CREATEUNIT, s_create, "创建单位解析失败");
-    ResolveBySig(SIG_LEVELUP, MSK_LEVELUP, sizeof(SIG_LEVELUP), R_LEVELUP, s_level, "单位升级解析失败");
-    ResolveBySig(SIG_KILL, MSK_KILL, sizeof(SIG_KILL), R_KILLUNIT, s_kill, "击杀单位解析失败");
-    ResolveBySig(SIG_MOUSE, MSK_MOUSE, sizeof(SIG_MOUSE), R_MOUSEMAP, s_mouse, "鼠标地图坐标解析失败");
-    ResolveBySig(SIG_FREE, MSK_FREE, sizeof(SIG_FREE), R_FREEBUILD, s_free, "免费建造站点解析失败");
-    ResolveBySig(SIG_DRAWSETMC, MSK_DRAWSETMC, sizeof(SIG_DRAWSETMC), R_DRAWSETMC, s_dmc, "模型条件设置器解析失败");
-    ResolveBySig(SIG_DRAWSETTINT, MSK_DRAWSETTINT, sizeof(SIG_DRAWSETTINT), R_DRAWSETTINT, s_tint, "色调包络设置器解析失败");
+    ResolveBySig(SIG_CREATE, MSK_CREATE, sizeof(SIG_CREATE), RV(R_CREATEUNIT, R_CREATEUNIT_S), s_create, "创建单位解析失败");
+    ResolveBySig(SIG_LEVELUP, MSK_LEVELUP, sizeof(SIG_LEVELUP), RV(R_LEVELUP, R_LEVELUP_S), s_level, "单位升级解析失败");
+    ResolveBySig(SIG_KILL, MSK_KILL, sizeof(SIG_KILL), RV(R_KILLUNIT, R_KILLUNIT_S), s_kill, "击杀单位解析失败");
+    ResolveBySig(SIG_MOUSE, MSK_MOUSE, sizeof(SIG_MOUSE), RV(R_MOUSEMAP, R_MOUSEMAP_S), s_mouse, "鼠标地图坐标解析失败");
+    ResolveBySig(SIG_FREE, MSK_FREE, sizeof(SIG_FREE), RV(R_FREEBUILD, R_FREEBUILD_S), s_free, "免费建造站点解析失败");
+    ResolveBySig(SIG_DRAWSETMC, MSK_DRAWSETMC, sizeof(SIG_DRAWSETMC), RV(R_DRAWSETMC, R_DRAWSETMC_S), s_dmc, "模型条件设置器解析失败");
+    ResolveBySig(SIG_DRAWSETTINT, MSK_DRAWSETTINT, sizeof(SIG_DRAWSETTINT), RV(R_DRAWSETTINT, R_DRAWSETTINT_S), s_tint, "色调包络设置器解析失败");
 
-    // Object::SetStatus：暂无特征码 —— 直接 RVA（VA 0x7274C0，手工验收与实机多次验证过）
-    s_setst.addr = reinterpret_cast<uintptr_t>(g_img) + R_SETSTATUS;
+    // Object::SetStatus：暂无特征码 —— 直接 RVA（零售 VA 0x7274C0，Steam VA 0x7658C0，均实测验证过）
+    s_setst.addr = reinterpret_cast<uintptr_t>(g_img) + RV(R_SETSTATUS, R_SETSTATUS_S);
     s_setst.how  = "RVA(实测)";
 
     // modifier 通道：施加/查表有唯一 AOB；解除（0x718300）无签名 → RVA + 入口形态校验
-    ResolveBySig(SIG_APPLYMOD, MSK_APPLYMOD, sizeof(SIG_APPLYMOD), R_APPLYMOD, s_amod, "施加 modifier 解析失败");
-    ResolveBySig(SIG_MODFIND,  MSK_MODFIND,  sizeof(SIG_MODFIND),  R_MODFIND,  s_mfind, "modifier 查表解析失败");
+    ResolveBySig(SIG_APPLYMOD, MSK_APPLYMOD, sizeof(SIG_APPLYMOD), RV(R_APPLYMOD, R_APPLYMOD_S), s_amod, "施加 modifier 解析失败");
+    ResolveBySig(SIG_MODFIND,  MSK_MODFIND,  sizeof(SIG_MODFIND),  RV(R_MODFIND, R_MODFIND_S),  s_mfind, "modifier 查表解析失败");
     {
-        const uintptr_t at = reinterpret_cast<uintptr_t>(g_img) + R_REMOVEMOD;
+        const uintptr_t at = reinterpret_cast<uintptr_t>(g_img) + RV(R_REMOVEMOD, R_REMOVEMOD_S);
         if (LooksLikeFuncEntry(at)) { s_rmod.addr = at; s_rmod.how = "RVA(已校验)"; }
         else { s_rmod.addr = 0; s_rmod.how = "解析失败"; OverlayLogLine(OVLOG_ERR, "解除 modifier 解析失败"); }
     }
@@ -253,18 +276,18 @@ void SymInit() {
             if (cnt > bestCnt) { bestCnt = cnt; bestFind = hits[i]; bestFact = f; }
         }
         if (bestFind) { s_find.addr = bestFind; s_find.how = "AOB+结构"; s_fact.addr = bestFact; s_fact.how = "结构推导"; }
-        else ResolveBySig(SIG_FIND, MSK_FIND, sizeof(SIG_FIND), R_TMPLFIND, s_find, "模板查找解析失败");
+        else ResolveBySig(SIG_FIND, MSK_FIND, sizeof(SIG_FIND), RV(R_TMPLFIND, R_TMPLFIND_S), s_find, "模板查找解析失败");
         snprintf(buf, sizeof(buf), "[符号] 模板查找=%08X(%s)  ThingFactory=%08X(%s,推导命中%d)",
                  (unsigned)s_find.addr, s_find.how, (unsigned)s_fact.addr, s_fact.how, bestCnt);
         OverlayLogLine(OVLOG_OK, buf);
     }
-    if (!s_fact.addr) { s_fact.addr = reinterpret_cast<uintptr_t>(g_img) + R_THINGFACT; s_fact.how = "RVA兜底"; }
+    if (!s_fact.addr) { s_fact.addr = reinterpret_cast<uintptr_t>(g_img) + RV(R_THINGFACT, R_THINGFACT_S); s_fact.how = "RVA兜底"; }
 
     // 选中管理器：优先「RVA + 结构验证」（CE 表逐字节验证过，对本构建可靠）；
     //   只有验证失败才退回"扫 .data 结构推导"（面向未知版本/其它 mod）。
     //   —— 2026-10-14 教训：扫 .data 曾误命中毒对象 → 所有"选中单位操作"（收编/血量/速度/满级/摧毁）全部失效。
     {
-        const uintptr_t rvaSel = reinterpret_cast<uintptr_t>(g_img) + R_SELMGR;
+        const uintptr_t rvaSel = reinterpret_cast<uintptr_t>(g_img) + RV(R_SELMGR, R_SELMGR_S);
         const uint32_t modLo = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_img));
         const uint32_t modHi = modLo + static_cast<uint32_t>(g_imgSize);
         uint32_t mgr = 0, vt = 0;

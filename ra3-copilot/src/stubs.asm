@@ -12,6 +12,10 @@
 .model flat, C
 
 EXTERNDEF g_localPlayerId : DWORD   ; 本地玩家 ID（= [[eax+28]+0x20]，整数）
+EXTERNDEF g_buildVer       : DWORD  ; 目标构建：0 = 零售 1.12，1 = Steam TUC 1.12
+EXTERNDEF g_zoomEntrySrc   : DWORD  ; ZoomEntry 原指令 mov eax,[abs] 的 abs（两构建不同）
+EXTERNDEF g_lockProbeCall  : DWORD  ; 技能锁定探针要 call 的函数地址（两构建不同）
+EXTERNDEF g_btnSetEnabled  : DWORD  ; 建造按钮 setEnabled(true) 的函数地址（两构建不同）
 EXTERNDEF g_localPlayerObj: DWORD   ; 本地"队伍/玩家"对象（= [eax+28]，PlayerID hook 写；召唤当 team）
 EXTERNDEF g_moneyObj     : DWORD    ; 加钱 hook 看到的"资金对象"（UI 读资金；与上者不同类，勿混用）
 EXTERNDEF g_selUnit      : DWORD    ; 弹药 hook 遍历到的"当前选中单位"（对象指针）
@@ -89,6 +93,14 @@ EXTERNDEF g_retEnemyCantBuild : DWORD
 EXTERNDEF g_retSuperPower     : DWORD
 EXTERNDEF g_retDisableAllSP   : DWORD
 EXTERNDEF g_retZoomEntry      : DWORD
+EXTERNDEF g_retBuildExtCs     : DWORD   ; = 构建器 hook 站 + 8（跳回点）
+EXTERNDEF g_extReplaceFn      : DWORD   ; C 侧「同族完整版句柄」替换函数指针
+EXTERNDEF g_btnForceCount     : DWORD   ; 0x1E 命中扩展建筑模板的次数（演练也记）
+EXTERNDEF g_btnForceReal      : DWORD   ; 0 = 只计数不动作（安全演练）；1 = 真调 setEnabled
+EXTERNDEF g_btnLastObj        : DWORD   ; 最近一次命中的按钮对象指针（只读取证用）
+EXTERNDEF g_btnLastHash       : DWORD   ; 最近一次命中的模板哈希（只读取证用）
+EXTERNDEF g_retBuildability   : DWORD   ; Buildability hook 跳回点（站 + 8）
+EXTERNDEF g_retSetDis         : DWORD   ; setDisabled hook 跳回点（站 + 5）
 
 .code
 
@@ -296,7 +308,8 @@ ZoomEntryStub PROC
     inc   dword ptr [g_zoomEntry]
     mov   dword ptr [g_zoomObj], ecx
     popad
-    mov   eax, dword ptr [0CDB750h]     ; A1 50 B7 CD 00  原指令重放
+    mov   eax, dword ptr [g_zoomEntrySrc]  ; 原指令 A1 xx xx xx xx 的绝对地址（按构建取）
+    mov   eax, dword ptr [eax]             ; 原指令重放：mov eax,[abs]
     jmp   dword ptr g_retZoomEntry
 ZoomEntryStub ENDP
 
@@ -696,7 +709,7 @@ LockProbeCaveStub PROC
 lp_norec:
     popfd
     popad
-    mov   eax, 0AD9EC0h                   ; 原 call 目标（无 ASLR，绝对地址）
+    mov   eax, dword ptr [g_lockProbeCall]; 原 call 目标（绝对地址，按构建取）
     call  eax
     jmp   dword ptr [g_retLockProbe]
 LockProbeCaveStub ENDP
@@ -1014,8 +1027,101 @@ CommandSetProbeCaveStub ENDP
 ;   桩：开关 g_flags[1Eh] 打开时，若按钮的 Template 是扩展建筑，直接 setEnabled(true) 并返回。
 ;   重放 6 字节 = sub esp,8 (3B) / push esi (1B) / mov esi,ecx (2B)，边界在 +6。
 ;   ⚠ 本桩无 pushad/pushfd，直接改 eax/ecx（两者都是调用者不保留的），ebx/esi/edi 不碰。
+
+; ===========================================================================
+; BuildableCaveStub —— 建造页「灰/亮」的唯一门：Buildability(Player*, Template*)
+;   零售 0x845250 / Steam 0xA832C0（RVA 0x445250 / 0x4832C0），__thiscall，ret 4
+;   原逻辑：Template==0 -> 0；Science(Player,Template)==0 -> 0；否则看 0x7DF770 的结果
+; 只对「扩展建筑模板」提前返回 1（可建），其余走原逻辑 ——
+; 这样游戏自己会调 setEnabled，我们完全不碰按钮对象。
+; ⛔ 别再改回「手动调 setEnabled」：0x1E 旧实现在 Steam 上 17:25 实测把栈弹坏
+;    （出错地址落在栈上、EBP=0x206），原因是 setEnabled 内部还有两层虚调用。
+; ===========================================================================
+; SetDisCaveStub —— 建造按钮 setDisabled 入口（零售 0xAB7040 / Steam RVA 0x64BCC0）
+;   两版逐字节相同：80 79 3D 00 (cmp byte [ecx+0x3D],0) / 56 (push esi) / 8D 71 08 (lea esi,[ecx+8])
+;   语义：把按钮 enabled 位（+0x3D）清 0 并通知 UI；setEnabled 是同址 +0x40 的对称函数。
+; 做法：命中扩展建筑模板时直接 **jmp setEnabled**（不是 call）——
+;   原调用者是 `call setDisabled`，栈上有返回地址；jmp 后 setEnabled 的 ret 正好回到同一处，
+;   栈完全平衡，上下文全是游戏自己的。
+; ⚠ 别再在 0x650320 入口手动 call setEnabled：那里栈上是 sub esp,8 + push esi，
+;   17:25 实测会把栈弹坏（EIP 落到栈上、EBP=0x206）。
+SetDisCaveStub PROC
+    pushad
+    pushfd
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Eh], 0
+    je    sd_orig
+    mov   eax, dword ptr [ecx+18h]         ; 按钮的 Template*
+    test  eax, eax
+    jz    sd_orig
+    mov   eax, dword ptr [eax+8]           ; Template+0x08 = 名字哈希
+    test  eax, eax
+    jz    sd_orig
+    mov   dword ptr [g_btnLastObj], ecx    ; 只读取证：记下按钮对象（+0x18 模板 / +0x3D 启用位）
+    mov   dword ptr [g_btnLastHash], eax   ; 只读取证：记下模板哈希
+    push  ecx
+    push  eax
+    call  Ra3IsExtTpl
+    add   esp, 4
+    pop   ecx
+    test  eax, eax
+    jz    sd_orig
+    inc   dword ptr [g_btnForceCount]
+    ; ⚠ popad 会把 EAX 恢复成入口时的原值。所以这里**不能**先 mov eax,[目标] 再 popad，
+    ;    否则 jmp eax 跳的是原 EAX（2026-10-26 18:16 实测 EIP=1 / EAX=1 就是这么崩的）。
+    ;    必须先查就绪，再 popad，最后用「内存间接跳」直接取绝对地址。
+    cmp   dword ptr [g_btnSetEnabled], 0
+    je    sd_orig                           ; 尚未就绪就走原逻辑，绝不 jmp 0
+    popfd
+    popad
+    jmp   dword ptr [g_btnSetEnabled]       ; setEnabled 的 ret 回到原调用者
+sd_orig:
+    popfd
+    popad
+    cmp   byte ptr [ecx+3Dh], 0            ; 80 79 3D 00   原指令重放
+    push  esi                              ; 56
+    jmp   dword ptr [g_retSetDis]          ; = 站 + 5（lea esi,[ecx+8]）
+SetDisCaveStub ENDP
+
+BuildableCaveStub PROC
+    pushad
+    pushfd
+    lea   edx, dword ptr [g_flags]
+    cmp   byte ptr [edx+1Eh], 0
+    je    bl_orig
+    mov   eax, dword ptr [esp+28h]         ; 入口 [esp+4] = Template*（36 字节 + 4）
+    test  eax, eax
+    jz    bl_orig
+    mov   eax, dword ptr [eax+8]           ; Template+0x08 = 名字哈希
+    test  eax, eax
+    jz    bl_orig
+    push  eax
+    call  Ra3IsExtTpl
+    add   esp, 4
+    test  eax, eax
+    jz    bl_orig
+    inc   dword ptr [g_btnForceCount]
+    popfd
+    popad
+    mov   al, 1                            ; 可建 → UI 走亮/可点分支
+    ret   4
+bl_orig:
+    popfd
+    popad
+    push  esi                              ; 56          原指令重放（8 字节）
+    mov   esi, dword ptr [esp+8]           ; 8B 74 24 08
+    test  esi, esi                         ; 85 F6
+    push  edi                              ; 57
+    jmp   dword ptr [g_retBuildability]    ; = 站 + 8（mov edi, ecx）
+BuildableCaveStub ENDP
+
 ; ===========================================================================
 BtnEnableCaveStub PROC
+    ; 入口全保护。原版只存 ecx —— 但 Steam 版是重新编译的，setEnabled / C 函数
+    ; 会破坏哪些寄存器没有保证；调用方（建造页构建循环）用 edi 存按钮定义指针，
+    ; 一旦被改就是 `[edi+4]` 读到垃圾 → 跳到堆上执行（四次崩溃 EDI=0x2B 即此类）。
+    pushad
+    pushfd
     lea   edx, dword ptr [g_flags]
     cmp   byte ptr [edx+1Eh], 0
     je    be_orig
@@ -1025,26 +1131,60 @@ BtnEnableCaveStub PROC
     mov   eax, dword ptr [eax+8]           ; Template+0x08 = 名字哈希
     test  eax, eax
     jz    be_orig
-    push  ecx                              ; C 调用会毁 ecx/edx，先存按钮对象
-    push  eax
-    call  Ra3IsExtTpl                      ; 苏/盟/天朝的扩展建筑统一判定
+    push  ecx                              ; cdecl 参数：先压按钮对象（高地址）
+    push  eax                              ; 再压哈希（栈顶 = 第一个参数）
+    call  Ra3IsExtTpl                      ; 四阵营扩展建筑统一判定
     add   esp, 4
-    pop   ecx
+    pop   ecx                              ; ★ 必须弹回：C 调用把 ecx 当 caller-saved 毁掉了。
+                                           ;   漏这一步 → setEnabled 的 this 变成垃圾，
+                                           ;   它内部 `mov ecx,[ecx+1C]` 再虚调用 → 跳到堆上执行。
+                                           ;   （2026-10-26 实测：漏掉时 g_btnLastObj 记到的是
+                                           ;     0x2D270F77，即模板哈希的残留值）
     test  eax, eax
     jz    be_orig
-be_force:
-    push  ecx                              ; 保存按钮对象（0xAB7000 用 ecx 作 this）
-    mov   eax, 0AB7000h                    ; setEnabled(true)
+    inc   dword ptr [g_btnForceCount]      ; 记账：命中一次（演练也记）
+    mov   dword ptr [g_btnLastObj], ecx    ; 记下按钮对象，供只读取证它的 +0x18/+0x1C
+    cmp   dword ptr [g_btnForceReal], 0
+    je    be_orig                          ; 演练模式：原样执行，不动按钮状态
+    mov   eax, dword ptr [g_btnSetEnabled] ; setEnabled(true)，ecx 仍是按钮对象
     call  eax
-    pop   ecx
-    mov   al, 1
+    popfd
+    popad
+    mov   al, 1                            ; 跳过原刷新，保留刚设的状态
     ret
 be_orig:
+    popfd
+    popad
     sub   esp, 8                           ; 83 EC 08   原指令重放
     push  esi                              ; 56
     mov   esi, ecx                         ; 8B F1
     jmp   dword ptr [g_retBtnEnable]       ; = 0xABB6F6
 BtnEnableCaveStub ENDP
+
+; ===========================================================================
+; BuildExtCsStub <- 零售 base+0x6CB352 / Steam base+0x662422  AOB 8BD885DB895C2418 (8B)
+;   建造页构建器拿到 CommandSet 句柄后（此时 eax = cs），立刻换成「同族扩展完整版」的句柄。
+;   原指令 8 字节：mov ebx,eax / test ebx,ebx / mov [esp+18h],ebx
+;
+;   ★ 为什么不用「改 cs+4」那条路：cs 对象只有 0x10 字节（+0 外层vtable / +4 引用计数 /
+;     +8 内层vtable / +0xC inner），构造时还会把 handle 注册进 manager+0x40 的 map
+;     （key = *(inner+0)+4）并调整引用计数。直接改 inner 指针会绕过这两条约束，
+;     点开建造列表时在容器路径上炸（StackHash，栈毁，dump 无法反查）。
+;     本 stub 只换「调用方拿到的句柄」，不动任何对象 —— 引用计数与 map key 全部保持自洽。
+;
+;   pushad 布局：+0 EDI / +4 ESI / +8 EBP / +12 原ESP / +16 EBX / +20 EDX / +24 ECX / +28 EAX
+BuildExtCsStub PROC
+    pushad
+    push  eax
+    call  dword ptr [g_extReplaceFn]
+    add   esp, 4
+    mov   dword ptr [esp+28], eax        ; 覆盖 pushad 保存的 eax（EAX 在最高位）
+    popad
+    mov   ebx, eax                       ; ↓ 原指令重放（8 字节）
+    test  ebx, ebx
+    mov   dword ptr [esp+18h], ebx
+    jmp   dword ptr [g_retBuildExtCs]    ; = site + 8
+BuildExtCsStub ENDP
 
 END
 

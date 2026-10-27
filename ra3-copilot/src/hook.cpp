@@ -1,5 +1,6 @@
 // hook.cpp - 进程内补丁引擎实现
 #include "hook.h"
+#include "buildinfo.h"
 #include <cstring>
 
 namespace ra3 {
@@ -16,6 +17,10 @@ size_t MainModuleSize() {
     auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
     return nt->OptionalHeader.SizeOfImage;
+}
+
+bool IsSteamBuild() {
+    return GetBuild() == BuildKind::Steam;
 }
 
 bool VerifyBytes(uintptr_t at, const uint8_t* expect, size_t n) {
