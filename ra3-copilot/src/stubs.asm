@@ -101,6 +101,20 @@ EXTERNDEF g_btnLastObj        : DWORD   ; 最近一次命中的按钮对象指�
 EXTERNDEF g_btnLastHash       : DWORD   ; 最近一次命中的模板哈希（只读取证用）
 EXTERNDEF g_retBuildability   : DWORD   ; Buildability hook 跳回点（站 + 8）
 EXTERNDEF g_retSetDis         : DWORD   ; setDisabled hook 跳回点（站 + 5）
+EXTERNDEF g_retCsKey          : DWORD   ; cs key hook 跳回点（站 + 9，落在 call find 上）
+EXTERNDEF g_cbResult           : DWORD   ; 第二道门（按钮刷新 0x65046E 那 call）的返回值
+EXTERNDEF g_cbTemplate         : DWORD   ; 该门的 Template 参数（ebp）
+EXTERNDEF g_cbEbx              : DWORD   ; 该门的第一个参数（ebx）
+EXTERNDEF g_cbEsi              : DWORD   ; 该门看到的对象（esi，含 +0x470/+0x471 两个标志字节）
+EXTERNDEF g_cbCount            : DWORD   ; 命中计数
+EXTERNDEF g_cbTargetHash       : DWORD   ; 只记录这个模板哈希（默认 胡杨防空 6094F50D）
+EXTERNDEF g_retCanProbe        : DWORD   ; 探针跳回点（站 + 6）
+EXTERNDEF g_setDisRet          : DWORD   ; setDisabled 入口的调用者返回地址（只读取证）
+EXTERNDEF g_setDisArg0         : DWORD   ; setDisabled 入口的第一个栈参数（只读取证）
+EXTERNDEF g_mapCsKeyFn        : DWORD   ; C 侧 key 映射函数指针（入参 producer,key；返回 0=不改）
+EXTERNDEF g_canProbeFn        : DWORD   ; C 侧取证回调：void(template, ret, arg0, arg1)
+EXTERNDEF g_cbProbeOn         : DWORD   ; 门探针开关（1=记录，0=完全旁路）
+EXTERNDEF g_csStoreSlot       : DWORD   ; CommandSet 注册表那个全局槽的地址（两构建不同）
 
 .code
 
@@ -1048,6 +1062,10 @@ CommandSetProbeCaveStub ENDP
 SetDisCaveStub PROC
     pushad
     pushfd
+    mov   eax, dword ptr [esp+36]          ; 原返回地址（pushad 32B + pushfd 4B）
+    mov   dword ptr [g_setDisRet], eax
+    mov   eax, dword ptr [esp+40]          ; 原 [esp+4]（第一个栈参数）
+    mov   dword ptr [g_setDisArg0], eax
     lea   edx, dword ptr [g_flags]
     cmp   byte ptr [edx+1Eh], 0
     je    sd_orig
@@ -1185,6 +1203,88 @@ BuildExtCsStub PROC
     mov   dword ptr [esp+18h], ebx
     jmp   dword ptr [g_retBuildExtCs]    ; = site + 8
 BuildExtCsStub ENDP
+
+; ===========================================================================
+; CsKeyCaveStub <- 零售 base+0x6CB344 / Steam base+0x662414
+;   建造页构建器「算出 cs key、还没查表」那一刻，把 key 就地换成同名 Enhanced 版。
+;   原指令 9 字节：
+;     8B 08              mov  ecx,[eax]        ; eax = &key（0x2FCCE0 的输出槽）
+;     51                 push ecx
+;     8B 0D <abs>        mov  ecx,[<CommandSet 注册表槽>]
+;   （紧随其后 site+9 是 call <store.find>，不重放、直接跳过去）
+;
+;   ★ 与 BuildExtCs（换句柄）的区别：这条在**查表前**改 key，游戏拿到的就是 Enhanced 版
+;     句柄本身，不涉及任何句柄替换；也不碰 cs/inner/引用计数。覆盖 24 组配对（含 8 处
+;     生产建筑），不需要靠内容猜同族。
+;
+;   ★ 重放里的绝对地址两构建不同（零售 0x00CD8D00 / Steam 0x00CDDEA0），所以不写死：
+;     先取 g_csStoreSlot 里的槽地址，再按原语义 mov ecx,[槽]。
+;
+;   pushad 布局：+0 EDI / +4 ESI / +8 EBP / +12 原ESP / +16 EBX / +20 EDX / +24 ECX / +28 EAX
+;   出口只有一处；pushad 只 pop 一次；净栈位移 = 0（引擎的 call find 是 ret 4，自清 push 的 key）
+CsKeyCaveStub PROC
+    pushad
+    mov   edx, eax                       ; edx = &key
+    mov   ecx, dword ptr [esi+10h]       ; ecx = 建造者/生产者对象（原 0x6CB337 读的那个）
+    push  dword ptr [edx]                ; 参数2：原 key
+    push  ecx                            ; 参数1：生产者
+    call  dword ptr [g_mapCsKeyFn]       ; uint32_t MapCsKey(producer, key)
+    add   esp, 8
+    test  eax, eax
+    jz    short cs_key_replay
+    mov   edx, dword ptr [esp+28]        ; pushad 保存的 eax = &key
+    mov   dword ptr [edx], eax           ; 就地换掉 key
+cs_key_replay:
+    popad
+    mov   ecx, dword ptr [eax]           ; ↓ 原指令重放（9 字节，到 call 之前）
+    push  ecx
+    mov   edx, dword ptr [g_csStoreSlot]
+    mov   ecx, dword ptr [edx]
+    jmp   dword ptr [g_retCsKey]         ; = site + 9（下一条即 call <store.find>）
+CsKeyCaveStub ENDP
+
+; ===========================================================================
+; CanBuildProbeCaveStub <- Steam base+0x650470（零售未定位，站点=0）
+;   建造按钮刷新里「第二道门」之后：mov edi,eax / test edi,edi / je 0x65049F
+;   原语义：edi(门返回值)==0 → 跳 站+0x2F（不置灰）；否则顺序执行到 setDisabled。
+;
+;   ★ 为什么重放要自己模拟这条 je：je 是 rel8，搬进 cave 后相对地址会算到 cave 里。
+;     所以只重放 mov/test，然后按原语义手写两条跳转（两条目标都在补丁区之外）。
+;   ebp = Template 参数、esi = 门看到的对象（+0x470/+0x471 两个标志字节、决定它的分支）。
+CanBuildProbeCaveStub PROC
+    pushad
+    pushfd
+    cmp   dword ptr [g_cbProbeOn], 0       ; 诊断开关（默认 1；出问题可关掉）
+    je    cb_skip
+    test  ebp, ebp
+    jz    cb_skip
+    ; pushad(32)+pushfd(4) 后的栈布局：+00 EFLAGS +04 EDI +08 ESI +0C EBP
+    ;   +10 旧ESP +14 EBX +18 EDX +1C ECX +20 EAX +24 返回地址 +28 arg0 +2C arg1
+    mov   eax, dword ptr [esp+20h]         ; 门的返回值（原 EAX）
+    mov   ecx, dword ptr [esp+28h]         ; arg0 = 判定主体（门内部 esi）
+    mov   edx, dword ptr [esp+2Ch]         ; arg1
+    push  edx
+    push  ecx
+    push  eax
+    push  ebp                              ; (template, ret, arg0, arg1)
+    call  dword ptr [g_canProbeFn]
+    add   esp, 16
+cb_skip:
+    popfd
+    popad
+    mov   edi, eax                         ; 原指令重放 1（8B F8）
+    test  edi, edi                         ; 原指令重放 2（85 FF）
+    jnz   cb_nonzero
+    mov   edx, dword ptr [g_retCanProbe]   ; 门说 0 → 原 je 目标
+    add   edx, 29h                         ; rel8 就藏在原 AOB 里（74 29），落点 = 站+6+0x29 = 0x65049F
+                                           ; ⚠ 必须 29h。写成 2Fh（多 6）会跳过 pop ebp/edi/ebx/
+                                           ;   xor al,al/pop esi 五条，直接从 add esp,8; ret 返回 →
+                                           ;   栈上还压着 4 个寄存器，EIP 取自 ESI 的残留值 →
+                                           ;   DEP 拦下，WER 报 BEX + StackHash（崩点无法反查）。
+    jmp   edx
+cb_nonzero:
+    jmp   dword ptr [g_retCanProbe]        ; = 站 + 6（0x650476 → setDisabled）
+CanBuildProbeCaveStub ENDP
 
 END
 

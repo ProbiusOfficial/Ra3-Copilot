@@ -76,6 +76,21 @@ extern uint32_t g_btnForceCount; // 0x1E 命中扩展建筑模板的累计次数
 extern uint32_t g_btnForceReal;  // 0 = 只计数（安全）；1 = 真调 setEnabled
 extern uint32_t g_btnLastObj;    // 最近命中的按钮对象指针（只读取证）
 extern uint32_t g_btnLastHash;   // 最近命中的模板哈希（只读取证）
+extern uint32_t g_setDisRet;     // setDisabled 入口的调用者返回地址（取证：灰是谁下的令）
+extern uint32_t g_setDisArg0;    // setDisabled 入口的第一个栈参数（取证）
+extern uint32_t g_cbResult;      // 第二道门返回值（0 = 不置灰）
+extern uint32_t g_cbTemplate;    // 第二道门看到的 Template
+extern uint32_t g_cbEbx;         // 第二道门的第一个参数
+extern uint32_t g_cbEsi;         // 第二道门看到的对象（含 +0x470/+0x471 标志字节）
+extern uint32_t g_cbCount;       // 探针命中数
+extern uint32_t g_cbTargetHash;  // 只记录该模板哈希
+extern uint32_t g_cbLastArg1;    // 最近一次门的第二个参数（Template）
+extern uint32_t g_cbRingN;       // 取证表已用条数（每格 4 数）
+extern uint32_t g_cbRing[24][4]; // 取证表：{模板哈希, 门返回, arg0, 次数}
+extern uint32_t g_canProbeFn;    // 门探针回调（stub 调它）
+extern uint32_t g_cbProbeOn;     // 门探针开关（1=记录，0=完全旁路）
+void CanProbeRecord(uint32_t tpl, uint32_t ret, uint32_t arg0, uint32_t arg1);
+uint32_t CanProbeDump(uint32_t* out, uint32_t max);
 extern uint32_t g_retBuildability; // Buildability hook 跳回点（站 + 8）
 extern uint32_t g_retSetDis;       // setDisabled hook 跳回点（站 + 5）
 extern uint32_t g_extCallCount;    // BuildExtCs hook 被调用次数
@@ -85,6 +100,16 @@ extern bool     g_extApply;      // true = 真写内存（默认 false，先演�
 extern uint32_t g_extLastCs;     // 最近一次被修正的 CommandSet（0 = 从未）
 extern uint32_t g_extLastDst;    // 换到的 inner（= 扩展完整版）
 extern uint32_t g_extScanMs;     // 全内存扫描耗时（ms）
+extern uint32_t g_retCsKey;      // cs key hook 跳回点（站 + 9）
+extern uint32_t g_mapCsKeyFn;    // key 映射函数指针（stub 调它）
+extern uint32_t g_csStoreSlot;   // CommandSet 注册表全局槽地址（两构建不同）
+extern uint32_t g_csKeyCalls;    // key hook 进入次数
+extern uint32_t g_csKeyHits;     // 真正换成 Enhanced key 的次数
+extern uint32_t g_csKeyNoOwner;  // 收窄模式下读不到归属而放弃的次数
+extern uint32_t g_csKeyLastKey;  // 最近一次的原 key
+extern uint32_t g_csKeyLastEnh;  // 最近一次换成的 Enhanced key
+extern uint32_t g_csKeyLastProd; // 最近一次的生产者对象
+extern uint32_t g_csKeyLastOwner;// 最近一次读到的归属（Player 对象）
 extern uint32_t g_scPointObj, g_scPointVal;
 extern uint32_t g_retFastBuild1, g_retFastBuild2, g_retFastBuild3, g_retMap;
 extern uint32_t g_retUnitAmmo, g_retDangerLevel, g_retOreMine, g_retGodMode;
@@ -131,6 +156,8 @@ void SetDisCaveStub();          // 0x1E：setDisabled 入口对扩展建筑改�
 void BuildableCaveStub();       // 0x1E：Buildability 层对扩展建筑放行（不碰按钮对象）
 void BtnEnableCaveStub();       // 0x1E 旧实现（已停用，站点=0）       // 建造按钮强制可用（g_flags[0x1E] 打开时对扩展建筑强制 setEnabled）
 void BuildExtCsStub();          // 建造页构建器：把战役版 CommandSet 句柄换成同族完整版（不改对象，只换句柄）
+void CsKeyCaveStub();           // 建造页构建器：查表前把 cs key 换成同名 Enhanced 版（0x1F）
+void CanBuildProbeCaveStub();   // 建造按钮第二道门取证（只读，Steam 专用）
 }
 
 // 战役建造页补全扩展建筑：由 CommandSetProbeCaveStub 在每次取到建造者 CommandSet 时调用。
@@ -139,6 +166,11 @@ void BuildExtCsStub();          // 建造页构建器：把战役版 CommandSet 
 extern "C" uint32_t Ra3BuildExtFix(uint32_t cs);
 // 供 HTTP /buildext 查询用：导出扫描统计与建造者类 CommandSet 摘要。
 uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries);
+// cs key 映射（0x1F）：producer = 建造者对象，key = 原 CommandSet 名字哈希。
+// 返回换过的 Enhanced key；0 = 不改（功能关 / 不在配对表 / 收窄模式下不属于本机玩家）。
+uint32_t MapCsKey(uint32_t producer, uint32_t key);
+// 供 HTTP /extkey 查询：导出 0x1F 的计数器与最近一次映射（顺序见实现）。
+uint32_t CsKeyDump(uint32_t* out, uint32_t max);
 uint32_t ReplaceBuildExtCs(uint32_t cs);   // 建造页构建期的句柄替换（只换句柄，不改对象）
 // 诊断：对所有「建造者类但缺扩展建筑」的 CommandSet 跑一次修正，返回改了几个。
 // 不依赖建造页构建器时机，只用于验证配对数据能否被选中（GET /buildext?fixall=1）。
@@ -168,6 +200,8 @@ enum FeatureIdx {
     FID_BTNPROBE  = 0x1C,   // 探针：记录建造页按钮对象地址（只在找列表结构时临时开）
     FID_BUILDEXT  = 0x1D,   // 战役建造页补全扩展建筑：构建时把战役版 CommandSet 换成扩展完整版
     FID_BTNENABLE = 0x1E,   // 扩展建筑按钮强制可用（0xABB6F0 直接走 setEnabled，绕过前置/范围判定）
+    FID_EXTKEY    = 0x1F,   // 扩展模式列表：查表前把 cs key 换成 Enhanced key（覆盖 24 组，含生产建筑）
+    FID_EXTKEYAI  = 0x20,   // 0x1F 的范围：0 = 只对本机玩家，1 = 全场（含 AI）
     FID_COUNT     = 32,
 };
 
@@ -184,6 +218,11 @@ bool GetFreeBuild();
 // 2 字节补丁，幂等，字节不符时不改动。
 bool SetProtoUnlock(bool on);
 bool GetProtoUnlock();
+
+// 血条常显：两处「该不该画血条」判定的 `jne`(75) 改成 `je`(74)，各 1 字节。
+// 两处是同一判定的两份拷贝，必须同时改，缺一处会只剩部分单位显示。
+bool SetHealthBarAlways(bool on);
+bool GetHealthBarAlways();
 
 // ---- 遥测（overlay 侧）----
 extern uint32_t g_telemImguiReady;

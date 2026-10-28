@@ -3,7 +3,9 @@
 // 渲染做法：进程内 d3d9 inline-hook（不注入独立窗口）：
 //   自己造 dummy device → 读 IDirect3DDevice9 vtable[16/17/42] 的**函数地址**
 //   → MinHook inline-hook 这些函数（位于 d3d9.dll，被游戏自己的 device 共用）
-//   → Present detour 里用「游戏 device + 游戏窗口」渲染 ImGui → 再调原 Present。
+//   → EndScene detour 里用「游戏 device + 游戏窗口」渲染 ImGui（放行原 EndScene 之后再画）；
+//     Present / SwapChain::Present 只在 EndScene 计数为 0 时兜底。
+//     Steam 版的呈现走 D3D9Ex PresentEx，IDirect3DDevice9::Present 整局几乎不调。
 //   （详见 docs/局内渲染解决方案.md）
 //
 // UI 布局：顶栏信息 + 分类页 + 底部「输出记录」日志区。
@@ -66,6 +68,26 @@ volatile LONG g_silent     = 0;   // 1=渲染线程已完成拆卸并即将离�
 volatile LONG g_inHook     = 0;   // 正执行 DLL 内 detour / 窗口过程的计数
 volatile LONG g_stopInput  = 0;   // 输入线程退出标志
 
+// ---------- 渲染/输入遥测（/render）----------
+// 用途：面板画不出来时区分「Present 没命中 D3D / ImGui 没就绪 / 键没收到 / 失焦」四层。
+// 全部是原子计数与毫秒戳，HTTP 线程直接读，不依赖渲染线程（这正是渲染停摆时唯一可查的东西）。
+volatile LONG g_telemSwapPresent = 0;
+volatile LONG g_telemDevMismatch = 0;    // Present 收到的 device 与 g_ov.device 不一致的次数
+volatile LONG g_telemTickMs      = 0;    // OverlayTick 最后一次执行
+volatile LONG g_telemToggleMs    = 0;    // 呼出键最后一次「按下」边沿
+volatile LONG g_telemToggleSeen  = 0;    // 边沿次数（>0 说明键确实被读到了）
+volatile LONG g_telemToggleApply = 0;    // 真正切换了 visible 的次数
+volatile LONG g_telemFocusMs     = 0;    // 最后一次确认游戏窗口在前台
+volatile LONG g_telemDriver      = 0;    // 谁在驱动每帧逻辑：1=EndScene 2=Present 3=SwapChain::Present
+volatile LONG g_telemEndMs       = 0;    // EndScene 最后一次被调用
+volatile LONG g_telemRenderMs    = 0;    // RenderOverlay 最后一次真正画完
+volatile LONG g_telemDevExcept   = 0;    // detour 里被 __except 吞掉的异常次数（画崩了但没崩游戏）
+volatile LONG g_telemImguiTry    = 0;    // EnsureImGui 被尝试的次数（>1 且 imguiReady=0 = 一直没建成）
+volatile LONG g_telemBeginScene  = 0;    // BeginScene 计数（每帧逻辑在它里面跑）
+volatile LONG g_telemBeginMs     = 0;    // BeginScene 最后一次被调用
+volatile LONG g_telemDeviceLost  = 0;    // 1=Reset 期间（device 不可用，绝不能画）
+volatile LONG g_telemStageFault  = 0;    // 阶段护栏拦下的异常次数（每段最多记 4 条日志）
+
 // ---- 战役目标扫描（后台线程；全内存扫描 ~10s，绝不能放渲染线程）----
 static HANDLE g_objScanThread = nullptr;
 static volatile LONG g_objScanState = 0;   // 0=未扫 1=扫描中 2=就绪
@@ -116,6 +138,7 @@ HANDLE g_inputThread = nullptr;
 LPTOP_LEVEL_EXCEPTION_FILTER g_oldFilter = nullptr;   // 安装 Ra3CrashFilter 前的过滤器
 
 typedef HRESULT (STDMETHODCALLTYPE* EndScene_t)(IDirect3DDevice9*);
+typedef HRESULT (STDMETHODCALLTYPE* BeginScene_t)(IDirect3DDevice9*);
 typedef HRESULT (STDMETHODCALLTYPE* Present_t)(IDirect3DDevice9*, const RECT*, const RECT*,
                                                HWND, const RGNDATA*);
 typedef HRESULT (STDMETHODCALLTYPE* Reset_t)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
@@ -124,6 +147,7 @@ typedef HRESULT (STDMETHODCALLTYPE* SwapPresent_t)(IDirect3DSwapChain9*, const R
 typedef HRESULT (STDMETHODCALLTYPE* SetTransform_t)(IDirect3DDevice9*, D3DTRANSFORMSTATETYPE,
                                                     const D3DMATRIX*);
 EndScene_t    g_origEndScene    = nullptr;
+BeginScene_t  g_origBeginScene  = nullptr;
 Present_t     g_origPresent     = nullptr;
 Reset_t       g_origReset       = nullptr;
 SwapPresent_t g_origSwapPresent = nullptr;
@@ -233,9 +257,41 @@ void AddLog(int kind, const char* fmt, ...) {
     if (g_cfg.diskLog) WriteDiskLog(kind, buf);
 }
 
+// 崩溃现场：当前执行到哪一步（OverlayTick 的各阶段埋点）。崩在游戏函数里的调用
+// 因为地址为 0 而看不出调用方，靠这个字符串直接定位到阶段。
+const char* volatile g_stage = "idle";
+
 // ---------- 未处理异常捕获（真·崩溃现场） ----------
 // 游戏未处理的异常触发时，把「异常码 / 出错地址 / 所属模块 / 寄存器」写进日志文件 ——
 // 一眼就能看出崩在**我们 DLL / 游戏本体 / d3d9** 哪一边。无视日志开关，强制记录。
+// 崩溃栈粗扫：栈上落在已加载模块内的值（返回地址）按顺序打出来。
+// 出错地址是 0（call 空函数指针）时 Eip 没有任何信息，只能靠它看出「谁调进来的」。
+void DumpCrashStack(CONTEXT* ctx) {
+    const DWORD* sp = reinterpret_cast<const DWORD*>(ctx->Esp);
+    char line[192];
+    int n = 0;
+    __try {
+        for (int i = 0; i < 192 && n < 12; ++i) {
+            const DWORD v = sp[i];
+            if (v < 0x10000) continue;
+            HMODULE m = nullptr;
+            if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                    reinterpret_cast<LPCSTR>(v), &m) || !m) continue;
+            char path[MAX_PATH] = { 0 }, name[MAX_PATH] = { 0 };
+            if (!GetModuleFileNameA(m, path, MAX_PATH)) continue;
+            const char* b = strrchr(path, '\\');
+            strncpy_s(name, b ? b + 1 : path, _TRUNCATE);
+            _snprintf_s(line, sizeof(line), _TRUNCATE,
+                        "[崩溃栈] #%d %s+0x%X (esp+0x%X)", n, name,
+                        (unsigned)(v - static_cast<DWORD>(reinterpret_cast<uintptr_t>(m))), i * 4);
+            WriteDiskLog(LOG_ERR, line);
+            CrashLogAppend(line);
+            ++n;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
 LONG WINAPI Ra3CrashFilter(EXCEPTION_POINTERS* ep) {
     __try {
         if (ep && ep->ExceptionRecord && ep->ContextRecord) {
@@ -254,9 +310,10 @@ LONG WINAPI Ra3CrashFilter(EXCEPTION_POINTERS* ep) {
             }
             char b[512];
             _snprintf_s(b, sizeof(b), _TRUNCATE,
-                        "[崩溃] code=%08X 出错地址=%08X 模块=%s | "
+                        "[崩溃] code=%08X 出错地址=%08X 模块=%s 阶段=%s | "
                         "EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
                         (unsigned)er->ExceptionCode, (unsigned)ctx->Eip, modName,
+                        g_stage ? g_stage : "?",
                         (unsigned)ctx->Eax, (unsigned)ctx->Ebx, (unsigned)ctx->Ecx,
                         (unsigned)ctx->Edx, (unsigned)ctx->Esi, (unsigned)ctx->Edi,
                         (unsigned)ctx->Ebp, (unsigned)ctx->Esp);
@@ -264,9 +321,11 @@ LONG WINAPI Ra3CrashFilter(EXCEPTION_POINTERS* ep) {
             // 顺带把出错地址也写进面包屑文件（两张表一起看）
             char b2[192];
             _snprintf_s(b2, sizeof(b2), _TRUNCATE,
-                        "[崩溃] code=%08X at %08X (%s)\r\n",
-                        (unsigned)er->ExceptionCode, (unsigned)ctx->Eip, modName);
+                        "[崩溃] code=%08X at %08X (%s) stage=%s\r\n",
+                        (unsigned)er->ExceptionCode, (unsigned)ctx->Eip, modName,
+                        g_stage ? g_stage : "?");
             CrashLogAppend(b2);
+            if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) DumpCrashStack(ctx);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
     return EXCEPTION_CONTINUE_SEARCH;   // 交回系统，保留游戏原有的崩溃行为
@@ -368,6 +427,7 @@ HWND GetDeviceWindow(IDirect3DDevice9* dev) {
 void EnsureImGui(IDirect3DDevice9* dev) {
     if (g_unloading) return;   // 卸载中/已卸载：不再重建 UI（否则会把刚释放的资源又装回来）
     if (g_ov.imguiReady || !dev) return;
+    InterlockedIncrement(&g_telemImguiTry);
     HWND hwnd = GetDeviceWindow(dev);
     if (!hwnd || !IsWindow(hwnd)) return;
 
@@ -457,10 +517,12 @@ void RenderOverlay(IDirect3DDevice9* dev) {
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
     g_telemRenderOnce++;
+    InterlockedExchange(&g_telemRenderMs, (LONG)GetTickCount());
 }
 
 // ===================== hook =====================
 HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev);
+HRESULT STDMETHODCALLTYPE HookBeginScene(IDirect3DDevice9* dev);
 HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
                                       HWND h, const RGNDATA* c);
 HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp);
@@ -545,6 +607,8 @@ void HookDeviceVtable(IDirect3DDevice9* dev) {
                      reinterpret_cast<void**>(&g_origReset), "Reset");
         HookFunction(vt[17], reinterpret_cast<void*>(&HookPresent),
                      reinterpret_cast<void**>(&g_origPresent), "Present");
+        HookFunction(vt[41], reinterpret_cast<void*>(&HookBeginScene),
+                     reinterpret_cast<void**>(&g_origBeginScene), "BeginScene");
         HookFunction(vt[42], reinterpret_cast<void*>(&HookEndScene),
                      reinterpret_cast<void**>(&g_origEndScene), "EndScene");
         IDirect3DSwapChain9* sc = nullptr;
@@ -566,6 +630,7 @@ void HookDeviceVtable(IDirect3DDevice9* dev) {
         g_vtInfo[2] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(vt[42]));
         g_vtInfo[3] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(vt[44]));
         g_vtInfo[4] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(vt[45]));
+        g_vtInfo[7] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(vt[41]));
         g_vtInfo[5] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(dev));
         g_vtInfo[6] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetModuleHandleA("d3d9.dll")));
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -786,10 +851,57 @@ void DoUnload(IDirect3DDevice9* dev) {
     if (!ok) AddLog(LOG_ERR, "[卸载] 中止：本实例保持加载，重新注入新 DLL 可恢复功能");
 }
 
+// BeginScene —— 一帧渲染的开始，游戏逻辑已经算完。
+// 每帧逻辑放这里：原来挂在 Present（帧末）最安全，但 Steam 版的呈现走 D3D9Ex 的 PresentEx，
+// Present 整局不调，只能前移到帧初 —— 放到 EndScene 之后属于渲染帧中段，会撞上游戏自己的状态机。
+static HRESULT STDMETHODCALLTYPE HookBeginSceneBody(IDirect3DDevice9* dev) {
+    InterlockedIncrement(&g_telemBeginScene);
+    InterlockedExchange(&g_telemBeginMs, (LONG)GetTickCount());
+
+    // 卸载触发点：/unload 靠「下一个渲染帧」执行，Present 不调时这里就是唯一时机
+    if (g_wantUnload && !g_unloading) {
+        __try { DoUnload(dev); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { AddLog(LOG_ERR, "[卸载] 拆卸途中异常 → 中止（保持加载）"); }
+    }
+    if (dev && !g_silent && g_telemDeviceLost == 0) {
+        __try {
+            if (!g_ov.imguiReady) EnsureImGui(dev);
+            if (g_ov.imguiReady && dev == g_ov.device) {
+                if (InterlockedCompareExchange(&g_telemDriver, 1, 0) == 0)
+                    AddLog(LOG_INFO, "[渲染] 每帧逻辑挂 BeginScene，绘制挂 EndScene");
+                OverlayTick();
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
+    }
+    if (g_origBeginScene) return g_origBeginScene(dev);
+    return D3D_OK;
+}
+HRESULT STDMETHODCALLTYPE HookBeginScene(IDirect3DDevice9* dev) {
+    InterlockedIncrement(&g_inHook);
+    const HRESULT hr = HookBeginSceneBody(dev);
+    InterlockedDecrement(&g_inHook);
+    return hr;
+}
+
+// EndScene —— 只负责画：放行游戏自己的 scene 之后，ImGui 再自己 BeginScene/EndScene 一遍。
 static HRESULT STDMETHODCALLTYPE HookEndSceneBody(IDirect3DDevice9* dev) {
     InterlockedIncrement(reinterpret_cast<LONG*>(&g_telemEndScene));
-    if (g_origEndScene) return g_origEndScene(dev);
-    return D3D_OK;
+    InterlockedExchange(&g_telemEndMs, (LONG)GetTickCount());
+
+    const HRESULT hr = g_origEndScene ? g_origEndScene(dev) : D3D_OK;
+
+    // device 在 Reset / 丢失期间绝不能碰（进对局的加载阶段就会 Reset）
+    if (dev && !g_silent && g_telemDeviceLost == 0 &&
+        g_ov.imguiReady && dev == g_ov.device && g_cfg.visible) {
+        static DWORD s_lastMs = 0;
+        const DWORD now = GetTickCount();
+        if (now != s_lastMs && SUCCEEDED(dev->TestCooperativeLevel())) {   // 一帧多个 scene 只画一次
+            s_lastMs = now;
+            __try { RenderOverlay(dev); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
+        }
+    }
+    return hr;
 }
 HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev) {
     InterlockedIncrement(&g_inHook);
@@ -801,6 +913,8 @@ HRESULT STDMETHODCALLTYPE HookEndScene(IDirect3DDevice9* dev) {
 static HRESULT STDMETHODCALLTYPE HookPresentBody(IDirect3DDevice9* dev, const RECT* a, const RECT* b,
                                                  HWND h, const RGNDATA* c) {
     if (dev) {
+        // 多 device 会让 ImGui 只画在 g_ov.device 那一个上：这一个计数器涨 = 画面走的是另一个 device
+        if (g_ov.device && dev != g_ov.device) InterlockedIncrement(&g_telemDevMismatch);
         __try {
             if (!g_hasView || !g_hasProj) {   // 兜底：游戏可能用常量表而非 SetTransform
                 D3DMATRIX m;
@@ -834,11 +948,13 @@ static HRESULT STDMETHODCALLTYPE HookPresentBody(IDirect3DDevice9* dev, const RE
                 }
             }
             if (!g_ov.imguiReady) EnsureImGui(dev);
-            if (g_ov.imguiReady && dev == g_ov.device) {
-                OverlayTick();                     // 无论菜单是否可见都要跑（否则 HTTP 接口会超时）
+            // 每帧逻辑的主驱动是 BeginScene；这里只在游戏根本不调 BeginScene 时兜底
+            if (g_ov.imguiReady && dev == g_ov.device && g_telemBeginScene == 0) {
+                InterlockedExchange(&g_telemDriver, 2);
+                OverlayTick();
                 if (g_cfg.visible) RenderOverlay(dev);
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
     }
     if (g_origPresent) return g_origPresent(dev, a, b, h, c);
     return D3D_OK;
@@ -860,6 +976,7 @@ HRESULT STDMETHODCALLTYPE HookPresent(IDirect3DDevice9* dev, const RECT* a, cons
 }
 
 static HRESULT STDMETHODCALLTYPE HookResetBody(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
+    InterlockedExchange(&g_telemDeviceLost, 1);      // Reset 期间 device 不可用 → 禁止 Tick/绘制
     if (g_ov.imguiReady) {
         __try { ImGui_ImplDX9_InvalidateDeviceObjects(); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
@@ -867,6 +984,7 @@ static HRESULT STDMETHODCALLTYPE HookResetBody(IDirect3DDevice9* dev, D3DPRESENT
     if (g_ov.imguiReady && SUCCEEDED(hr)) {
         __try { ImGui_ImplDX9_CreateDeviceObjects(); } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
+    InterlockedExchange(&g_telemDeviceLost, 0);
     return hr;
 }
 HRESULT STDMETHODCALLTYPE HookReset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
@@ -883,13 +1001,14 @@ static HRESULT STDMETHODCALLTYPE HookSwapPresentBody(IDirect3DSwapChain9* sc, co
             IDirect3DDevice9* dev = nullptr;
             if (SUCCEEDED(sc->GetDevice(&dev)) && dev) {
                 if (!g_ov.imguiReady) EnsureImGui(dev);
-                if (g_ov.imguiReady && dev == g_ov.device) {
+                if (g_ov.imguiReady && dev == g_ov.device && g_telemBeginScene == 0) {
+                    InterlockedExchange(&g_telemDriver, 3);
                     OverlayTick();                 // 兜底：若游戏只走 SwapChain::Present
                     if (g_cfg.visible) RenderOverlay(dev);
                 }
                 dev->Release();
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
     }
     if (g_origSwapPresent) return g_origSwapPresent(sc, a, b, h, c, fl);
     return D3D_OK;
@@ -897,6 +1016,7 @@ static HRESULT STDMETHODCALLTYPE HookSwapPresentBody(IDirect3DSwapChain9* sc, co
 HRESULT STDMETHODCALLTYPE HookSwapPresent(IDirect3DSwapChain9* sc, const RECT* a, const RECT* b,
                                           HWND h, const RGNDATA* c, DWORD fl) {
     InterlockedIncrement(&g_inHook);
+    InterlockedIncrement(&g_telemSwapPresent);
     const HRESULT hr = HookSwapPresentBody(sc, a, b, h, c, fl);
     InterlockedDecrement(&g_inHook);
     return hr;
@@ -1435,6 +1555,19 @@ void PanelMisc() {
             SetFeature(FID_ZOOM_IN, zi);
             AddLog(zi ? LOG_OK : LOG_INFO, "[缩放] 无限缩放 %s", zi ? "开" : "关");
         }
+    }
+    ImGui::Separator();
+    {
+        // 两处「该不该画血条」判定的 1 字节补丁（jne→je），全图单位头顶常显血条。
+        bool hb = GetHealthBarAlways();
+        if (ImGui::Checkbox("血条常显", &hb)) {
+            const bool ok = SetHealthBarAlways(hb);
+            AddLog(ok ? (hb ? LOG_OK : LOG_INFO) : LOG_ERR,
+                   "[血条] 常显 %s%s", hb ? "开" : "关", ok ? "" : "（字节不符，未改动）");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("所有单位头顶一直挂血条，不必选中或挨打才出现\n"
+                              "含建筑与敌方单位；改的是两处判定指令，关掉即还原");
     }
     ImGui::Separator();
     ImGui::TextDisabled("建造 / 科技");
@@ -2351,17 +2484,30 @@ void TabSettings() {
 
 // 每帧逻辑：与「菜单是否可见」无关。
 // Present 与 SwapChain::Present 可能对同一帧各触发一次 → 用毫秒戳去重。
+// 阶段护栏：某阶段 AV → 记日志并跳过，不让修改器把游戏带崩。
+// 只对「可选功能」用；g_stage 在进入时设置，崩溃日志会带出来。
+#define STAGE_GUARD(name, expr)                                              \
+    do {                                                                     \
+        g_stage = name;                                                      \
+        __try { expr; }                                                      \
+        __except (EXCEPTION_EXECUTE_HANDLER) {                               \
+            if (InterlockedIncrement(&g_telemStageFault) <= 4)               \
+                AddLog(LOG_ERR, "[护栏] 阶段 %s 异常已跳过（游戏继续）", name); \
+        }                                                                    \
+    } while (0)
+
 void OverlayTick() {
     static DWORD s_lastMs = 0;
     const DWORD now = GetTickCount();
     if (now == s_lastMs) return;
     const float dt = s_lastMs ? (now - s_lastMs) / 1000.0f : 0.0f;
     s_lastMs = now;
+    InterlockedExchange(&g_telemTickMs, (LONG)now);
 
-    HttpApiPump();                    // 执行调试接口投递过来的命令（本线程=游戏主线程）
-    BurstPump();                       // 箱子即爆：到期的延迟引爆（delay>0 时才用）
-    PostProcPump();                   // 到期补跑"创建后处理"（登记召唤物进玩家体系）
-    HKMsgTick();                      // 改键结果 → 输出记录（日志只在渲染线程写）
+    STAGE_GUARD("pump:http",  HttpApiPump());     // 调试接口投递过来的命令（本线程=游戏主线程）
+    STAGE_GUARD("pump:burst", BurstPump());       // 箱子即爆：到期的延迟引爆（delay>0 时才用）
+    STAGE_GUARD("pump:post",  PostProcPump());    // 到期补跑"创建后处理"（登记召唤物进玩家体系）
+    STAGE_GUARD("hkmsg",      HKMsgTick());       // 改键结果 → 输出记录
     ++g_tickNow;                      // 帧计数（选中单位新鲜度判断用）
     g_logClock += dt;
     // 详细日志：每 5 秒一条心跳（只落盘、不进 UI 日志环）。
@@ -2376,24 +2522,31 @@ void OverlayTick() {
                     g_hookSt.installed, g_hookSt.total, GuardSkips());
         WriteDiskLog(LOG_INFO, hb);
     }
-    // 先在渲染线程（= 游戏主线程）执行排队的快捷键动作
-    for (int k = 0; k < 8; ++k) { const int id = PopHotkey(); if (!id) break; RunHotkey(id); }
-    // 金额锁定：每帧把资金回写到锁定值（在游戏主线程上做，安全）
-    if (g_moneyLock && LocalPlayerReady()) MoneySet(g_moneyLockVal);
+    // 快捷键动作：输入线程只投递，真正执行放这里（跨线程调游戏函数会崩）
+    g_stage = "hk:run";
+    __try {
+        for (int k = 0; k < 8; ++k) { const int id = PopHotkey(); if (!id) break; RunHotkey(id); }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (InterlockedIncrement(&g_telemStageFault) <= 4)
+            AddLog(LOG_ERR, "[护栏] 阶段 hk:run 异常已跳过（游戏继续）");
+    }
+    // 金额锁定：每帧把资金回写到锁定值
+    if (g_moneyLock && LocalPlayerReady()) { STAGE_GUARD("money", MoneySet(g_moneyLockVal)); }
     // 血量锁定：每帧把选中单位血量回写到其上限
-    if (g_hpLock) LockSelectedHealth();
+    if (g_hpLock) { STAGE_GUARD("hp", LockSelectedHealth()); }
     // 无限弹药：开关打开时把当前选中"赋予"为常驻目标（登记 Thing + 模板哈希），
-    //   之后取消选中也一直补弹（探宝要求：对单位生效，而不是靠选中维持）。
-    //   目标失效（被摧毁 / 地址回收给别的单位）时自动剔除；关掉开关 = 解除全部。
+    //   之后取消选中也一直补弹；目标失效（被摧毁 / 地址回收）时自动剔除。
     if (GetFeature(FID_UNITAMMO)) {
         static unsigned s_ammoFrame = 0;
         if ((s_ammoFrame++ % 6u) == 0u) {
-            AmmoAddSelected();   // 新选中的登记（幂等）
-            AmmoTick();          // 常驻目标补弹 + 剔除失效
+            STAGE_GUARD("ammo:add", AmmoAddSelected());   // 新选中的登记（幂等）
+            STAGE_GUARD("ammo:tick", AmmoTick());         // 常驻目标补弹 + 剔除失效
         }
     } else if (AmmoTargetCount()) {
+        g_stage = "ammo:clear";
         AmmoClearTargets();
     }
+    g_stage = "idle";
 }
 
 // ---- 各面板显隐（多浮动面板，2026-10-15 UI 改版）----
@@ -2603,6 +2756,7 @@ DWORD WINAPI InputThread(LPVOID) {
     DWORD lastScan = 0;
     while (!g_stopInput) {
         const bool focused = GameFocused();
+        if (focused) InterlockedExchange(&g_telemFocusMs, (LONG)GetTickCount());
 
         // 启动器在外部改键：每秒看一眼 ini 的写时间，变了就重读（捕获期间不打断）
         const DWORD now = GetTickCount();
@@ -2626,7 +2780,15 @@ DWORD WINAPI InputThread(LPVOID) {
 
         const bool ctrlAll = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         const bool tgl = focused && (GetAsyncKeyState(g_toggleVk) & 0x8000) != 0;
-        if (tgl && !lastToggle && g_toggleCtrl == ctrlAll) g_cfg.visible = !g_cfg.visible;
+        if (tgl && !lastToggle) {
+            // 边沿无条件记账：把「键根本没读到」和「读到了但被 Ctrl 条件拦掉」分开
+            InterlockedExchange(&g_telemToggleMs, (LONG)GetTickCount());
+            InterlockedIncrement(&g_telemToggleSeen);
+            if (g_toggleCtrl == ctrlAll) {
+                g_cfg.visible = !g_cfg.visible;
+                InterlockedIncrement(&g_telemToggleApply);
+            }
+        }
         lastToggle = tgl;
 
         // 改键捕获优先；捕获期间功能热键一律不响应
@@ -2704,6 +2866,57 @@ void OverlayToggleKeyName(char* out, int n) {
     char key[32] = { 0 };
     KeyName(g_toggleVk, key, (int)sizeof(key));
     _snprintf_s(out, (size_t)n, _TRUNCATE, "%s%s", g_toggleCtrl ? "Ctrl+" : "", key);
+}
+
+// 渲染/输入遥测：面板画不出来时用它分清四层——Present 有没有每帧命中 / ImGui 有没有就绪 /
+// 呼出键边沿有没有被读到 / 游戏是不是在前台。全部读原子计数与毫秒戳，不碰引擎、可在 HTTP 线程调。
+void OverlayRenderTelemetry(char* out, int n) {
+    if (!out || n <= 0) return;
+    const DWORD now = GetTickCount();
+    const LONG tickMs = g_telemTickMs, toggleMs = g_telemToggleMs, focusMs = g_telemFocusMs;
+    const LONG endMs = g_telemEndMs, renderMs = g_telemRenderMs, beginMs = g_telemBeginMs;
+    char tgl[32] = { 0 };
+    ToggleLabel(tgl, sizeof(tgl));
+    HWND fg = GetForegroundWindow();
+    DWORD fpid = 0;
+    if (fg) GetWindowThreadProcessId(fg, &fpid);
+    _snprintf_s(out, (size_t)n, _TRUNCATE,
+                "== 渲染 ==\n"
+                "present=%u endscene=%u begin=%u swappresent=%u\n"
+                "renderonce=%u tick=%u driver=%d\n"
+                "beginAgoMs=%d endsceneAgoMs=%d tickAgoMs=%d renderAgoMs=%d\n"
+                "deviceLost=%d devMismatch=%d devExcept=%d stageFault=%d\n"
+                "imguiReady=%d imguiTry=%d stage=%s\n"
+                "device=%p window=%p wndHooked=%d\n"
+                "vt17=%08X vt41=%08X vt42=%08X vt44=%08X d3d9=%08X\n"
+                "== 输入 ==\n"
+                "visible=%d toggle=%s\n"
+                "toggleSeen=%d toggleApplied=%d toggleAgoMs=%d\n"
+                "focusAgoMs=%d foregroundIsGame=%d\n"
+                "== 功能 hook ==\n"
+                "hooks=%d/%d aobOk=%d\n"
+                "== 卸载 ==\n"
+                "unloadWant=%d unloading=%d silent=%d\n",
+                (unsigned)g_telemPresent, (unsigned)g_telemEndScene,
+                (unsigned)g_telemBeginScene, (unsigned)g_telemSwapPresent,
+                (unsigned)g_telemRenderOnce, (unsigned)g_tickNow, (int)g_telemDriver,
+                beginMs  > 0 ? (int)(now - (DWORD)beginMs)  : -1,
+                endMs    > 0 ? (int)(now - (DWORD)endMs)    : -1,
+                tickMs   > 0 ? (int)(now - (DWORD)tickMs)   : -1,
+                renderMs > 0 ? (int)(now - (DWORD)renderMs) : -1,
+                (int)g_telemDeviceLost, (int)g_telemDevMismatch, (int)g_telemDevExcept,
+                (int)g_telemStageFault,
+                g_ov.imguiReady ? 1 : 0, (int)g_telemImguiTry, g_stage ? g_stage : "?",
+                g_ov.device, (void*)g_ov.wnd, (int)g_telemWndHooked,
+                (unsigned)g_vtInfo[1], (unsigned)g_vtInfo[7], (unsigned)g_vtInfo[2],
+                (unsigned)g_vtInfo[3], (unsigned)g_vtInfo[6],
+                g_cfg.visible ? 1 : 0, tgl,
+                (int)g_telemToggleSeen, (int)g_telemToggleApply,
+                toggleMs > 0 ? (int)(now - (DWORD)toggleMs) : -1,
+                focusMs  > 0 ? (int)(now - (DWORD)focusMs)  : -1,
+                (fg && fpid == GetCurrentProcessId()) ? 1 : 0,
+                g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk,
+                (int)g_wantUnload, (int)g_unloading, (int)g_silent);
 }
 
 // ===================== 对外：召唤 / 空投 =====================

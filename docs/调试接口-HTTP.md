@@ -32,6 +32,19 @@
 | GET | `/resolve?hash=0x..` | 对象类型哈希 → 模板指针 |
 | GET | `/help` | 全部端点列表 |
 | GET | `/ui[?on=1\|0]` | 面板显隐：不带参数读状态（`visible` / `toggle` 呼出键名 / `blockInput`）；`on=1` 显示、`on=0` 隐藏。热重载后 `visible` 回到默认隐藏，键盘上又没有呼出键时用它叫回面板 |
+| GET | `/render` | 渲染/输入遥测：Present / BeginScene / EndScene / SwapChain::Present 计数、`driver`、`devMismatch`、`devExcept`、`stageFault`、ImGui 是否就绪、device 与窗口句柄、呼出键边沿次数、失焦时长、卸载标志 |
+| GET | `/env` | 环境/版本采集：游戏 exe 的 PE 头（`TimeDateStamp` 能区分补丁）、d3d9 来源与文件版本、**游戏目录自带的 d3d9/dxgi 代理**、DXVK / dgVoodoo / ReShade / 叠加层模块、显卡驱动模块、OS 与显示模式、命令行 |
+
+`/render` 与 `/state` 的分工：`/state` 要投递到渲染线程（内部调游戏函数），游戏失焦或渲染停摆时只回
+`timeout（渲染线程没在跑？）`；`/render` 读的全是原子计数与毫秒戳，任何时刻都答得出 —— 「面板画不出来」
+就该先看它：
+
+- `present` 不涨 → d3d9 hook 没命中（对照 `/log` 里的 `[hook] 已挂 Present`）
+- `present` 恒为 1 而 `endscene` 在涨 → 呈现走的是 D3D9Ex 的 `PresentEx`，`driver` 应为 1（EndScene）
+- `present` 涨、`tick` 不涨且 `devMismatch` 在涨 → 画面走的是另一个 device
+- `tick` 在涨、`toggleSeen` 不涨 → 呼出键没被读到（键值或前台判定）
+- `focusAgoMs` 很大 / `foregroundIsGame=0` → 游戏不在前台，热键本来就不响应
+- `devExcept` 在涨 → detour 内部异常被吞了（画崩但游戏没崩），看 `/log` 尾部
 
 ### 落点查询
 
@@ -64,6 +77,7 @@
 | POST | `/summon?pool=naval\|vehicle\|infantry\|air\|structure\|any&count=N` | 按兵种随机召唤：忽略 `hash`，从单位表基准形态里抽一个。回执 `hash=` 是实际抽中的模板。等价于「地面折跃信标」的投下即出，但兵种可控 —— 海面随机单位用 `pool=naval`（落点须在水面，否则海军单位沉底自毁） |
 | POST | `/toggle?f=N&on=0\|1` | 功能开关（索引见 `features.h` 的 `FeatureIdx`） |
 | POST | `/freebuild?on=0\|1` | 免费建造 |
+| POST | `/hpbar?on=0\|1` | 血条常显（两处判定的 1 字节补丁，不带 `on` 则取反） |
 | POST | `/poke?addr=0x..&type=u32&val=0x..` | 写内存（RE 用） |
 | POST | `/call?rva=0x..&cc=cdecl\|fc&a0=..&a1=..&a2=..` | 按 **RVA** 调游戏函数（绝对地址 = 模块基址 + `rva`；RE 用，SEH 包裹） |
 

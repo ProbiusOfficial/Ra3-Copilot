@@ -17,6 +17,7 @@
 #include "battle_catalog.h"
 #include "scriptobj.h"
 #include "scripttable.h"   // 战役目标表（自动识别关卡 + 一键完成目标）
+#include "envprobe.h"      // 环境/版本采集（/env）
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -735,7 +736,9 @@ bool PostAndWaitN(int fn, const int* args, int na, char* out, int n) {
         Sleep(10);
     }
     InterlockedExchange(&g_cmd.state, 0);
-    _snprintf_s(out, n, _TRUNCATE, "timeout（渲染线程没在跑？）");
+    _snprintf_s(out, n, _TRUNCATE,
+                "timeout: 渲染线程 2.5s 内没取命令。查 GET /render —— tick/endsceneAgoMs 都该在 50ms 内；"
+                "两个都停着 = 游戏失焦暂停渲染，或 detour 没被调用\n");
     return false;
 }
 
@@ -823,6 +826,24 @@ void Handle(SOCKET c, char* req) {
                     g_cfg.visible ? 1 : 0, vkName,
                     g_cfg.blockInput ? 1 : 0);
         HttpSend(c, out, (int)strlen(out));
+        return;
+    }
+    // /render        渲染/输入遥测：Present 命中数、ImGui 就绪、呼出键边沿、前台判定
+    //
+    // 与 /state 的分工：/state 要投渲染线程（会调游戏函数），渲染一停就 timeout；
+    // 这里读的全是原子计数，HTTP 线程直接答——「面板画不出来」正是要查这些。
+    if (strcmp(path, "/render") == 0) {
+        OverlayRenderTelemetry(out, (int)sizeof(out));
+        HttpSend(c, out, (int)strlen(out));
+        return;
+    }
+    // /env           环境/版本采集：游戏 PE 头（TimeDateStamp 区分补丁）、d3d9 来源与版本、
+    //                游戏目录自带代理、DXVK/dgVoodoo/ReShade/叠加层、驱动模块、显示模式。
+    // 用途：同一个「Steam 1.12」在不同机器上呈现路径可能完全不同，构建判定不够用。
+    if (strcmp(path, "/env") == 0) {
+        static char envbuf[16384];
+        EnvProbeText(envbuf, (int)sizeof(envbuf));
+        HttpSend(c, envbuf, (int)strlen(envbuf));
         return;
     }
     // ---- 脚本变量表（ScriptEngine 的 flag / timer map）----
@@ -937,6 +958,8 @@ void Handle(SOCKET c, char* req) {
             "== 只读（HTTP 线程直接答）==\n"
             "GET  /ping\n"
             "GET  /ui[?on=1|0]              面板显隐状态 / 显示或隐藏（等价按呼出键；热重载后用它叫回面板）\n"
+            "GET  /render                   渲染/输入遥测（Present 命中数、ImGui 就绪、呼出键边沿、前台判定）\n"
+            "GET  /env                      环境/版本采集（PE 时间戳、d3d9 来源与版本、本地代理、DXVK/叠加层、驱动模块）\n"
             "GET  /state | /diag            状态+符号+相机+落点+选中单位结构\n"
             "GET  /log?n=40                 输出记录尾部\n"
             "GET  /read?addr=0x..&n=128     内存十六进制转储（RE 用）\n"
@@ -1008,10 +1031,14 @@ void Handle(SOCKET c, char* req) {
             "GET  /buildprobe[?reset=1]       建造页询问记录（0x43EA70 桩遥测：UI 问过哪些模板 → 「当前列表」快照）\n"
             "GET  /buildext                   战役建造页补全扩展建筑：状态 + 建造者类 CommandSet 摘要\n"
             "                                 开关 f=0x1D；打开后构建建造页时自动把战役版换成扩展完整版\n"
+            "GET  /extkey                     扩展模式列表（f=0x1F）：进入/已换/判不出归属 计数 + 最近映射\n"
+            "GET  /canprobe[?hash=0x..]       建造按钮第二道门取证：门返回值 + esi 的 +470/+471 标志字节\n"
             "GET  /toggle?f=0x1B&on=0|1        f=0x1B 移除科技锁定（0x43EA70 对本机玩家恒「可用」→ 建造页黑锁解锁）\n"
             "                                  f=0x1A 忽略建造前置科技（0x4451F0 恒真；对 0x445250 的灰按钮同样有效）\n"
             "                                  f=0x1D 补全扩展建筑（构建建造页时换成扩展完整版 CommandSet）\n"
             "                                  f=0x1E 扩展建筑可点（0xABB6F0 对胡杨防空/礁石岸防强制 setEnabled）\n"
+            "                                  f=0x1F 扩展模式列表（查表前换 cs key，24 组配对含生产建筑）\n"
+            "                                  f=0x20 f=0x1F 的范围：0=只对本机玩家 1=全场（含 AI）\n"
             "GET  /unlock?on=0|1              协议技能免「该阵营基地」前置（0x83B740 恒真）\n"
             "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
             "GET  /place?hash=0x..           自动落点推荐（几何打分 + 引擎校验，不召唤）\n"
@@ -1686,6 +1713,15 @@ void Handle(SOCKET c, char* req) {
                     on ? "on" : "off", ok ? "ok" : "fail（字节不符，未改动）");
         HttpSend(c, out, (int)strlen(out));
         return;
+    } else if (strcmp(path, "/hpbar") == 0) {
+        // 血条常显：?on=0|1（不带 on 则取反）
+        int on = GetParamInt(query, "on", -1);
+        if (on < 0) on = GetHealthBarAlways() ? 0 : 1;
+        const bool ok = SetHealthBarAlways(on != 0);
+        _snprintf_s(out, sizeof(out), _TRUNCATE, "hpbar %s : %s",
+                    on ? "on" : "off", ok ? "ok" : "fail（字节不符，未改动）");
+        HttpSend(c, out, (int)strlen(out));
+        return;
     } else if (strcmp(path, "/probe") == 0) {
         // 只读：技能按钮「锁定」探针（hook 0xA7E9AB，只记录不改行为）
         static char pb[4096];
@@ -2085,6 +2121,48 @@ void Handle(SOCKET c, char* req) {
             w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE, "  [%2u] %08X\n", i, g_bpBuf[i]);
         HttpSend(c, pb, (int)strlen(pb));
         return;
+    } else if (strcmp(path, "/extkey") == 0) {
+        // 0x1F「扩展模式列表」：查表前换 cs key。只读计数器 + 最近一次映射，便于判断
+        //   收窄模式到底是「没触发」「配对表没命中」还是「归属判不出」。
+        static char pb[1024];
+        uint32_t d[12] = { 0 };
+        const uint32_t n = CsKeyDump(d, 12);
+        size_t w = _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                               "extkey on=%d ai=%d | 进入=%u 已换=%u 判不出归属=%u 配对=%u\n",
+                               GetFeature(FID_EXTKEY) ? 1 : 0, GetFeature(FID_EXTKEYAI) ? 1 : 0,
+                               n > 0 ? d[0] : 0, n > 1 ? d[1] : 0,
+                               n > 2 ? d[2] : 0, n > 3 ? d[3] : 0);
+        if (n >= 8)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  最近 key=%08X -> %08X | producer=%08X owner=%08X\n",
+                             d[4], d[5], d[6], d[7]);
+        if (n >= 9)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  收窄用本机=%08X（现走玩家链） 缓存=%08X\n", d[8], g_localPlayerObj);
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
+    } else if (strcmp(path, "/canprobe") == 0) {
+        // 建造按钮「第二道门」全量取证（只读）：门返回非 0 → 走 setDisabled（灰）。
+        //   每次建造页刷新，每个按钮都会记录一条 {模板哈希, 门返回, arg0, 次数}。
+        static char pb[2048];
+        {
+            char rb[8];
+            if (GetParam(query, "reset", rb, sizeof(rb)) && rb[0] && rb[0] != '0') { g_cbRingN = 0; g_cbCount = 0; }
+            if (GetParam(query, "on", rb, sizeof(rb)) && rb[0]) g_cbProbeOn = (rb[0] != '0') ? 1u : 0u;
+            char hb[16];
+            if (GetParam(query, "hash", hb, sizeof(hb)) && hb[0]) g_cbTargetHash = (uint32_t)strtoul(hb, nullptr, 0);
+        }
+        uint32_t d[24 * 4] = { 0 };
+        const uint32_t n = CanProbeDump(d, 24 * 4);
+        size_t w = _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                               "canprobe on=%u 命中=%u 条目=%u | 盯=%08X（?on=0 关闭 / ?reset=1 清空）\n",
+                               g_cbProbeOn, g_cbCount, n / 4, g_cbTargetHash);
+        for (uint32_t i = 0; i + 4 <= n && w < sizeof(pb) - 96; i += 4) {
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  tpl=%08X ret=%u arg0=%08X n=%u\n", d[i], d[i + 1], d[i + 2], d[i + 3]);
+        }
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
     } else if (strcmp(path, "/buildext") == 0) {
         // 战役建造页补全扩展建筑（g_flags[0x1D]）状态 + 建造者类 CommandSet 摘要。
         // 首次调用会触发一次全内存扫描（数百 ms），结果按局缓存。
@@ -2158,10 +2236,12 @@ void Handle(SOCKET c, char* req) {
             char tplName[48] = "-";
             (void)tplName;
             w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
-                             "btn1E on=%d real=%d 命中=%u | 最近按钮=%08X tpl=%08X hash=%08X 启用位=%d | hook调用=%u\n",
+                             "btn1E on=%d real=%d 命中=%u | 最近按钮=%08X tpl=%08X hash=%08X 启用位=%d | 灰来自=%08X arg0=%08X\n",
                              GetFeature(FID_BTNENABLE) ? 1 : 0, g_btnForceReal ? 1 : 0,
                              g_btnForceCount, g_btnLastObj, tpl, g_btnLastHash,
-                             en, g_extCallCount);
+                             en,
+                             g_setDisRet ? g_setDisRet - static_cast<uint32_t>(MainModuleBase()) : 0,
+                             g_setDisArg0);
         }
         for (uint32_t i = 4; i + 6 <= n && w + 128 < sizeof(pb); i += 6) {
             w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,

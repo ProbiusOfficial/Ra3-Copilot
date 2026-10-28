@@ -37,6 +37,10 @@ void RequestUnload();
 // 呼出键名（"Ctrl+Insert" 形式）。热重载后面板回到隐藏态，排查「按什么键能叫出来」用。
 void OverlayToggleKeyName(char* out, int n);
 
+// 渲染/输入遥测（/render）：Present 命中数、ImGui 是否就绪、呼出键边沿、前台判定都在这。
+// 面板画不出来时唯一可查的东西——它不依赖渲染线程，渲染停摆也答得出来。
+void OverlayRenderTelemetry(char* out, int n);
+
 // ---- 日志桥（供 actions.cpp 写进界面「输出记录」）----
 enum { OVLOG_INFO = 0, OVLOG_OK, OVLOG_WARN, OVLOG_ERR };
 void OverlayLogLine(int kind, const char* text);

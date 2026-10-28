@@ -80,7 +80,7 @@ def parse_src(src_path):
 
 
 # 少数站点的签名里自带绝对地址，两构建不一致（对应 C++ 侧 AobFor()）
-STEAM_AOB_OVERRIDE = {"ZoomEntry": "AOB_ZOOMENTRY_STEAM"}
+STEAM_AOB_OVERRIDE = {"ZoomEntry": "AOB_ZOOMENTRY_STEAM", "CsKey": "AOB_CSKEY_STEAM"}
 
 
 def main():

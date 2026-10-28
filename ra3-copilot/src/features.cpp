@@ -2,6 +2,7 @@
 #include "features.h"
 #include "hook.h"
 #include "symres.h"
+#include "cs_pairs.h"
 #include <cstring>
 #include <cstdio>
 
@@ -89,6 +90,34 @@ uint32_t g_buildVer      = 0;            // 0 = 零售 1.12，1 = Steam TUC 1.12
 uint32_t g_zoomEntrySrc  = 0x00CDB750;   // ZoomEntry 原指令 mov eax,[abs] 的 abs
 uint32_t g_lockProbeCall = 0x00AD9EC0;   // 技能锁定探针 call 的目标
 uint32_t g_btnSetEnabled = 0;             // 建造按钮 setEnabled(true)，InstallHooks 里按构建填 VA（0=未就绪）
+// 0x1F：查表前换 cs key
+uint32_t g_retCsKey       = 0;            // CsKeyCaveStub 的跳回点（site + 9）
+uint32_t g_mapCsKeyFn     = 0;            // → ra3::MapCsKey
+uint32_t g_csStoreSlot    = 0x00CD8D00;   // CommandSet 注册表全局槽（Steam 0x00CDDEA0）
+uint32_t g_csKeyCalls     = 0;
+uint32_t g_csKeyHits      = 0;
+uint32_t g_csKeyNoOwner   = 0;
+uint32_t g_csKeyLastKey   = 0;
+uint32_t g_csKeyLastEnh   = 0;
+uint32_t g_csKeyLastProd  = 0;
+uint32_t g_csKeyLastOwner = 0;
+uint32_t g_csKeyLastLocal = 0;   // 收窄时现走玩家链拿到的本机对象（诊断归属误判用）
+uint32_t g_setDisRet      = 0;   // setDisabled 入口的调用者返回地址（取证：灰是谁下的令）
+uint32_t g_setDisArg0     = 0;   // setDisabled 入口的第一个栈参数（取证）
+uint32_t g_cbResult       = 0;   // 第二道门的返回值（0 = 不置灰）
+uint32_t g_cbTemplate     = 0;
+uint32_t g_cbEbx          = 0;
+uint32_t g_cbEsi          = 0;
+uint32_t g_cbCount        = 0;
+uint32_t g_cbTargetHash   = 0x6094F50Du;   // 默认盯胡杨防空
+uint32_t g_retCanProbe    = 0;
+// 建造按钮「第二道门」全量取证表：每格 {模板哈希, 门返回, arg0(玩家/阵营对象), 命中次数}
+//   门返回 0 = 不置灰；非 0 = 走 setDisabled（1/6/7/8，见 Steam 0x18DD20）
+uint32_t g_cbRing[24][4]  = {};
+uint32_t g_cbRingN        = 0;
+uint32_t g_cbLastArg1     = 0;   // 最近一次门的第二个参数（Template，= ebp）
+uint32_t g_canProbeFn     = 0;   // → ra3::CanProbeRecord（InstallHooks 里赋值）
+uint32_t g_cbProbeOn      = 1;   // 门探针开关（0 = 完全旁路，只剩原指令重放）
 }
 
 // ---- overlay 侧遥测 ----
@@ -168,6 +197,12 @@ const uint8_t AOB_BTNENABLE[11] = { 0x83,0xEC,0x08, 0x56, 0x8B,0xF1, 0xE8,0x65,0
 // 建造页构建器里「拿到 CommandSet 句柄」那三条指令（两版字节相同，各 3 处命中，按 RVA 校验定位）：
 //   mov ebx,eax / test ebx,ebx / mov [esp+18h],ebx
 const uint8_t AOB_BUILDEXT_CS[8] = { 0x8B,0xD8, 0x85,0xDB, 0x89,0x5C,0x24,0x18 };
+// 建造页构建器里「算完 key、尚未查表」那 9 字节：
+//   mov ecx,[eax] / push ecx / mov ecx,[<注册表槽>]   —— 槽地址随构建变，故两套 AOB
+const uint8_t AOB_CSKEY[9]        = { 0x8B,0x08, 0x51, 0x8B,0x0D, 0x00,0x8D,0xCD,0x00 };
+const uint8_t AOB_CSKEY_STEAM[9]  = { 0x8B,0x08, 0x51, 0x8B,0x0D, 0xA0,0xDE,0xCD,0x00 };
+// 建造按钮刷新的第二道门之后：mov edi,eax / test edi,edi / je +0x29（只读取证用）
+const uint8_t AOB_CANPROBE[6]     = { 0x8B,0xF8, 0x85,0xFF, 0x74,0x29 };
 
 struct HookDef {
     const char*    name;
@@ -188,6 +223,7 @@ inline uint32_t SiteRva(const HookDef& h) {
 // 校验/回写用的 AOB：默认两构建共用；个别站点的签名里自带绝对地址，需按构建换
 inline const uint8_t* AobFor(const HookDef& h) {
     if (IsSteamBuild() && h.aob == AOB_ZOOMENTRY) return AOB_ZOOMENTRY_STEAM;
+    if (IsSteamBuild() && h.aob == AOB_CSKEY)     return AOB_CSKEY_STEAM;
     return h.aob;
 }
 
@@ -252,6 +288,12 @@ const HookDef kHooks[] = {
     //   ⚠ 2026-10-26 16:45：先前「换句柄崩」的归因**作废**。那四次崩溃的真凶是 0x1E 的 stub
     //      命中扩展建筑时 `mov al,1; ret` 跳过按钮构造函数（见 BtnEnable 处注释），与本站点无关。
     //      0x1E 已默认关，本路径重验中。
+    // 扩展模式列表（0x1F）：查表前换 cs key —— 一次覆盖 24 组配对（含 8 处生产建筑），
+    //   不靠「四栋建筑签名」猜同族。重放 9 字节（到 call <store.find> 之前），跳回点 = 站 + 9。
+    //   默认关：与 0x1D 二选一（0x1D 换句柄、0x1F 换 key），同时开会互相抵消。
+    { "CsKey",      0x6CB344, 0x662414, AOB_CSKEY, 9, (void*)&CsKeyCaveStub, &g_retCsKey, 9 },
+    // 第二道门取证（只读）：Steam 0x650470 零售未定位 → 零售站点 0，跳过不装。
+    { "CanProbe",   0x000000, 0x650470, AOB_CANPROBE, 6, (void*)&CanBuildProbeCaveStub, &g_retCanProbe, 6 },
 };
 
 // 已装站表（卸载回写用）：InstallHooks 记录，RemoveHooks 逆操作
@@ -299,6 +341,9 @@ HookStatus InstallHooks() {
     // 用户在 UI 里取消勾选仍然有效（只是重注入/重开游戏后会回到默认开）。
     // ✅ 2026-10-26 18:33 实测通过（Steam 战役苏联）：生效=2（构建期换句柄），
     //    0x1E 命中 4700+ 次无崩溃；同一按钮 A/B 对照 —— 关=启用位0（灰）/ 开=启用位1（亮）。
+    // ⚠ 2026-10-27 21:30：日冕（神州）环境点建造栏必崩（栈见 internal/docs/待修-mod环境建造栏崩溃.md）。
+    //    「mod 环境默认关掉这几项」的改法已试并**回滚** —— 未验证有效，且会让 mod 用户失去功能。
+    //    在拿到定论前保持历史默认值（1/1），不做环境分支。
     g_flags[FID_BUILDEXT]  = 1;
     // ⛔ 0x1E 两版一律默认关（2026-10-26 16:45 定因）。
     //    BtnEnableCaveStub 命中扩展建筑时走 be_force：调完 setEnabled 就 `mov al,1; ret`
@@ -332,6 +377,9 @@ HookStatus InstallHooks() {
     g_zoomEntrySrc  = mb + (steam ? 0x008E08F0u : 0x008DB750u);
     g_btnSetEnabled = mb + (steam ? 0x0064BC80u : 0x006B7000u);
     g_extReplaceFn  = reinterpret_cast<uint32_t>(&ReplaceBuildExtCs);   // BuildExtCsStub 的替换入口
+    g_mapCsKeyFn    = reinterpret_cast<uint32_t>(&MapCsKey);            // CsKeyCaveStub 的映射入口
+    g_canProbeFn    = reinterpret_cast<uint32_t>(&CanProbeRecord);      // CanBuildProbeCaveStub 的取证入口
+    g_csStoreSlot   = steam ? 0x00CDDEA0u : 0x00CD8D00u;                // CommandSet 注册表槽
     // g_lockProbeCall 保持零售值：该站点在 Steam 版未定位，不做安装
 
     char* fp = st.failed;
@@ -458,6 +506,64 @@ bool SetProtoUnlock(bool on) {
     if (VerifyBytes(at, want, 2)) return true;      // 已是目标状态（幂等）
     if (!VerifyBytes(at, expect, 2)) return false;  // 字节不符，别碰
     return WriteRaw(at, want, 2);
+}
+
+// ============================================================================
+// 血条常显（全图单位头顶血条一直画）
+//
+// 引擎里「这个 Drawable 要不要画血条」由一个判定函数回答，函数在二进制里有两份拷贝
+// （一份 this 直接放 ecx，一份先取 Drawable+0x138 拿到 Thing 再判），骨架一致：
+//
+//   cmp  byte [g_showBars], 0   ; 0xCB4A10（零售 0xCB0348）总开关，当前=1
+//   je   → 返回 false
+//   cmp  byte [g_uiGate], 0     ; 0xCE08C5（零售 0xCDB725）当前=0
+//   jne  → 画血条分支           ← 只改这一个字节
+//   test byte [obj+0x13D], 0x40 ; 对象级「强制显示」位
+//   jne  → 画血条分支
+//   mov  eax, [obj+0x16C] / cmp eax, [g_cmp] ; 之后再接一串对象级条件
+//
+// g_uiGate 平时是 0，`jne` 永不成立，判定只能落到对象级条件上 —— 所以默认只有选中 /
+// 悬停 / 刚挨打的单位有血条。把 `jne` 改成 `je`，就把「g_uiGate == 0」变成「去画血条」，
+// 判定恒真 ⇒ 全图所有 Drawable 常显血条。
+//
+// 只写 1 字节、不动寄存器与栈，关掉时原样写回 0x75；字节不符（构建认错）时一个字不碰。
+// ============================================================================
+namespace {
+
+constexpr uint8_t kHpBarJne = 0x75;   // 原始：g_uiGate != 0 才画（实际永不成立）
+constexpr uint8_t kHpBarJe  = 0x74;   // 改后：g_uiGate == 0 就画
+
+// 两处站点（RVA）。零售列由同一条 AOB 在零售 exe 里唯一命中确认，
+// Steam 列的 VA（0x570293 / 0x55BCA0）与战网客户端 HP 条补丁打的两个点逐字节一致。
+constexpr uint32_t kHpBarRvaRetail[2] = { 0x12EB93, 0x11A4A0 };
+constexpr uint32_t kHpBarRvaSteam[2]  = { 0x170293, 0x15BCA0 };
+
+inline uintptr_t HpBarSite(int i) {
+    return MainModuleBase() + Pick(kHpBarRvaRetail[i], kHpBarRvaSteam[i]);
+}
+
+} // namespace
+
+bool GetHealthBarAlways() {
+    for (int i = 0; i < 2; ++i) {
+        const uintptr_t at = HpBarSite(i);
+        if (!at || *reinterpret_cast<const uint8_t*>(at) != kHpBarJe) return false;
+    }
+    return true;
+}
+
+bool SetHealthBarAlways(bool on) {
+    const uint8_t want   = on ? kHpBarJe : kHpBarJne;
+    const uint8_t expect = on ? kHpBarJne : kHpBarJe;
+    bool allOk = true;
+    for (int i = 0; i < 2; ++i) {
+        const uintptr_t at = HpBarSite(i);
+        if (!at) { allOk = false; continue; }
+        if (*reinterpret_cast<const uint8_t*>(at) == want) continue;    // 已是目标态，幂等
+        if (!VerifyBytes(at, &expect, 1)) { allOk = false; continue; }  // 字节不符，别碰
+        if (!WriteRaw(at, &want, 1)) allOk = false;
+    }
+    return allOk;
 }
 
 // ============================================================================
@@ -676,6 +782,123 @@ uint32_t ReplaceCsImpl(uint32_t cs) {
 
 // 给 InstallHooks 取址用（namespace 内的实现不能跨作用域取址）
 uint32_t ReplaceBuildExtCs(uint32_t cs) { return ReplaceCsImpl(cs); }
+
+namespace {
+// 归属判定用的安全读：只在构造建造页时调用（一局几次），不值得做缓存。
+bool RdPtr(uintptr_t at, uint32_t& out) {
+    if (at < 0x00010000 || at > 0x7FFFFFFF) return false;
+    __try {
+        out = *reinterpret_cast<const uint32_t*>(at);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// 每次现走的玩家链：`[[ctx]+0x28]`，用 [player+0x20] 是合法玩家索引（0..7）、
+//   [player+0x10] 是 team 指针两条做校验。
+//   ★ 为什么要「现走」：g_localPlayerObj 由 PlayerID hook 写入，而那条 hook 要等 UI 读资金
+//     才触发 —— 进局那一刻它往往还是**上一局的旧对象**。拿旧对象做收窄会把本机全判成
+//     「不是本机」，0x1F 就静默失效（2026-10-27 20:11 实测：进入=3 / 已换=0，就是这个原因）。
+uint32_t LocalPlayerFresh() {
+    const uint32_t ctxAddr = IsSteamBuild() ? 0xCEDE2CU : 0x00CE8C9CU;
+    uint32_t ctx = 0, pl = 0, ix = 0xFFFF, team = 0;
+    if (RdPtr(ctxAddr, ctx) && ctx &&
+        RdPtr(ctx + 0x28, pl) && pl &&
+        RdPtr(pl + 0x20, ix) && ix < 8 &&
+        RdPtr(pl + 0x10, team) && team) {
+        g_localPlayerObj = pl;                  // 顺手刷新缓存
+        if (!g_localPlayerId) g_localPlayerId = ix;
+        return pl;
+    }
+    return g_localPlayerObj;                    // 链走不通 → 退回缓存（可能是旧对象）
+}
+}  // namespace
+
+// 0x1F 的映射入口（CsKeyCaveStub 调用，__cdecl）。
+// 只回答「这个 key 该换成哪个」，不改内存、不动句柄 —— 与 0x1D 的换句柄是两条独立路径。
+uint32_t MapCsKey(uint32_t producer, uint32_t key) {
+    g_csKeyCalls++;
+    if (!g_flags[FID_EXTKEY] || !key) return 0;
+    uint32_t enh = 0;
+    for (int i = 0; i < kCsPairCount; i++) {
+        if (kCsPairs[i].base == key) { enh = kCsPairs[i].enh; break; }
+    }
+    if (!enh) return 0;                       // 不在配对表里 → 原样放行
+    g_csKeyLastKey  = key;
+    g_csKeyLastProd = producer;
+    // 归属：Thing+0x418 = Player*。读不到就不判断 —— 收窄模式下宁可不生效，
+    // 也不要把 AI 的建造列表一起改掉（构建器同时服务 AI 的建造决策）。
+    uint32_t owner = 0;
+    const bool ownerOk = RdPtr(static_cast<uintptr_t>(producer) + 0x418, owner) && owner >= 0x00010000;
+    g_csKeyLastOwner = ownerOk ? owner : 0;
+    if (!g_flags[FID_EXTKEYAI]) {
+        if (!ownerOk) { g_csKeyNoOwner++; return 0; }
+        const uint32_t local = LocalPlayerFresh();
+        g_csKeyLastLocal = local;
+        if (!local) { g_csKeyNoOwner++; return 0; }
+        if (owner != local) return 0;
+    }
+    g_csKeyHits++;
+    g_csKeyLastEnh = enh;
+    return enh;
+}
+
+// 供 HTTP /extkey 查询（4+8 个数，顺序与文档一致）
+uint32_t CsKeyDump(uint32_t* out, uint32_t max) {
+    uint32_t n = 0;
+    if (!out || max < 4) return 0;
+    out[n++] = g_csKeyCalls;
+    out[n++] = g_csKeyHits;
+    out[n++] = g_csKeyNoOwner;
+    out[n++] = static_cast<uint32_t>(kCsPairCount);
+    if (max >= 8) {
+        out[n++] = g_csKeyLastKey;
+        out[n++] = g_csKeyLastEnh;
+        out[n++] = g_csKeyLastProd;
+        out[n++] = g_csKeyLastOwner;
+    }
+    if (max >= 9) out[n++] = g_csKeyLastLocal;
+    return n;
+}
+
+// CanBuildProbeCaveStub 的回调：记录每个建造按钮经过「第二道门」的结果。
+//   参数来自桩压栈：template(ebp) / 门返回(eax) / arg0(ebx，门的判定主体) / arg1
+void CanProbeRecord(uint32_t tpl, uint32_t ret, uint32_t arg0, uint32_t arg1) {
+    g_cbTemplate = tpl;
+    g_cbResult   = ret;
+    g_cbEbx      = arg0;
+    g_cbLastArg1 = arg1;
+    g_cbCount++;
+    for (uint32_t i = 0; i < g_cbRingN; ++i) {
+        if (g_cbRing[i][0] == tpl) {
+            g_cbRing[i][1] = ret;
+            g_cbRing[i][2] = arg0;
+            g_cbRing[i][3]++;
+            return;
+        }
+    }
+    if (g_cbRingN < 24) {
+        g_cbRing[g_cbRingN][0] = tpl;
+        g_cbRing[g_cbRingN][1] = ret;
+        g_cbRing[g_cbRingN][2] = arg0;
+        g_cbRing[g_cbRingN][3] = 1;
+        g_cbRingN++;
+    }
+}
+
+// 供 HTTP /canprobe 查询：每条 4 个数（哈希 / 门返回 / arg0 / 次数）
+uint32_t CanProbeDump(uint32_t* out, uint32_t max) {
+    uint32_t n = 0;
+    if (!out) return 0;
+    for (uint32_t i = 0; i < g_cbRingN && n + 4 <= max; ++i) {
+        out[n++] = g_cbRing[i][0];
+        out[n++] = g_cbRing[i][1];
+        out[n++] = g_cbRing[i][2];
+        out[n++] = g_cbRing[i][3];
+    }
+    return n;
+}
 
 uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries) {
     if (!s_fullScanned) ScanAllMemory();

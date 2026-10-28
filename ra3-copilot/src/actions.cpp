@@ -1448,6 +1448,16 @@ int LastCreatedObjs(uintptr_t* out, int max) {
     return n;
 }
 
+// 建筑不能吃「创建后状态字补写」：那 6 个偏移是单位状态机的字段，建筑同一段是别的结构。
+// 实测（伏龙殿 0x1C5EE05B）：补写后约 20 秒，游戏遍历对象调虚函数时 AV —— 对象首字段已被破坏。
+static bool IsStructureTemplate(uint32_t hash) {
+    for (int i = 0; i < kSupportUnitCount; ++i) {
+        if (kSupportUnits[i].hash != hash) continue;
+        return strcmp(kSupportUnits[i].type, u8"建筑") == 0;
+    }
+    return false;
+}
+
 // teamOverride != 0 → 用指定"队伍对象"当归属（可给敌方/任意玩家召唤）；0 → 本地玩家
 bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMouse, const char* name) {
     (void)name;
@@ -1585,15 +1595,65 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
 
     {
         int nb = 0, nfix = 0;
+        if (IsStructureTemplate(hash)) {
+            // 2026-10-28 修复（「建筑复制/召唤后没效果」的根因）：
+            //   裸 CreateUnit 造出来的建筑，状态机停在**半初始化**态 ——
+            //     实测埃癸斯护盾发生器 0x32535841：+0x084=0、+0x088=0、+0x090=0x40（「场景物」位）。
+            //     表现：模型/血量/归属全对，但护盾不投、技能不亮，就是「未入世」。
+            //   旧代码在这里直接 return（注释写「6 个偏移只对单位状态机成立」）——
+            //     **但 2026-10-15 验证这套补写的对象正是埃癸斯护盾发生器**，那是建筑；
+            //     这个跳过是后来加的，等于把已验证的修复关掉了。
+            //   ⚠️ 建筑不能照抄单位那套「绝对写 6 个字」：会抹掉建筑自己的
+            //     +0x094 的 0x4000 与 +0x0D0 的 0x40（实测写后缺失）。
+            //   → 改成「按位置位 + 清场景物位」，且只在 (+0x80|+0x84|+0x88)==0（未初始化）时动手，
+            //     正常建造的建筑 +0x84=0x80000，条件不成立 → 完全不动它。
+            //   写入后引擎会自己把 +0x080 / +0x088 补成激活态（实测 0 → 0x20000000 / 0x00800000），
+            //     这一步等价于 10-15 记的「踢通状态机，一次即可」。
+            for (int i = 0; i < made && i < 20; ++i) {
+                if (!created[i]) continue;
+                uintptr_t thing = ResolveThing(created[i]);
+                if (!thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; continue; }
+                ++nb;
+                uint32_t w80 = 0, w84 = 0, w88 = 0, w90 = 0, w94 = 0, wd0 = 0;
+                SafeRead32(thing + 0x080, w80);
+                SafeRead32(thing + 0x084, w84);
+                SafeRead32(thing + 0x088, w88);
+                SafeRead32(thing + 0x090, w90);
+                SafeRead32(thing + 0x094, w94);
+                SafeRead32(thing + 0x0D0, wd0);
+                if ((w80 | w84 | w88) == 0) {
+                    // ★ 触发器实测（2026-10-28，/copy 造出来的埃癸斯护盾发生器逐帧读回）：
+                    //   只写 +0x84 / +0x94、把 +0x90 清成 0 → **状态机完全不动**
+                    //     （+0x80/+0x88/+0x0D0 一直是 0，护盾不出、技能灰）。
+                    //   把 **+0x90 写成 2** → 2 秒内引擎自己把整组补成激活态：
+                    //     +0x80: 0 → 0x20000000   +0x84: 0x800 → 0x80800
+                    //     +0x88: 0 → 0x00800000   +0x90: 2 → 0（被消费掉）
+                    //     +0x0D0: 0 → 0x40
+                    //   写完后与正常建造逐项一致，画面出现护盾罩。
+                    //   ⇒ `+0x090 = 2` 是「请求入世」的一次性命令位，不是常驻状态位，写完必须让它归 0。
+                    if (SafeWrite32(thing + 0x084, w84 | 0x00000800u)) ++nfix;
+                    if (SafeWrite32(thing + 0x090, 0x00000002u)) ++nfix;
+                    if (SafeWrite32(thing + 0x094, w94 | 0x00000020u)) ++nfix;
+                }
+                R3_LOG(0, "[召唤] 建筑状态字 obj=%08X 旧值 080=%08X 084=%08X 088=%08X 090=%08X 094=%08X 0D0=%08X",
+                       (unsigned)thing, w80, w84, w88, w90, w94, wd0);
+            }
+        } else {
         for (int i = 0; i < made && i < 20; ++i) {
             if (!created[i]) continue;
             uintptr_t thing = ResolveThing(created[i]);
             if (!thing || !LooksLikeGameObject(thing)) { ++g_guardSkip; continue; }
             ++nb;
-            for (int k = 0; k < (int)(sizeof(kPostCreateStateWords) / sizeof(kPostCreateStateWords[0])); ++k)
+            uint32_t ov[6] = { 0 };
+            for (int k = 0; k < 6; ++k) SafeRead32(thing + kPostCreateStateWords[k].off, ov[k]);
+            for (int k = 0; k < 6; ++k)
                 if (SafeWrite32(thing + kPostCreateStateWords[k].off, kPostCreateStateWords[k].val)) ++nfix;
+            R3_LOG(0, "[召唤] 状态字 obj=%08X 旧值 080=%08X 084=%08X 088=%08X 090=%08X 094=%08X 0D0=%08X",
+                   (unsigned)thing, ov[0], ov[1], ov[2], ov[3], ov[4], ov[5]);
         }
-        R3_LOG(0, "[召唤] 创建后状态字补写：%d 个单位 × 6 字（成功写入 %d 次）", nb, nfix);
+        }
+        R3_LOG(0, "[召唤] 创建后状态字补写：%d 个对象（%s 路径，成功写入 %d 次）",
+               nb, IsStructureTemplate(hash) ? "建筑踢状态机" : "单位写 6 字", nfix);
     }
     // 创建后处理链（延迟版，`/postproc?on=1` 默认开）：把对象登记进玩家体系。
     //   ⚠️ 实测：**创建当帧立刻调无效**（图标仍透明）→ 这里只"入队"，
