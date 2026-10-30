@@ -254,7 +254,7 @@ ra3-copilot/
 ├── mcp/
 │   ├── ra3_mcp.py          MCP stdio 服务器（零依赖 Python）
 │   └── unit_catalog.json   单位目录（自动生成）
-├── tools/              AOB 预检 / 注入诊断 / 渲染探针 / 目录生成 / 图标生成等脚本
+├── tools/              AOB 预检 / 注入诊断 / 渲染探针 / 桌面侧 UI 自动化 / 目录生成 / 图标生成等脚本
 ├── build_out/          Ra3Copilot.exe（单文件发布版）/ ra3copilot.dll
 ├── ra3copilot.dll      产物：注入模块
 ├── injector.exe        产物：命令行注入器
