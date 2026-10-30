@@ -118,6 +118,12 @@ uint32_t g_cbRingN        = 0;
 uint32_t g_cbLastArg1     = 0;   // 最近一次门的第二个参数（Template，= ebp）
 uint32_t g_canProbeFn     = 0;   // → ra3::CanProbeRecord（InstallHooks 里赋值）
 uint32_t g_cbProbeOn      = 1;   // 门探针开关（0 = 完全旁路，只剩原指令重放）
+uint32_t g_builderLastCs  = 0;   // 建造页构建器实际拿到的 CommandSet 句柄（只读取证）
+uint32_t g_csKeyPtr       = 0;   // CsKeyCaveStub 入口的 &key（写回用）
+uint32_t g_builderRing[8][2] = {};  // 构建器最近 8 次 {cs, 条目数}
+uint32_t g_builderRingN   = 0;
+uint32_t g_csKeyCached    = 0;   // 成功把 Thing+0x464 写成扩展版 key 的次数
+uint32_t g_csKeyCacheFail = 0;   // 写缓存失败（指针不可写）的次数
 }
 
 // ---- overlay 侧遥测 ----
@@ -276,10 +282,14 @@ const HookDef kHooks[] = {
     //    Steam 上 setEnabled 内部还有两层虚调用，17:25 实测把栈弹坏（EIP 落到栈上、EBP=0x206）。
     //    0x1E 已改到 Buildability 层实现（见 Buildable 项），走游戏自己的 UI 流程。
     { "BtnEnable",  0x000000, 0x000000, AOB_BTNENABLE,  11,(void*)&BtnEnableCaveStub, &g_retBtnEnable, 6 },
-    // 建造页灰/亮唯一门：Buildability(Player*, Template*) —— 只对扩展建筑放行
-    { "Buildable",  0x445250, 0x4832C0, AOB_BUILDABLE,   8,(void*)&BuildableCaveStub, &g_retBuildability, 8 },
-    // 0x1E 的正解：setDisabled 入口把「扩展建筑」改走 setEnabled（jmp，栈平衡）
-    { "SetDisable", 0x6B7040, 0x64BCC0, AOB_SETDIS,     10,(void*)&SetDisCaveStub, &g_retSetDis, 5 },
+    // ⛔ 0x1E 的两条站点（Buildable / SetDisable）2026-10-30 起**一律不装**（RVA 置 0）。
+    //    它们是「在判定层替扩展条目开绿灯」，实机后果：按钮亮着但点下去被秒取消
+    //    （10-29 RVA 0x288470 链表遍历 AV），换成门钩子版本又在 0x4227A1 崩。
+    //    根因：显示列表与判定用的不是同一份 CommandSet（按按钮下标取 def 会越界）。
+    //    正解已改为 0x1F：换 cs key **并**写 Thing+0x464，让两边查到同一份列表，
+    //    灰/亮完全交回引擎自己的科技链。桩体保留在 stubs.asm 里只为不破坏链接，永不调用。
+    { "Buildable",  0x000000, 0x000000, AOB_BUILDABLE,   8,(void*)&BuildableCaveStub, &g_retBuildability, 8 },
+    { "SetDisable", 0x000000, 0x000000, AOB_SETDIS,     10,(void*)&SetDisCaveStub, &g_retSetDis, 5 },
     // 建造页构建器：eax = 查表得到的 CommandSet 句柄 → 换成同族扩展完整版句柄（0x1D）
     // 零售 0x6CB352 / Steam 0x662422，重放 8 字节（= AOB 长度，落在指令边界上）
     { "BuildExtCs", 0x000000, 0x662422, AOB_BUILDEXT_CS, 8, (void*)&BuildExtCsStub, &g_retBuildExtCs, 8 },
@@ -344,7 +354,12 @@ HookStatus InstallHooks() {
     // ⚠ 2026-10-27 21:30：日冕（神州）环境点建造栏必崩（栈见 internal/docs/待修-mod环境建造栏崩溃.md）。
     //    「mod 环境默认关掉这几项」的改法已试并**回滚** —— 未验证有效，且会让 mod 用户失去功能。
     //    在拿到定论前保持历史默认值（1/1），不做环境分支。
-    g_flags[FID_BUILDEXT]  = 1;
+    // 扩展模式（建造页）默认走 0x1F：查表前把 cs key 换成 Enhanced key，覆盖 24 组配对
+    // （含 8 处生产建筑），零内存写入、两版同一套代码。
+    // 0x1D（换 cs 句柄）只在 Steam 有站点、要全内存扫描 2.8~5 秒，且与 0x1F 同时开会互相抵消
+    // → 默认关，仍可用 /toggle?f=0x1D&on=1 单独启用。
+    g_flags[FID_EXTKEY]    = 1;
+    g_flags[FID_BUILDEXT]  = 0;
     // ⛔ 0x1E 两版一律默认关（2026-10-26 16:45 定因）。
     //    BtnEnableCaveStub 命中扩展建筑时走 be_force：调完 setEnabled 就 `mov al,1; ret`
     //    —— 它跳过的是**建造按钮的构造函数**本身（零售 0xABB6F0 / Steam 0x650320 的
@@ -357,10 +372,11 @@ HookStatus InstallHooks() {
     //    SovietHeavyAntiAirMissileTurret / DualPurposeCruiseMissileTurret 两个按钮，
     //    0x1E 一看到就跳过构造。⇒ 与 0x1D 的替换逻辑无关，是 0x1E 这个 stub 写错了。
     //    要做「强制可点」，hooks 必须挂在「按钮构造完成之后」，不能在构造入口劫持。
-    // ✅ 2026-10-26 18:33 起默认开：走的是 setDisabled 入口 `jmp setEnabled`（栈平衡、
-    //    上下文是游戏自己的），已实测 4700+ 次命中无崩溃。旧的「在 0x650320 入口手动
-    //    call setEnabled」永远不要再启用（那才是历史上连崩 6 次的路径）。
-    g_flags[FID_BTNENABLE] = 1;
+    // ⛔ 0x1E 默认关：它是在「判定层」强行给扩展条目开绿灯的做法（setDisabled 改道 /
+    //    Buildability 恒真 / 门返回可建），实机证明会造成「亮着但点下去被取消」，
+    //    门钩子版本还会在下游 AV（RVA 0x4227A1）。扩展条目的可用性改由 0x1F 写
+    //    Thing+0x464 缓存让引擎自己算，不再需要这一路。
+    g_flags[FID_BTNENABLE] = 0;
 
     // stub 内联的绝对地址按构建切换。ZoomEntry 的原指令是 `mov eax,[0xCDB750]`
     // （Steam 版为 [0xCE08F0]），读错地址会让后续 `cmp [eax+0xBC],bl` 直接空指针崩。
@@ -615,6 +631,15 @@ const uint32_t EXT_BLD[] = {
 };
 const int EXT_BLD_N = static_cast<int>(sizeof(EXT_BLD) / sizeof(EXT_BLD[0]));
 
+// 运行时扩展模板白名单：由 0x1F 首次命中时，从 store 取出每组 (普通, 扩展) CommandSet
+// 求差集填入 —— 覆盖生产建筑新增的单位/建筑，静态 EXT_BLD 只作兜底。
+// 只收「扩展版有、普通版没有」的条目，普通条目一律不进，否则会把它们的科技前置一起放开。
+const int MAX_EXT_TPL = 512;
+uint32_t s_extTpl[MAX_EXT_TPL];
+int      s_extTplN      = 0;
+bool     s_extTplFilled = false;
+int      s_extTplPair   = 0;   // 实际成功取到并求过差集的配对数（诊断）
+
 // 建造者识别签名：每阵营的「电厂 / 兵营 / 矿场 / 战车工厂」四栋。
 // 四栋全命中才认作建造基地/起重车类 CommandSet（单看一个容易误配）。
 const uint32_t SIG_BLD[][4] = {
@@ -676,6 +701,63 @@ bool ReadCsNode(uint32_t cs, CsNode& n) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
+}
+
+// —— 从 SAGE store 按「名字哈希」取 CommandSet 句柄 ——
+//   签名与建造页构建器用的是同一个：`mov ecx,[store]; push key; call find`，
+//   thiscall、单参数、返回 cs 句柄（找不到返回 0）。
+//   两版差异只有 store 全局与 find 的地址：零售 [0x00CD8D00] / RVA 0x0DF970，
+//   Steam [0x00CDDEA0] / RVA 0x121370（两者代码形状一致，均为 thiscall + `ret 4`）。
+typedef uint32_t(__thiscall* StoreFindFn)(void* store, uint32_t key);
+
+uint32_t StoreFindCs(uint32_t key) {
+    if (!key) return 0;
+    const uint32_t storeVa = ::ra3::Pick(0x00CD8D00, 0x00CDDEA0);
+    const uint32_t findVa  = ::ra3::Pick(0x004DF970, 0x00521370);
+    uint32_t cs = 0;
+    __try {
+        void* store = *reinterpret_cast<void**>(static_cast<uintptr_t>(storeVa));
+        if (!store) return 0;
+        const StoreFindFn fn = reinterpret_cast<StoreFindFn>(static_cast<uintptr_t>(findVa));
+        cs = fn(store, key);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+    return cs;
+}
+
+bool CsHasHash(const CsNode& n, uint32_t h) {
+    for (uint32_t i = 0; i < n.nhash; i++)
+        if (n.hash[i] == h) return true;
+    return false;
+}
+
+// 一次性把 24 组配对的「扩展独有条目」灌进白名单。
+//   调用点是 MapCsKey（建造页构建器内部、游戏线程），此时 store 一定已经就绪；
+//   放这儿而不是启动时：一局没进时 store 里根本没有这些 key。
+void FillExtTplTable() {
+    if (s_extTplFilled) return;
+    s_extTplFilled = true;
+    for (int i = 0; i < kCsPairCount && s_extTplN < MAX_EXT_TPL; i++) {
+        const uint32_t enhCs = StoreFindCs(kCsPairs[i].enh);
+        if (!enhCs) continue;
+        CsNode en = {};
+        if (!ReadCsNode(enhCs, en)) continue;
+        CsNode ba = {};
+        const uint32_t baseCs = StoreFindCs(kCsPairs[i].base);
+        const bool haveBase = baseCs && ReadCsNode(baseCs, ba);
+        s_extTplPair++;
+        for (uint32_t k = 0; k < en.nhash && s_extTplN < MAX_EXT_TPL; k++) {
+            const uint32_t h = en.hash[k];
+            if (haveBase && CsHasHash(ba, h)) continue;   // 普通版也有 ⇒ 原有条目，不碰
+            bool dup = false;
+            for (int j = 0; j < s_extTplN; j++)
+                if (s_extTpl[j] == h) { dup = true; break; }
+            if (!dup) s_extTpl[s_extTplN++] = h;
+        }
+    }
+    // 一组都没取到 ⇒ 这次调用的时机不对（store 还没装好），下次命中再试一次。
+    if (s_extTplPair == 0) s_extTplFilled = false;
 }
 
 int FindNode(uint32_t cs) {
@@ -740,6 +822,15 @@ void ScanNear(uint32_t cs) {
 //   直接写 inner 会绕过这两条约束，点开建造列表时在容器路径上崩（StackHash）。
 uint32_t ReplaceCsImpl(uint32_t cs) {
     g_extCallCount++;                              // 先记账：能区分「hook 没触发」与「匹配失败」
+    g_builderLastCs = cs;                          // 构建器查表拿到的 cs（无论 0x1D 开不开都记）
+    {
+        CsNode bn = {};
+        const uint32_t cnt = (cs && ReadCsNode(cs, bn)) ? bn.nhash : 0;
+        const uint32_t slot = g_builderRingN % 8;
+        g_builderRing[slot][0] = cs;
+        g_builderRing[slot][1] = cnt;
+        g_builderRingN++;
+    }
     if (!g_flags[FID_BUILDEXT]) return cs;
     if (!cs || cs < 0x00010000) return cs;
     int idx = FindNode(cs);
@@ -841,6 +932,18 @@ uint32_t MapCsKey(uint32_t producer, uint32_t key) {
     }
     g_csKeyHits++;
     g_csKeyLastEnh = enh;
+    // 让引擎自己认这套列表：生产者对象的 cs key 缓存（Thing+0x464）也写成扩展版。
+    //   可用性判定 0x33B0F0 就是读这个字段去 store.find 的（读到非 0 直接返回，不重算），
+    //   写对它之后扩展条目天然「在列表内」，灰/亮与下命令都走引擎自己的逻辑。
+    if (producer) {
+        __try {
+            *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(producer) + 0x464) = enh;
+            g_csKeyCached++;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            g_csKeyCacheFail++;
+        }
+    }
+    FillExtTplTable();   // 首次命中时顺带把「扩展独有条目」灌进可点白名单（只做一次）
     return enh;
 }
 
@@ -859,6 +962,14 @@ uint32_t CsKeyDump(uint32_t* out, uint32_t max) {
         out[n++] = g_csKeyLastOwner;
     }
     if (max >= 9) out[n++] = g_csKeyLastLocal;
+    if (max >= 11) {
+        out[n++] = static_cast<uint32_t>(s_extTplN);    // 白名单条目数（扩展独有模板）
+        out[n++] = static_cast<uint32_t>(s_extTplPair); // 实际求过差集的配对数
+    }
+    if (max >= 13) {
+        out[n++] = g_csKeyCached;      // Thing+0x464 写成扩展版 key 的次数
+        out[n++] = g_csKeyCacheFail;
+    }
     return n;
 }
 
@@ -885,6 +996,23 @@ void CanProbeRecord(uint32_t tpl, uint32_t ret, uint32_t arg0, uint32_t arg1) {
         g_cbRing[g_cbRingN][3] = 1;
         g_cbRingN++;
     }
+}
+
+// 供 HTTP /csdump?key=0x.. 查询：按名字哈希取 CommandSet，导出它的条目模板哈希。
+//   out[0] = cs 句柄，out[1] = 条目数，其后为各条目模板哈希。
+uint32_t CsDumpByKey(uint32_t key, uint32_t* out, uint32_t max) {
+    if (!out || max < 2) return 0;
+    out[0] = 0;
+    out[1] = 0;
+    const uint32_t cs = StoreFindCs(key);
+    if (!cs) return 2;
+    out[0] = cs;
+    CsNode n = {};
+    if (!ReadCsNode(cs, n)) return 2;
+    out[1] = n.nhash;
+    uint32_t k = 2;
+    for (uint32_t i = 0; i < n.nhash && k < max; i++) out[k++] = n.hash[i];
+    return k;
 }
 
 // 供 HTTP /canprobe 查询：每条 4 个数（哈希 / 门返回 / arg0 / 次数）
@@ -925,11 +1053,14 @@ uint32_t BuildExtDump(uint32_t* out, uint32_t maxEntries) {
     return n;
 }
 
-// 供 BtnEnableCaveStub 用：该模板哈希是否是「扩展建筑」（三阵营任一）。
+// 供 Buildable/SetDisableCaveStub 用：该模板哈希是否是「扩展独有条目」。
 // asm 里 push hash / call Ra3IsExtTpl / add esp,4，返回 eax=1 表示命中。
+// 先查运行时白名单（24 组配对的差集，含生产建筑新增的单位），再退回静态 EXT_BLD。
 extern "C" uint32_t Ra3IsExtTpl(uint32_t hash) {
     for (int i = 0; i < EXT_BLD_N; i++)
         if (hash == EXT_BLD[i]) return 1;
+    for (int i = 0; i < s_extTplN; i++)
+        if (hash == s_extTpl[i]) return 1;
     return 0;
 }
 

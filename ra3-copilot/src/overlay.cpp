@@ -1604,19 +1604,17 @@ void PanelMisc() {
                               "只对本机玩家生效，电脑不受影响");
     }
     {
-        // 0x1D 补列表 + 0x1E 解灰色，两件事合起来才是「扩展模式那套建造页」。
-        // 0x1D 只在进对局构建建造页那一刻生效，本局已构建完就要重开一局。
-        const bool bExt = GetFeature(FID_BUILDEXT);
-        const bool bBtn = GetFeature(FID_BTNENABLE);
-        bool ext = bExt || bBtn;
+        // 0x1F：构建建造页时把 cs key 换成扩展版，并把生产者对象的 key 缓存一并改写 ——
+        // 灰/亮与下命令由引擎自己按扩展版列表判定，不做任何强制。
+        // 只在进对局构建建造页那一刻生效，本局已构建完就要重开一局。
+        bool ext = GetFeature(FID_EXTKEY);
         if (ImGui::Checkbox("启用扩展模式科技", &ext)) {
-            SetFeature(FID_BUILDEXT, ext);
-            SetFeature(FID_BTNENABLE, ext);
+            SetFeature(FID_EXTKEY, ext);
             AddLog(ext ? LOG_OK : LOG_INFO, "[建造] 扩展模式科技 %s", ext ? "已启用" : "已恢复");
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("战役建造页缺的扩展建筑补上，并让它们可点\n"
-                              "含胡杨防空导弹系统、礁石岸防导弹要塞等（四阵营通用）\n"
+            ImGui::SetTooltip("建造页恢复扩展模式那一套：建造厂、兵营、机场、船坞、战车工厂\n"
+                              "共 24 组列表补全，新增的建筑与单位随之出现\n"
                               "补全在进入对局时生效 —— 本局已进过建造页则需重开一局");
     }
     ImGui::Separator();

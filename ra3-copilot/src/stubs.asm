@@ -115,6 +115,7 @@ EXTERNDEF g_mapCsKeyFn        : DWORD   ; C 侧 key 映射函数指针（入参 
 EXTERNDEF g_canProbeFn        : DWORD   ; C 侧取证回调：void(template, ret, arg0, arg1)
 EXTERNDEF g_cbProbeOn         : DWORD   ; 门探针开关（1=记录，0=完全旁路）
 EXTERNDEF g_csStoreSlot       : DWORD   ; CommandSet 注册表那个全局槽的地址（两构建不同）
+EXTERNDEF g_csKeyPtr          : DWORD   ; CsKeyCaveStub 入口存下的 &key
 
 .code
 
@@ -1224,15 +1225,15 @@ BuildExtCsStub ENDP
 ;   出口只有一处；pushad 只 pop 一次；净栈位移 = 0（引擎的 call find 是 ret 4，自清 push 的 key）
 CsKeyCaveStub PROC
     pushad
-    mov   edx, eax                       ; edx = &key
+    mov   dword ptr [g_csKeyPtr], eax    ; 先存 &key：pushad 保存的 EAX 在 +0x1C，不靠栈偏移取
     mov   ecx, dword ptr [esi+10h]       ; ecx = 建造者/生产者对象（原 0x6CB337 读的那个）
-    push  dword ptr [edx]                ; 参数2：原 key
+    push  dword ptr [eax]                ; 参数2：原 key
     push  ecx                            ; 参数1：生产者
     call  dword ptr [g_mapCsKeyFn]       ; uint32_t MapCsKey(producer, key)
     add   esp, 8
     test  eax, eax
     jz    short cs_key_replay
-    mov   edx, dword ptr [esp+28]        ; pushad 保存的 eax = &key
+    mov   edx, dword ptr [g_csKeyPtr]    ; &key
     mov   dword ptr [edx], eax           ; 就地换掉 key
 cs_key_replay:
     popad
@@ -1242,6 +1243,7 @@ cs_key_replay:
     mov   ecx, dword ptr [edx]
     jmp   dword ptr [g_retCsKey]         ; = site + 9（下一条即 call <store.find>）
 CsKeyCaveStub ENDP
+
 
 ; ===========================================================================
 ; CanBuildProbeCaveStub <- Steam base+0x650470（零售未定位，站点=0）

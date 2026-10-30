@@ -1035,9 +1035,10 @@ void Handle(SOCKET c, char* req) {
             "GET  /canprobe[?hash=0x..]       建造按钮第二道门取证：门返回值 + esi 的 +470/+471 标志字节\n"
             "GET  /toggle?f=0x1B&on=0|1        f=0x1B 移除科技锁定（0x43EA70 对本机玩家恒「可用」→ 建造页黑锁解锁）\n"
             "                                  f=0x1A 忽略建造前置科技（0x4451F0 恒真；对 0x445250 的灰按钮同样有效）\n"
-            "                                  f=0x1D 补全扩展建筑（构建建造页时换成扩展完整版 CommandSet）\n"
-            "                                  f=0x1E 扩展建筑可点（0xABB6F0 对胡杨防空/礁石岸防强制 setEnabled）\n"
-            "                                  f=0x1F 扩展模式列表（查表前换 cs key，24 组配对含生产建筑）\n"
+            "                                  f=0x1D 补全扩展建筑（换 cs 句柄；Steam 专用，默认关，与 0x1F 同时开会互相抵消）\n"
+            "                                  f=0x1E 已下线（原「判定层强行放行」：三套实现均会崩或被秒取消；\n"
+            "                                         现两条站点不安装，扩展条目灰/亮由引擎科技链自己决定）\n"
+            "                                  f=0x1F 扩展模式列表（查表前换 cs key，24 组配对含 8 处生产建筑；默认开）\n"
             "                                  f=0x20 f=0x1F 的范围：0=只对本机玩家 1=全场（含 AI）\n"
             "GET  /unlock?on=0|1              协议技能免「该阵营基地」前置（0x83B740 恒真）\n"
             "GET  /buildable?x=&y=&z=&hash=0x..[&angle=&opts=0x..]  建筑落点可建性（直调游戏判定）\n"
@@ -2125,8 +2126,8 @@ void Handle(SOCKET c, char* req) {
         // 0x1F「扩展模式列表」：查表前换 cs key。只读计数器 + 最近一次映射，便于判断
         //   收窄模式到底是「没触发」「配对表没命中」还是「归属判不出」。
         static char pb[1024];
-        uint32_t d[12] = { 0 };
-        const uint32_t n = CsKeyDump(d, 12);
+        uint32_t d[14] = { 0 };
+        const uint32_t n = CsKeyDump(d, 14);
         size_t w = _snprintf_s(pb, sizeof(pb), _TRUNCATE,
                                "extkey on=%d ai=%d | 进入=%u 已换=%u 判不出归属=%u 配对=%u\n",
                                GetFeature(FID_EXTKEY) ? 1 : 0, GetFeature(FID_EXTKEYAI) ? 1 : 0,
@@ -2139,6 +2140,31 @@ void Handle(SOCKET c, char* req) {
         if (n >= 9)
             w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
                              "  收窄用本机=%08X（现走玩家链） 缓存=%08X\n", d[8], g_localPlayerObj);
+        if (n >= 11)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  可点白名单=%u 条 / 求差集配对=%u 组 / 构建器最近 cs=%08X\n", d[9], d[10], g_builderLastCs);
+        if (n >= 13)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  缓存写回=%u 次 / 失败=%u 次（Thing+0x464 = 扩展版 key）\n", d[11], d[12]);
+        for (uint32_t i = 0; i < g_builderRingN && w < sizeof(pb) - 48; i++) {
+            const uint32_t slot = i % 8;
+            if (!g_builderRing[slot][0]) continue;
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE,
+                             "  cs=%08X 条目=%u\n", g_builderRing[slot][0], g_builderRing[slot][1]);
+        }
+        HttpSend(c, pb, (int)strlen(pb));
+        return;
+    } else if (strcmp(path, "/csdump") == 0) {
+        // 按 CommandSet 名字哈希导出条目模板哈希（只读）：核对「换 key 之后到底拿到哪份列表」。
+        static char pb[2048];
+        char kb[16];
+        const uint32_t key = GetParam(query, "key", kb, sizeof(kb)) ? (uint32_t)strtoul(kb, nullptr, 0) : 0u;
+        uint32_t d[64] = { 0 };
+        const uint32_t n = CsDumpByKey(key, d, 64);
+        size_t w = _snprintf_s(pb, sizeof(pb), _TRUNCATE,
+                               "csdump key=%08X cs=%08X 条目=%u\n", key, n > 0 ? d[0] : 0, n > 1 ? d[1] : 0);
+        for (uint32_t i = 2; i < n && w < sizeof(pb) - 16; i++)
+            w += _snprintf_s(pb + w, sizeof(pb) - w, _TRUNCATE, "  %08X\n", d[i]);
         HttpSend(c, pb, (int)strlen(pb));
         return;
     } else if (strcmp(path, "/canprobe") == 0) {

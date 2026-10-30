@@ -89,8 +89,15 @@ extern uint32_t g_cbRingN;       // 取证表已用条数（每格 4 数）
 extern uint32_t g_cbRing[24][4]; // 取证表：{模板哈希, 门返回, arg0, 次数}
 extern uint32_t g_canProbeFn;    // 门探针回调（stub 调它）
 extern uint32_t g_cbProbeOn;     // 门探针开关（1=记录，0=完全旁路）
+extern uint32_t g_builderLastCs; // 建造页构建器实际拿到的 CommandSet 句柄（只读取证）
+extern uint32_t g_csKeyPtr;      // CsKeyCaveStub 的 &key（桩内部用）
+extern uint32_t g_builderRingN;  // 构建器最近几次调用的计数
+extern uint32_t g_csKeyCached;   // 把 Thing+0x464 写成扩展版 key 的成功次数
+extern uint32_t g_csKeyCacheFail;// 写缓存失败的次数
+extern uint32_t g_builderRing[8][2];  // 最近 8 次 {cs, 条目数}
 void CanProbeRecord(uint32_t tpl, uint32_t ret, uint32_t arg0, uint32_t arg1);
 uint32_t CanProbeDump(uint32_t* out, uint32_t max);
+uint32_t CsDumpByKey(uint32_t key, uint32_t* out, uint32_t max);
 extern uint32_t g_retBuildability; // Buildability hook 跳回点（站 + 8）
 extern uint32_t g_retSetDis;       // setDisabled hook 跳回点（站 + 5）
 extern uint32_t g_extCallCount;    // BuildExtCs hook 被调用次数
