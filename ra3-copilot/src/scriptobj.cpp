@@ -12,6 +12,7 @@
 #include <tlhelp32.h>
 #include "scriptobj.h"
 #include "scripttable.h"
+#include "buildinfo.h"
 #include "generated/objectives_data.h"
 #include "maptbl.h"
 
@@ -506,28 +507,135 @@ bool ScriptNodeAddrLive(uint32_t hash, uintptr_t* outNode) {
     return true;
 }
 
-// 当前地图路径：TheGameLogic（[0x00CD8CE4]）+0x98 是一个 C 串，
-// 实测形如 data\maps\official\CAMP_S09_NewYork_Rao\CAMP_S09_NewYork_Rao.map。
+// 当前地图路径：[TheGameLogic]+0x98 是一个 C 串，实测形如
+// data\maps\official\CAMP_S08_EasterIsland_Stewart\CAMP_S08_EasterIsland_Stewart.map。
 // 按地图文件名认关卡是唯一可靠的方式 —— 靠脚本节点命中率会被跨关卡同名的
 // TIMER - Objective Buffer 带偏（A01 曾经永远是「最像」的那张）。
-// 当前地图的相对路径，原样返回（'\\' 分隔）。读不到返回 false。
-static bool GameMapRelPath(char* out, int cap) {
+//
+// GameLogic 全局 VA 按构建分两列：零售 0x00CD8CE4 / Steam 0x00CDDE84。两者差 0x51A0，
+// 与 features.cpp 里 0x00CD8D00 / 0x00CDDEA0 那一对同差。取错列读到的是 .data 里的
+// 未用槽位（值为 0）—— 表现不是崩溃，而是「读不到当前地图路径」，于是掉进启发式打分，
+// 关卡认错。两列都读不出 *.map 时扫一遍 .data 兜底（别的构建 / 槽位被别的对象重用）。
+static volatile LONG g_mapPathVa  = 0;   // 兜底探测到的全局 VA（0 = 还没有）
+static volatile LONG g_mapPathNextMs = 0;   // 兜底探测的冷却截止（GetTickCount）
+
+// 地址起的 n 字节是否落在已提交、可读的页里
+static bool PageReadable(uintptr_t addr, size_t n) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (VirtualQuery((LPCVOID)addr, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) return false;
+    const DWORD ok = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                     PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE;
+    if (!(mbi.Protect & ok)) return false;
+    return (addr + n) <= ((uintptr_t)mbi.BaseAddress + mbi.RegionSize);
+}
+
+static bool RdU32(uintptr_t addr, uintptr_t* out) {
+    if (!PageReadable(addr, 4)) return false;
+    __try { *out = *(const uintptr_t*)addr; } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    return true;
+}
+
+// 读 C 串（同进程内，VA 即绝对地址；无 ASLR）
+static bool ReadCStr(uintptr_t addr, char* out, int cap) {
     out[0] = 0;
-    uintptr_t gl = 0;
-    __try { gl = *(const uintptr_t*)0x00CD8CE4; } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-    if (!gl) return false;
-    const char* path = nullptr;
-    __try { path = *(const char**)(gl + 0x98); } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-    if (!path || (uintptr_t)path < 0x01000000u) return false;
+    if (cap < 2 || !PageReadable(addr, 2)) return false;
     int n = 0;
     __try {
-        for (; n < cap - 1 && path[n]; ++n) out[n] = path[n];
+        const char* p = (const char*)addr;
+        for (; n < cap - 1 && p[n]; ++n) out[n] = p[n];
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         out[0] = 0;
         return false;
     }
     out[n] = 0;
     return n > 0;
+}
+
+// 只认地图路径：必须以 .map 结尾。别把 GameLogic 里别的串当路径用。
+static bool LooksLikeMapPath(const char* s) {
+    const size_t n = strlen(s);
+    if (n < 8 || n >= 260) return false;
+    return _stricmp(s + n - 4, ".map") == 0;
+}
+
+// gva 指向 GameLogic：取 +0x98 的串。out 可为 nullptr（只校验）。
+static bool PathFromGlobal(uintptr_t gva, char* out, int cap) {
+    uintptr_t obj = 0, p = 0;
+    if (!gva || !RdU32(gva, &obj) || !obj) return false;
+    if (!RdU32(obj + 0x98, &p) || !p) return false;
+    char tmp[260];
+    if (!ReadCStr(p, tmp, (int)sizeof(tmp))) return false;
+    if (!LooksLikeMapPath(tmp)) return false;
+    if (out && cap > 0) strncpy_s(out, (size_t)cap, tmp, _TRUNCATE);
+    return true;
+}
+
+// 路径里是否真有 \maps\ 这一层（战役/遭遇战图都在 maps 下；additionalmaps 不算）
+static bool HasMapsDir(const char* s) {
+    for (const char* p = s; *p; ++p)
+        if (_strnicmp(p, "\\maps\\", 6) == 0) return true;
+    return false;
+}
+
+// 兜底：扫主模块可写数据段，找「[全局] → 对象，且对象 +0x98 是 *.map 路径」的那个全局。
+// 先只认 \maps\ 下的路径（战役与遭遇战图都在那儿，能避开 mapmetadata_*.manifest 这类
+// 同结构的对象），一个都没有才放宽到任意 .map —— additionalmaps 里的 mod 图靠第二遍。
+// .data 几十万字节、单次遍历几十毫秒，只可能在后台线程跑到。
+static uintptr_t DetectMapPathGlobal() {
+    const uintptr_t img = (uintptr_t)GetModuleHandleW(nullptr);
+    if (!img) return 0;
+    const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)img;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    const IMAGE_NT_HEADERS32* nt = (const IMAGE_NT_HEADERS32*)(img + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+
+    for (int strict = 1; strict >= 0; --strict) {
+        const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+        for (int s = 0; s < nt->FileHeader.NumberOfSections; ++s) {
+            const DWORD vsz = sec[s].Misc.VirtualSize;
+            if (!(sec[s].Characteristics & IMAGE_SCN_MEM_WRITE)) continue;
+            if (vsz < 0x1000 || vsz > 0x400000) continue;   // .data 量级；跳过 .tls 之类
+            const uintptr_t lo = img + sec[s].VirtualAddress;
+            const uintptr_t hi = lo + vsz - 4;
+            for (uintptr_t a = lo; a < hi; a += 4) {
+                uintptr_t obj = 0;
+                if (!RdU32(a, &obj) || obj < 0x01000000u || obj >= 0x7F000000u) continue;
+                char tmp[260];
+                if (!PathFromGlobal(a, tmp, (int)sizeof(tmp))) continue;
+                if (strict && !HasMapsDir(tmp)) continue;
+                return a;
+            }
+        }
+    }
+    return 0;
+}
+
+// 当前地图路径的来源全局：已知两列 → 探测缓存 → 兜底探测（失败冷却 5 秒再试）
+static uintptr_t MapPathGlobal() {
+    uintptr_t cached = (uintptr_t)InterlockedCompareExchange(&g_mapPathVa, 0, 0);
+    if (cached && PathFromGlobal(cached, nullptr, 0)) return cached;
+
+    const uintptr_t picked = ::ra3::Pick(0x00CD8CE4u, 0x00CDDE84u);
+    if (PathFromGlobal(picked, nullptr, 0)) {
+        InterlockedExchange(&g_mapPathVa, (LONG)picked);
+        return picked;
+    }
+
+    // 冷却而不是"最多试 N 次"：主菜单阶段扫不到是正常的，进局后必须还能自己找回来。
+    const DWORD now = GetTickCount();
+    if ((LONG)(now - (DWORD)g_mapPathNextMs) < 0) return 0;
+    const uintptr_t g = DetectMapPathGlobal();
+    if (g) InterlockedExchange(&g_mapPathVa, (LONG)g);
+    else    InterlockedExchange(&g_mapPathNextMs, (LONG)(now + 5000));
+    return g;
+}
+
+// 当前地图的相对路径，原样返回（'\\' 分隔）。读不到返回 false。
+static bool GameMapRelPath(char* out, int cap) {
+    out[0] = 0;
+    return PathFromGlobal(MapPathGlobal(), out, cap);
 }
 
 // 从路径取小写、不含扩展名的文件名
@@ -595,6 +703,10 @@ int ObjDetectMap(int* scoreOut) {
         }
     }
     if (scoreOut) *scoreOut = bestScore;
+    // 启发式只是最后一层（路径读得到时根本走不到这儿）。独有依赖命中率不到一半 = 目标表里
+    // 没有像当前这关的图 —— 返回 -1 让人手动选关，比猜一张错的更安全：猜错会把别的关的
+    // flag 拨一遍。
+    if (bestScore < 500) return -1;
     return best;
 }
 

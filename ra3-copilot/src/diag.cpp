@@ -38,9 +38,12 @@ static const wchar_t* DLL_NAME  = L"ra3copilot.dll";
 static const int      HTTP_PORT = 17832;
 static const char*    DIAG_VER  = "1";
 
-// TheGameLogic 全局指针：VA 0x00CD8CE4（ImageBase 0x400000，无 ASLR），+0x98 是地图路径 C 串
-static const DWORD    GL_VA     = 0x00CD8CE4u;
+// TheGameLogic 全局指针：VA 随构建不同 —— 零售 0x00CD8CE4 / Steam 0x00CDDE84
+// （两版 .data 布局差 0x51A0，与 features.cpp 里 0x00CD8D00/0x00CDDEA0 那一对同差）。
+// 取错列不会崩，只会读到未用槽位里的 0，于是「拿不到当前地图路径」。
 static const DWORD    IMAGE_BASE = 0x00400000u;
+static DWORD          g_soi      = 0;     // 目标进程 SizeOfImage（[1] 段填）
+static DWORD GlVa() { return (g_soi == 0x950000u) ? 0x00CDDE84u : 0x00CD8CE4u; }
 
 // ------------------------------------------------------------------ 通用
 
@@ -94,6 +97,12 @@ static bool RelaunchElevated(int argc, wchar_t** argv) {
 static bool Rd(HANDLE h, uintptr_t addr, void* buf, size_t n) {
     SIZE_T got = 0;
     return ReadProcessMemory(h, (LPCVOID)addr, buf, n, &got) && got == n;
+}
+
+// 读到的串必须是 *.map 才算地图路径（同一个结构里还有别的串，别当路径用）
+static bool IsMapPath(const char* s) {
+    const size_t n = strlen(s);
+    return n >= 8 && n < 260 && _stricmp(s + n - 4, ".map") == 0;
 }
 
 static uint32_t Fnv1(const char* s) {
@@ -431,6 +440,7 @@ int wmain(int argc, wchar_t** argv) {
                     const DWORD csum = *(DWORD*)(nt + 0x58);
                     fprintf(f, "PE sig=%08X machine=%04X TimeDateStamp=%08X SizeOfImage=%08X checksum=%08X\n",
                             (unsigned)sig, machine, (unsigned)tds, (unsigned)soi, (unsigned)csum);
+                    g_soi = soi;
                 }
             }
         }
@@ -509,12 +519,13 @@ int wmain(int argc, wchar_t** argv) {
         // 当前地图：TheGameLogic + 0x98
         char mapPath[260] = { 0 };
         uint32_t gl = 0;
-        if (Rd(h, modBase + (GL_VA - IMAGE_BASE), &gl, 4) && gl >= 0x01000000u) {
+        if (Rd(h, modBase + (GlVa() - IMAGE_BASE), &gl, 4) && gl >= 0x01000000u) {
             char* p = nullptr;
             if (Rd(h, (uintptr_t)gl + 0x98, &p, 4) && p && (uintptr_t)p >= 0x01000000u)
                 Rd(h, (uintptr_t)p, mapPath, sizeof(mapPath) - 1);
         }
-        fprintf(f, "当前地图: %s\n", mapPath[0] ? mapPath : "(未取到 —— 可能不在对局里)");
+        fprintf(f, "当前地图: %s\n", mapPath[0] && IsMapPath(mapPath) ? mapPath
+                                                                   : "(未取到 —— 可能不在对局里)");
 
         ScanCandidates(h, (uintptr_t)0x00010000u, (uintptr_t)0xFFFE0000u);
         fprintf(f, "候选总数=%d（每个 hash 最多留 32 个）\n", g_ncand);
@@ -569,13 +580,14 @@ int wmain(int argc, wchar_t** argv) {
         char mapPath[260] = { 0 };
         if (h && modBase) {
             uint32_t gl = 0;
-            if (Rd(h, modBase + (GL_VA - IMAGE_BASE), &gl, 4) && gl >= 0x01000000u) {
+            if (Rd(h, modBase + (GlVa() - IMAGE_BASE), &gl, 4) && gl >= 0x01000000u) {
                 char* p = nullptr;
                 if (Rd(h, (uintptr_t)gl + 0x98, &p, 4) && p && (uintptr_t)p >= 0x01000000u)
                     Rd(h, (uintptr_t)p, mapPath, sizeof(mapPath) - 1);
             }
         }
 
+        if (mapPath[0] && !IsMapPath(mapPath)) mapPath[0] = 0;
         if (!mapPath[0]) {
             fprintf(f, "跳过：拿不到当前地图路径（不在对局里？）\n");
         } else {

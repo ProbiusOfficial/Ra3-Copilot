@@ -110,6 +110,9 @@ static const char* const kFixFlags[4] = {
 };
 
 static DWORD WINAPI FixStuckThreadProc(LPVOID) {
+    // 先按当前地图现场解析目标表：内置表只覆盖 27 张官方图，mod 图与别的版本不在里面。
+    // 不解析就只能靠启发式猜关卡，猜错的后果是拨错目标（比不动更糟）。
+    ObjTableUseScript();
     ScriptNodeScan();
     int score = 0;
     const int autoMap = ObjDetectMap(&score);
