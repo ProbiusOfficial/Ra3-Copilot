@@ -46,7 +46,7 @@ namespace {
 
 const wchar_t* const kWindowClass = L"Ra3CopilotLauncher";
 const wchar_t* const kAppName = L"Ra3-Copilot";
-const wchar_t* const kVersion = L"1.3.2";
+const wchar_t* const kVersion = L"1.3.3";
 
 enum { WM_APP_WORK_DONE = WM_APP + 1 };
 enum { LOG_INFO = 0, LOG_OK, LOG_WARN, LOG_ERR };
