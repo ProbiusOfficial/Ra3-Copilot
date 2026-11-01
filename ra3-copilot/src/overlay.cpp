@@ -406,7 +406,11 @@ LRESULT CALLBACK OverlayWndProcBody(HWND h, UINT msg, WPARAM w, LPARAM l) {
             }
         }
     }
-    if (g_ov.imguiReady)
+    // 面板不可见时不能喂 ImGui：它把消息压进 InputEventsQueue，而队列只在 ImGui::NewFrame()
+    //   里消费，NewFrame 又只在 visible 时执行（RenderOverlay 的三个调用点都带 visible 门）。
+    //   隐藏期间只入不出 → 打开瞬间整批积压按 trickle 逐帧回放（每帧只消化 1~2 条），
+    //   且重放用的是当时的坐标 → 落在面板按钮上就成了误操作。
+    if (g_ov.imguiReady && g_cfg.visible)
         ImGui_ImplWin32_WndProcHandler(h, msg, w, l);
     return CallWindowProcW(g_origWndProc, h, msg, w, l);
 }
@@ -425,6 +429,138 @@ HWND GetDeviceWindow(IDirect3DDevice9* dev) {
     h = FindGameWnd();
     if (h) return h;
     return GetForegroundWindow();
+}
+
+// ===================== 字表 / UI 缩放 =====================
+// 字表 = ImGui 常用 2500 字（含标点）+ 界面符号 + 源码里出现过的全部汉字。
+//   不能用 0x4E00-0x9FAF 全表：两万多汉字在 32px（2 倍缩放）时图集超过 4096x4096，
+//   打包失败后整张字体退回默认字体（中文全变 '?'）。kUiCjkText 由源码提取，
+//   新增界面文案若出现生僻字，把它加到这个串里再重建。
+static const char kUiCjkText[] =
+    "一丁七万三上下不与专且世业东丢两严个中串临为主举久么义之乌乎乐乘乙九也习买乱了予争事二于云互五井些亡交产享亭亮亲人什仅仇仍从仓他付代令以仪们仰件价任份仿企伊伍伏伐优会传伤伪估伴似伽但位低住体何余作你使"
+    "例供依侠侦侧便俄保信修俯倍倒候值倾假偏做停健偶储像儿允元充先光克免兜入全八六兰共关兵其具典兼内册再冒冕写军冥冬冰冲决况冷冻净准凌减凑几凤凭凰凶出击函刀刃分切刑列则刚创初删判利别到制刷券刺刻削前剔剧剩剪"
+    "副割力办功加务动助劫励势勒勘勾勿包化匣匹区医匿十千升半华协单卖博占卡卫印危即却卸厂历压原厦去参又叉及友双反发取受变叛叠口句另只叫召叮可台史右号司吃各合吉同名后向吗吞否含听启吸呈告员周呼命和品哈响哨哪唤"
+    "售唯啸喀喂喷器噪四回因团困围固国图圆圈在地场圾址均坎坏坐坑块坚坛坞坠坦坪垂垃型垒垫埃埋域基堆堡塔塞填境墙增壁士声壳处备复外多夜够大天太夫失头夹奇奏奖套奥女好如始姬威娜媒嫌子字存学孩宁它宇守安完宏官宙定"
+    "宝实审客宫害家容宽宿寄密富察寸对寻导封射将尊小少尔尖尚尝尤就尺尼尾局层居屏屑展属履山岔岗岚岛岩岸崩嵌州巡巢工左巨差己已布希帝带帧帮常幂幅幕干平并幻幽广序库应底废度座康廉延建开异弃式弓引张弧弩弱弹强归当"
+    "录形影役彻彼往征径待很律徒得御循微德心必忍忒志忘忙快念忽怀态怎怒怕怖性怪总恐恒恢息悍悬情惊惑惨惩惯想意感慢戈戏成我戒或战截戳户房所手才扎打执扩扫扰批找承技抄把抑抓投抖折抛抢护报抵抹抽拆拉拍拒拖拘拟拥拦"
+    "拨择括拷拼拾拿持挂指按挑挡挤挥挨挪捕捞损换据捷授掉排探接控推掩掷描提插揭援揽搜搞搬搭摆摇摊摘摧摸撑撞撤播操擎支收改攻放政故效敌敏救教敛散敬数整文斋斐斗斜断斯新方施旁旋族无既日旧早时明易星映昭是显晋普景"
+    "晰晶晷智暂暴更曾替最有服朗望朝期未末本术朱机杀杂权杉杜束杠条来杨杰松板极构析林枚果枢枪架柄某染查柱标栈栋栏树栖校样核根格框案档桥桩梁械检棱棵植楚楼概槛槽模樱次欧止正此步武死歼殊残段殿毁母每毒比毕毫民气"
+    "水永求汇汉池污汰沟没河油治沿泄泊法泛波注泵泻洋洛洪洲活洽派流测济浑浩浪浮浴海消涡涨液淘深混淹清渊渡温港渲游湮溃源溢溯滑滚满滤漂漏演潜激灌火灭灯灰灵灼灾炉炎炮炸点炼炽烈烟烧热焊焚焦然煌照煽熊熔爆父片版牛"
+    "牢物牵特犀犬状狂狗独猎猛猜獾玄率玉王玩环现珍球理琼瑞生用甩田由甲申电画界畏留略畸疑疗疯疾症痛癸登白百的皇益监盖盘盛盟目盯盲直相盾省看真眼着睛瞄瞬知矩短石矶矿码研破础硬确碉碍碎碑碰碾磁磨礁示礼祖祝神票禁"
+    "福离私种科秒秘积称移稀程稍稳穴究空穿突窄窗立竖站竞章端符第笼等筑答策筛签简算管箭箱篷簇米类粉粒粗粘精糟系素索紧累繁纠红纤约级纪纯纳纹纽线练组细终经绑结绕绘给络绝统继绪续维综绿缀缓编缘缝缠缩缺网罕罗罚罡"
+    "罩置署群羲羽翠翻翼耀老考者而耐耗耦联聚肉肯背胎胜胡能脆脉脑脚脱腐臂自至致舞航般舰舱船艇色节芬花苍苏若英范茵荐荣药荷莎莫莱莲获莺菊菜菱营落蒙蓄蓝薙藏虎虚虫虽蚀蛙蜂蝾螈融血行衡补表袍被袭裂装裸裹西要覆见观"
+    "规视角解触言警计认让训议讯记许论设访证识诊词译试话询该详语误说请诺读谁调谍谓谭谱豚象豪豹貅貔贝负贡责败账货质购贴贵贸费资赋赖走起超越足跃跌跑距跟跨路跳踢踩蹂躏身车轨转轮软轰载轿较辅辆辐辑输辨边达迅过运"
+    "近返还这进远连迟迫迭述迷追退送适逃逆选逊透逐递途通速造逻逾遁遇遍道遗遣遥遭避那邮邻郁部都配采释里重野量金鉴针钉钟钢钩钮钱钻铁铳银铸铺链销锁锋错锚锤键镜镰长门闪闭问闲间闸阈队防阳阵阶阿附际陆降限院除陨险"
+    "随隐隔隙障难雀雄雅集雕雨零雷雾需霍露青静非靠面靶音页顶项顺须顿预频颗题颜额风飞饰馆馈首香马驱驻骇验骑骨骸骼高鬼魔鱼鲁鲜鸟鸿鹭麒麟黑默鼎鼓鼠齐齿龙";
+
+static const ImWchar* UiGlyphRanges() {
+    static ImVector<ImWchar> s_ranges;
+    if (!s_ranges.empty()) return s_ranges.Data;
+    static const ImWchar kSym[] = {
+        0x0020, 0x00FF,   // 基本拉丁 + 拉丁补充（含 × · °）
+        0x2000, 0x206F,   // 常用标点（— … ‘ ’）
+        0x2190, 0x21FF,   // 箭头 ← ↑ → ↓
+        0x2460, 0x24FF,   // 带圈数字 ①②
+        0x25A0, 0x25FF,   // 几何图形 ● ■ ▲
+        0x2600, 0x26FF,   // 杂项符号 ★ ☆
+        0x3000, 0x30FF,   // 全角标点（「」【】）+ 假名
+        0x31F0, 0x31FF,
+        0xFF00, 0xFFEF,   // 全角形式
+        0,
+    };
+    ImFontGlyphRangesBuilder b;
+    b.AddRanges(ImGui::GetIO().Fonts->GetGlyphRangesChineseSimplifiedCommon());
+    b.AddRanges(kSym);
+    b.AddText(kUiCjkText);
+    b.BuildRanges(&s_ranges);
+    return s_ranges.Data;
+}
+
+static float g_uiScale = 0.0f;      // 字体与样式当前按哪个倍率建好（0 = 尚未建）
+static bool  g_uiRelayout = false;  // 缩放刚变 → 下一帧按新倍率重排窗口
+
+// 系统 DPI / 96。优先 GetDpiForMonitor：DPI-unaware 进程里 GetDpiForWindow 恒返回 96
+//   （被系统虚拟化），而显示器真实 DPI 只有前者拿得到 —— 4K 屏「字小得看不清」正是这个。
+static float DetectDpiScale(HWND hwnd) {
+    typedef HRESULT (WINAPI* FnMon)(HMONITOR, int, UINT*, UINT*);
+    static FnMon pMon = nullptr;
+    static bool triedMon = false;
+    if (!triedMon) {
+        triedMon = true;
+        if (HMODULE m = LoadLibraryW(L"shcore.dll"))
+            pMon = reinterpret_cast<FnMon>(GetProcAddress(m, "GetDpiForMonitor"));
+    }
+    if (pMon && hwnd) {
+        UINT dx = 96, dy = 96;
+        const HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (SUCCEEDED(pMon(mon, 0 /* MDT_EFFECTIVE_DPI */, &dx, &dy)) && dx >= 72)
+            return dx / 96.0f;
+    }
+    typedef UINT (WINAPI* FnWin)(HWND);
+    static FnWin pWin = nullptr;
+    static bool triedWin = false;
+    if (!triedWin) {
+        triedWin = true;
+        if (HMODULE u = GetModuleHandleW(L"user32.dll"))
+            pWin = reinterpret_cast<FnWin>(GetProcAddress(u, "GetDpiForWindow"));
+    }
+    if (pWin && hwnd) {
+        const UINT d = pWin(hwnd);
+        if (d >= 72) return d / 96.0f;
+    }
+    HDC dc = GetDC(nullptr);
+    float r = 1.0f;
+    if (dc) {
+        const int d = GetDeviceCaps(dc, LOGPIXELSX);
+        ReleaseDC(nullptr, dc);
+        if (d >= 72) r = d / 96.0f;
+    }
+    return r;
+}
+
+static float ClampUiScale(float s) { return s < 0.6f ? 0.6f : (s > 3.0f ? 3.0f : s); }
+
+// 按倍率重建字体图集与样式。只在渲染线程、device 有效时调用，且调用后必须
+//   紧跟 ImGui_ImplDX9_InvalidateDeviceObjects() + CreateDeviceObjects()（字体纹理会重建）。
+static void ApplyUiStyle(float s) {
+    ImGuiIO& io = ImGui::GetIO();
+
+    io.Fonts->Clear();
+    ImFontConfig fc;
+    fc.OversampleH = 1; fc.OversampleV = 1; fc.PixelSnapH = true;
+    const float px = 16.0f * s;   // 16px 是按 1080p / 100% 定下的基准
+    ImFont* f = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msyh.ttc", px, &fc, UiGlyphRanges());
+    if (!f) f = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\simhei.ttf", px, &fc, UiGlyphRanges());
+    if (!f) io.Fonts->AddFontDefault();
+    io.FontGlobalScale = 1.0f;    // 缩放做在字号上：拉伸全局缩放是位图放大，字会糊
+    io.Fonts->Build();
+
+    // 从默认样式起步：在旧样式上反复 ScaleAllSizes 会逐次叠加，越调越大
+    ImGuiStyle st;
+    st.WindowRounding = 4.f; st.FrameRounding = 3.f; st.GrabRounding = 3.f;
+    st.WindowBorderSize = 1.f; st.FrameBorderSize = 0.f;
+    st.ItemSpacing = ImVec2(8, 6); st.FramePadding = ImVec2(8, 4);
+    ImVec4* c = st.Colors;
+    c[ImGuiCol_WindowBg]      = ImVec4(0.07f, 0.08f, 0.10f, 0.95f);
+    c[ImGuiCol_TitleBg]       = ImVec4(0.10f, 0.13f, 0.18f, 1.00f);
+    c[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.18f, 0.26f, 1.00f);
+    c[ImGuiCol_Tab]           = ImVec4(0.11f, 0.14f, 0.19f, 1.00f);
+    c[ImGuiCol_TabHovered]    = ImVec4(0.20f, 0.42f, 0.55f, 1.00f);
+    c[ImGuiCol_TabSelected]   = ImVec4(0.16f, 0.34f, 0.46f, 1.00f);
+    c[ImGuiCol_Header]        = ImVec4(0.16f, 0.30f, 0.40f, 1.00f);
+    c[ImGuiCol_HeaderHovered] = ImVec4(0.22f, 0.44f, 0.56f, 1.00f);
+    c[ImGuiCol_Button]        = ImVec4(0.16f, 0.32f, 0.44f, 1.00f);
+    c[ImGuiCol_ButtonHovered] = ImVec4(0.22f, 0.46f, 0.60f, 1.00f);
+    c[ImGuiCol_ButtonActive]  = ImVec4(0.12f, 0.26f, 0.36f, 1.00f);
+    c[ImGuiCol_CheckMark]     = ImVec4(0.35f, 0.85f, 0.95f, 1.00f);
+    c[ImGuiCol_SliderGrab]    = ImVec4(0.35f, 0.75f, 0.90f, 1.00f);
+    c[ImGuiCol_FrameBg]       = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+    st.ScaleAllSizes(s);
+    ImGui::GetStyle() = st;
+
+    g_uiScale = s;
+    g_uiRelayout = true;
+    AddLog(LOG_OK, "[UI] 缩放 %.2fx（字号 %.1fpx）", s, px);
 }
 
 void EnsureImGui(IDirect3DDevice9* dev) {
@@ -451,50 +587,10 @@ void EnsureImGui(IDirect3DDevice9* dev) {
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX9_Init(dev);
 
-    // 字形范围自己列全：ImGui 自带的 ChineseSimplifiedCommon **不含箭头等符号**，
-    //   界面上会显示成 '?'（实测「复制单位 → 光标处」的箭头、"•" 之类的符号全丢了）。
-    static const ImWchar kGlyphRanges[] = {
-        0x0020, 0x00FF,   // 基本拉丁 + 拉丁补充（含 × · °）
-        0x2000, 0x206F,   // 常用标点（— … ‘ ’）
-        0x2190, 0x21FF,   // 箭头 ← ↑ → ↓
-        0x2460, 0x24FF,   // 带圈数字 ①②
-        0x25A0, 0x25FF,   // 几何图形 ● ■ ▲
-        0x2600, 0x26FF,   // 杂项符号 ★ ☆
-        0x3000, 0x30FF,   // CJK 标点（「」【】）+ 假名
-        0x31F0, 0x31FF,
-        0xFF00, 0xFFEF,   // 全角形式
-        0x4E00, 0x9FAF,   // CJK 基本区（常用 + 次常用汉字）
-        0,
-    };
-    ImFontConfig fc;
-    fc.OversampleH = 1; fc.OversampleV = 1; fc.PixelSnapH = true;
-    ImFont* f = io.Fonts->AddFontFromFileTTF(
-        "C:\\Windows\\Fonts\\msyh.ttc", 16.0f, &fc, kGlyphRanges);
-    if (!f)
-        f = io.Fonts->AddFontFromFileTTF(
-            "C:\\Windows\\Fonts\\simhei.ttf", 16.0f, &fc, kGlyphRanges);
-    if (!f) io.Fonts->AddFontDefault();
-
-    // ---- 配色：深色 + 青色 ----
-    ImGuiStyle& st = ImGui::GetStyle();
-    st.WindowRounding = 4.f; st.FrameRounding = 3.f; st.GrabRounding = 3.f;
-    st.WindowBorderSize = 1.f; st.FrameBorderSize = 0.f;
-    st.ItemSpacing = ImVec2(8, 6); st.FramePadding = ImVec2(8, 4);
-    ImVec4* c = st.Colors;
-    c[ImGuiCol_WindowBg]      = ImVec4(0.07f, 0.08f, 0.10f, 0.95f);
-    c[ImGuiCol_TitleBg]       = ImVec4(0.10f, 0.13f, 0.18f, 1.00f);
-    c[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.18f, 0.26f, 1.00f);
-    c[ImGuiCol_Tab]           = ImVec4(0.11f, 0.14f, 0.19f, 1.00f);
-    c[ImGuiCol_TabHovered]    = ImVec4(0.20f, 0.42f, 0.55f, 1.00f);
-    c[ImGuiCol_TabSelected]   = ImVec4(0.16f, 0.34f, 0.46f, 1.00f);
-    c[ImGuiCol_Header]        = ImVec4(0.16f, 0.30f, 0.40f, 1.00f);
-    c[ImGuiCol_HeaderHovered] = ImVec4(0.22f, 0.44f, 0.56f, 1.00f);
-    c[ImGuiCol_Button]        = ImVec4(0.16f, 0.32f, 0.44f, 1.00f);
-    c[ImGuiCol_ButtonHovered] = ImVec4(0.22f, 0.46f, 0.60f, 1.00f);
-    c[ImGuiCol_ButtonActive]  = ImVec4(0.12f, 0.26f, 0.36f, 1.00f);
-    c[ImGuiCol_CheckMark]     = ImVec4(0.35f, 0.85f, 0.95f, 1.00f);
-    c[ImGuiCol_SliderGrab]    = ImVec4(0.35f, 0.75f, 0.90f, 1.00f);
-    c[ImGuiCol_FrameBg]       = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+    // 字体与样式按「系统 DPI × 用户倍数」一次建好；之后倍率变化在 RenderOverlay 里重建
+    ApplyUiStyle(ClampUiScale(DetectDpiScale(hwnd) * g_cfg.scale));
+    ImGui_ImplDX9_InvalidateDeviceObjects();
+    ImGui_ImplDX9_CreateDeviceObjects();
 
     g_ov.imguiReady = true;
     g_telemImguiReady = 1;
@@ -507,11 +603,50 @@ void OverlayTick();
 
 void RenderOverlay(IDirect3DDevice9* dev) {
     ImGuiIO& io = ImGui::GetIO();
+
+    // 渲染停摆期间（device lost、加载画面、面板隐藏后再打开）积压的输入事件不能带进恢复后
+    //   的第一帧：ImGui 按 trickle 逐帧重放历史点击，重放用的是当时的坐标，会落到现在的
+    //   控件上。停摆超过 1 秒即认为期间的输入已与当前画面语义脱钩（正常对局不低于 10 fps）。
+    //   键位状态一并清零：可见时按下、隐藏后松开的键会卡在按下态；积压的字符也会一次性
+    //   喷进输入框。清空后本帧按真实光标重建。
+    static DWORD s_lastDrawMs = 0;
+    const DWORD drawMs = GetTickCount();
+    if (s_lastDrawMs && drawMs - s_lastDrawMs > 1000) {
+        io.ClearEventsQueue();
+        io.ClearInputMouse();
+        io.ClearInputKeys();
+    }
+    s_lastDrawMs = drawMs;
+
+    // 缩放目标 = 系统 DPI × 用户倍数。拖动滑块时目标每帧都在变，等 250ms 稳定再重建 ——
+    //   重建要重新栅格化整张字表（几十毫秒），每帧重建会让拖动直接卡死。
+    //   比较用百分比取整：DPI 检测偶发的尾数抖动不该触发重建。
+    if (g_ov.wnd) {
+        const int targetPct = (int)(ClampUiScale(DetectDpiScale(g_ov.wnd) * g_cfg.scale) * 100.0f + 0.5f);
+        static int s_pendPct = 0;
+        static DWORD s_pendMs = 0;
+        if (targetPct != (int)(g_uiScale * 100.0f + 0.5f)) {
+            if (targetPct != s_pendPct) {
+                s_pendPct = targetPct;
+                s_pendMs = drawMs;
+            } else if (drawMs - s_pendMs >= 250) {
+                ApplyUiStyle(targetPct / 100.0f);
+                ImGui_ImplDX9_InvalidateDeviceObjects();
+                ImGui_ImplDX9_CreateDeviceObjects();
+                // 重建会把所有窗口整体重排，旧的按下态已无意义：清掉它，免得这一帧的按键
+                //   被算到刚跳到光标底下的新控件上（缩放后误操作的直接来源）。
+                io.ClearInputMouse();
+            }
+        }
+    }
+
     POINT pt = {};
     if (GetCursorPos(&pt) && g_ov.wnd && IsWindow(g_ov.wnd)) ScreenToClient(g_ov.wnd, &pt);
+    // 光标位置每帧校正：窗口失焦、指针移出客户区时收不到 WM_MOUSEMOVE，不校正会让 hover
+    //   停在旧位置。按键状态不在这里合成 —— 权威时序来自 WndProc 的 WM_LBUTTONDOWN/UP，
+    //   每帧用 GetAsyncKeyState 再发一遍等于往同一队列塞第二套时序，既争抢 trickle 配额
+    //   （队列消化变慢），也可能在同一帧内凑出 down+up 的空点击。
     io.AddMousePosEvent(static_cast<float>(pt.x), static_cast<float>(pt.y));
-    io.AddMouseButtonEvent(0, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-    io.AddMouseButtonEvent(1, (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
 
     ImGui_ImplDX9_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -2345,6 +2480,29 @@ void TabUnits() {
 }
 
 void TabSettings() {
+    // 界面缩放用档位下拉，不用连续滑块：拖动时面板尺寸与布局一路突变，每次停手重建
+    //   都会把所有窗口整体重排一次，松手瞬间鼠标常已落在别的控件上，一点就是误操作。
+    //   选一档只触发一次重建。HTTP 侧仍接受任意值，这里只负责把最接近的档显示出来。
+    static const float kSteps[] = { 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f };
+    static const char kLabels[] =
+        "0.50×\0" "0.75×\0" "1.00×\0" "1.25×\0" "1.50×\0"
+        "1.75×\0" "2.00×\0" "2.25×\0" "2.50×\0";
+    int cur = 0;
+    float best = 1e9f;
+    for (int i = 0; i < IM_ARRAYSIZE(kSteps); ++i) {
+        float d = kSteps[i] - g_cfg.scale;
+        if (d < 0) d = -d;
+        if (d < best) { best = d; cur = i; }
+    }
+    ImGui::SetNextItemWidth(110);
+    if (ImGui::Combo("界面缩放", &cur, kLabels))
+        g_cfg.scale = kSteps[cur];
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("4K / 高 DPI 屏觉得字小就调大。\n"
+                          "实际缩放 = 系统 DPI × 此档位；选完约 0.3 秒后生效。");
+    ImGui::SameLine();
+    ImGui::TextDisabled("实际 %.2f×（系统 DPI %d%%）", g_uiScale,
+                        (int)(DetectDpiScale(g_ov.wnd) * 100.0f + 0.5f));
     ImGui::SliderFloat("背景透明度", &g_cfg.alpha, 0.2f, 1.0f, "%.2f");
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.95f, 1.f), "安全护栏");
@@ -2571,16 +2729,21 @@ void BuildUI() {
     g_rectFill = 0;
     if (!g_cfg.visible) { DrainColorStack(); g_panelRectN = 0; return; }   // INSERT 总开关：关掉时一个面板都不画
 
-    // 默认布局（仅首次显示生效；之后用户拖动的位置会被 ImGui 记住）
-    static const ImVec2 kPos[9] = {
-        ImVec2(40, 90),  ImVec2(40, 350),  ImVec2(300, 90), ImVec2(300, 400),
-        ImVec2(660, 90), ImVec2(660, 350), ImVec2(40, 640), ImVec2(660, 560),
-        ImVec2(980, 90)
+    // 默认布局按缩放折算：4K 上 2 倍时若仍按 1 倍排，各窗口会挤在左上角叠成一团。
+    //   缩放刚变的那一帧用 Always 强制重排一次（否则 FirstUseEver 会沿用旧倍率下的
+    //   位置尺寸，2 倍字体塞进 1 倍的框里），之后交回 ImGui 记住用户拖的位置。
+    const float k = g_uiScale > 0.01f ? g_uiScale : 1.0f;
+    const ImGuiCond kCond = g_uiRelayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+    g_uiRelayout = false;
+    const ImVec2 kPos[9] = {
+        ImVec2(40 * k, 90 * k),  ImVec2(40 * k, 350 * k),  ImVec2(300 * k, 90 * k), ImVec2(300 * k, 400 * k),
+        ImVec2(660 * k, 90 * k), ImVec2(660 * k, 350 * k), ImVec2(40 * k, 640 * k), ImVec2(660 * k, 560 * k),
+        ImVec2(980 * k, 90 * k)
     };
 
     // ===== 主面板 =====
-    ImGui::SetNextWindowPos(kPos[0], ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(210, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(kPos[0], kCond);
+    ImGui::SetNextWindowSize(ImVec2(210 * k, 0), kCond);
     if (ImGui::Begin("Ra3-Copilot##main", &g_pMain, ImGuiWindowFlags_AlwaysAutoResize)) {
         MarkPanelRect();
         ImGui::TextDisabled("构建：%s%s", BuildName(GetBuild()),
@@ -2606,53 +2769,53 @@ void BuildUI() {
 
     // ===== 资源科技 =====
     if (g_pRes) {
-        ImGui::SetNextWindowPos(kPos[1], ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[1], kCond);
         if (ImGui::Begin("资源科技##res", &g_pRes)) { MarkPanelRect(); TabResource(); }
         ImGui::End();
     }
     // ===== 单位操作 =====
     if (g_pUnit) {
-        ImGui::SetNextWindowPos(kPos[2], ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[2], kCond);
         if (ImGui::Begin("单位操作##unit", &g_pUnit)) { MarkPanelRect(); PanelUnitOps(); }
         ImGui::End();
     }
     // ===== 支援召唤 =====
     if (g_pSummon) {
-        ImGui::SetNextWindowPos(kPos[3], ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[3], kCond);
         if (ImGui::Begin("支援召唤##summon", &g_pSummon)) { MarkPanelRect(); TabUnits(); }
         ImGui::End();
     }
     // ===== 协议技能 =====
     if (g_pProto) {
-        ImGui::SetNextWindowPos(kPos[8], ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(430, 620), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[8], kCond);
+        ImGui::SetNextWindowSize(ImVec2(430 * k, 620 * k), kCond);
         if (ImGui::Begin("协议技能##proto", &g_pProto)) { MarkPanelRect(); PanelProtocol(); }
         ImGui::End();
     }
     // ===== 杂项操作 =====
     if (g_pMisc) {
-        ImGui::SetNextWindowPos(kPos[4], ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[4], kCond);
         if (ImGui::Begin("杂项操作##misc", &g_pMisc)) { MarkPanelRect(); PanelMisc(); }
         ImGui::End();
     }
     // ===== 脑机接口（MCP）=====
     if (g_pAi) {
-        ImGui::SetNextWindowPos(kPos[7], ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(430, 460), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[7], kCond);
+        ImGui::SetNextWindowSize(ImVec2(430 * k, 460 * k), kCond);
         if (ImGui::Begin("脑机接口##ai", &g_pAi)) { MarkPanelRect(); PanelAi(); }
         ImGui::End();
     }
     // ===== 设置 =====
     if (g_pSet) {
-        ImGui::SetNextWindowPos(kPos[5], ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(680, 620), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[5], kCond);
+        ImGui::SetNextWindowSize(ImVec2(680 * k, 620 * k), kCond);
         if (ImGui::Begin("设置##set", &g_pSet)) { MarkPanelRect(); TabSettings(); }
         ImGui::End();
     }
     // ===== 输出记录 =====
     if (g_pLog) {
-        ImGui::SetNextWindowPos(kPos[6], ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(560, 200), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(kPos[6], kCond);
+        ImGui::SetNextWindowSize(ImVec2(560 * k, 200 * k), kCond);
         if (ImGui::Begin("输出记录##log", &g_pLog)) {
             MarkPanelRect();
             if (ImGui::SmallButton("清空")) g_logCount = 0;

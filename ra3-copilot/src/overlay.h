@@ -7,7 +7,7 @@ namespace ra3 {
 
 struct OverlayConfig {
     bool  visible   = false;   // UI 显隐（INSERT 切换）
-    float scale     = 1.0f;    // 界面缩放
+    float scale     = 1.0f;    // 用户附加缩放：实际 = 系统 DPI × 此值（4K/高 DPI 屏靠它放大）
     float alpha     = 0.95f;   // 窗口不透明度
     int   addAmount = 10000;   // 「加钱」每次金额
     bool  blockInput = true;   // 鼠标在菜单上时，吞掉点击（不让游戏也收到）

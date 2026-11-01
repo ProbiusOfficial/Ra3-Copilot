@@ -819,12 +819,20 @@ void Handle(SOCKET c, char* req) {
             if (v) g_cfg.visible = true;
             else   g_cfg.visible = false;
         }
+        // scale=：UI 附加缩放（实际倍率 = 系统 DPI × 此值）。越界直接忽略，
+        //   免得把界面调到看不见、键盘上又摸不回来；
+        //   RenderOverlay 在 250ms 稳定后重建字体，所以这里改完不会立刻生效。
+        const char* scv = strstr(query, "scale=");
+        if (scv) {
+            const float v = (float)atof(scv + 6);
+            if (v >= 0.6f && v <= 3.0f) g_cfg.scale = v;
+        }
         char vkName[64] = { 0 };
         OverlayToggleKeyName(vkName, (int)sizeof(vkName));
         _snprintf_s(out, sizeof(out), _TRUNCATE,
-                    "visible=%d\ntoggle=%s\nblockInput=%d\n",
+                    "visible=%d\ntoggle=%s\nblockInput=%d\nscale=%.2f\n",
                     g_cfg.visible ? 1 : 0, vkName,
-                    g_cfg.blockInput ? 1 : 0);
+                    g_cfg.blockInput ? 1 : 0, g_cfg.scale);
         HttpSend(c, out, (int)strlen(out));
         return;
     }
