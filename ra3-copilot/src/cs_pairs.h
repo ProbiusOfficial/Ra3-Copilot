@@ -11,7 +11,8 @@ struct CsPair { uint32_t base; uint32_t enh; };
 
 static const CsPair kCsPairs[] = {
     { 0x003019D1u, 0xFEADEF32u },   // JapanWarFactoryCommandSetBase  15->15
-    { 0x19CD70D0u, 0x4E50F80Au },   // CelestialWarFactoryUpgradeCommandSetBase  15->10
+    { 0x07B3E2C0u, 0x00C8EB1Fu },   // CelestialWarFactoryTransitionCommandSetBase  16->16
+    { 0x19CD70D0u, 0x12CE7483u },   // CelestialWarFactoryUpgradeCommandSetBase  15->16
     { 0x22A63EB3u, 0xEAB0A8EAu },   // SovietPowerPlantAdvancedCommandSet  None->None
     { 0x26AC879Fu, 0x0C37FFD2u },   // CelestialOutPostCommandSet  1->16
     { 0x330BA476u, 0x7E945880u },   // SovietConstructionYardCommandSet  17->19
@@ -30,14 +31,11 @@ static const CsPair kCsPairs[] = {
     { 0xC24ACBEAu, 0xC62913ECu },   // JapanWarFactoryCommandSetTech2  16->16
     { 0xC49E3569u, 0xFEC760AEu },   // AlliedConstructionYardCommandSetBase  15->17
     { 0xE1259A4Au, 0x57B775C7u },   // AlliedNavalYardCommandSet  8->9
-    { 0xE36CF8D9u, 0xC60E6D9Fu },   // CelestialWarFactoryCommandSetBase  16->11
+    { 0xE36CF8D9u, 0x10BF5D9Fu },   // CelestialWarFactoryCommandSetBase  16->16
     { 0xEC7B195Eu, 0xAFD21A84u },   // AlliedWarFactoryCommandSet  16->11
     { 0xF27DA9BCu, 0xBB408578u },   // AlliedConstructionYardCommandSet  16->18
     { 0xFE64EB5Eu, 0x3929E633u },   // AlliedAirfieldCommandSet  8->9
 };
-static const int kCsPairCount = 24;
+static const int kCsPairCount = 25;
 
 }  // namespace ra3
-
-// 同 base_key 的其它分支（未采用，映射只能选一条）：
-//   0x0x9CEBD1E5 -> 0x0xCA728F8C  CelestialWarFactoryTransitionCommandSet  10->11
