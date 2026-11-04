@@ -2305,6 +2305,16 @@ void Handle(SOCKET c, char* req) {
         return;
     }
     char r[1024] = { 0 };
+#ifdef RA3_NO_OVERLAY
+    // 无 overlay 构建：没有 Present detour 泵命令队列，/toggle 必须在本线程直接改标志
+    if (fn == 14) {
+        SetFeature(args[0], args[1] != 0);
+        char rb[64];
+        _snprintf_s(rb, sizeof(rb), _TRUNCATE, "ok toggle %d=%d\n", args[0], args[1]);
+        HttpSend(c, rb, (int)strlen(rb));
+        return;
+    }
+#endif
     PostAndWaitN(fn, args, na, r, sizeof(r));
     _snprintf_s(out, sizeof(out), _TRUNCATE, "%s", r);
     if (isAi) { InterlockedIncrement(&g_aiCalls); AiLogLine("AI %s -> %s", path, r); }

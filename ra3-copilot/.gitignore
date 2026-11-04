@@ -1,9 +1,15 @@
 # 构建产物
 build_out/
+build_linux*/
+build_diag/
+build_msvc_wine/
 *.obj
 *.dll
 *.exe
 *.map
+
+# 工具索引 / 生成物
+graft/
 
 # 运行时落盘
 ra3copilot_log.txt
