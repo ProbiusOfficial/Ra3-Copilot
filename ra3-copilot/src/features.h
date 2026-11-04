@@ -17,7 +17,7 @@ extern uint32_t g_okUnit;          // 秒杀：当前单位
 extern uint32_t g_okBody;          // 秒杀：当前单位血量体
 extern int32_t  g_moneyOp;         // 0=无 1=加钱 2=设置（一次性）
 extern int32_t  g_moneyValue;      // 金额
-extern uint8_t  g_flags[32];       // 功能开关数组（索引对齐 CE 的 FLAGS 偏移）
+extern uint8_t  g_flags[33];       // 功能开关数组（索引对齐 CE 的 FLAGS 偏移；最大索引 0x20）
 extern uint32_t g_zoomHits;        // 遥测：ZoomCaveStub 进入次数
 extern uint32_t g_zoomCam34;       // 遥测：ZoomPostStub 采样的 [+0x34] 相机系数
 extern uint32_t g_zoomPitch;       // 遥测：ZoomPostStub 采样的 [+0x74] 俯仰
@@ -209,7 +209,7 @@ enum FeatureIdx {
     FID_BTNENABLE = 0x1E,   // 扩展建筑按钮强制可用（0xABB6F0 直接走 setEnabled，绕过前置/范围判定）
     FID_EXTKEY    = 0x1F,   // 扩展模式列表：查表前把 cs key 换成 Enhanced key（覆盖 24 组，含生产建筑）
     FID_EXTKEYAI  = 0x20,   // 0x1F 的范围：0 = 只对本机玩家，1 = 全场（含 AI）
-    FID_COUNT     = 32,
+    FID_COUNT     = 33,      // 0..0x20（0x20 也要能用，否则 g_flags[0x20] 越界读）
 };
 
 void SetFeature(int idx, bool on);
