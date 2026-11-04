@@ -54,6 +54,47 @@ python ra3-copilot\tools\precheck_aob.py --game "<ra3_1.12.game 路径>"
 rem 也可用环境变量 RA3_GAME_EXE 指定路径
 ```
 
+### Linux / Steam Proton
+
+Linux 上用 `llvm-mingw` 交叉编译（无 MSVC）：
+
+```bash
+cd ra3-copilot
+OUT=build_linux bash tools/build_linux.sh     # 产物 build_linux/ra3copilot.dll
+```
+
+游戏通过 Proton 运行时，用同前缀的 wine 注入（脚本自动从游戏进程读取 `WINEPREFIX`）：
+
+```bash
+cd "Red Alert 3"
+./ra3copilot.sh inject      # 注入（先启动游戏、进入对局）
+./ra3copilot.sh ping        # 查接口
+```
+
+想省掉手动注入，可把 Steam 启动项改成（路径换成脚本实际位置）：
+
+```
+"/path/to/Red Alert 3/ra3copilot.sh" launch %command%
+```
+
+`launch` 原样启动游戏，并在 `RA3_1.12.game` 进程出现后自动注入；注入输出写到
+`Ra3Copilot-win/inject-launch.log`。DLL 自己会等 `d3d9.dll`，启动即注入是安全的。
+
+排查开关放在 DLL 同目录的 `ra3copilot_debug.ini`（注入型 DLL 读不到注入器的环境变量）：
+
+```ini
+[debug]
+boot_trace=0      ; 1=每次注入把启动步骤写进 ra3copilot_boot.txt（排障时打开）
+disk_log=1        ; 详细日志写 ra3copilot_log.txt
+hook_max=-1       ; -1=全部；N=只装前 N 个功能 hook
+skip_hooks=0      ; 1=不装功能 hook（诊断）
+skip_overlay=0    ; 1=不装渲染层（诊断）
+boot_stop=0       ; >0=执行到第 N 步就挂起（步骤级二分）
+render_steps=5    ; 1..5 逐段执行 InstallRenderHooks
+```
+
+`ra3copilot_boot.txt` 的最后一行就是崩溃/卡死所在的步骤；崩溃时 `ra3copilot_log.txt` 会记录模块基址、`rva` 与 `bootStep`。
+
 ## 发版
 
 打 tag 即由 GitHub Actions（`windows-latest`，vcvars x86 工具链）构建并发布：
