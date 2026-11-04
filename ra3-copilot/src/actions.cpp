@@ -88,13 +88,20 @@ typedef void  (__cdecl*    ScreenToWorld_t)(void* src, void* dst, int a, int b);
 typedef void  (__fastcall* LevelUp_t)(void* unit, void* edx, int a, int b, int c);
 typedef void  (__fastcall* KillUnit_t)(void* body, void* edx, int a, int b, int c);   // 0x39EA50 thiscall(body,6,19,0)
 
-// 安全读指针（SEH 包裹）
+// Linux/clang i686 构建没有 SEH：-D__try=if(1) 把 __try/__except 整段编译成空操作，
+// 这里必须先用 VirtualQuery 证明"这段内存可读"再解引用，否则护栏形同虚设。
+// （2026-11-03 召唤崩溃即为此：body=0x42700000 直接读 +0x418。）
+bool IsMemOk(uintptr_t p, size_t n, bool writable);
+
+// 安全读指针（先 VirtualQuery 证明可读，MSVC 侧仍保留 SEH 兜底竞态）
 bool SafeRead32(uintptr_t at, uint32_t& out) {
+    if (!IsMemOk(at, 4, false)) return false;
     __try { out = *reinterpret_cast<uint32_t*>(at); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 
 bool SafeReadBytes(uintptr_t at, void* dst, size_t n) {
+    if (!dst || !n || !IsMemOk(at, n, false)) return false;
     __try { std::memcpy(dst, reinterpret_cast<void*>(at), n); return true; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
@@ -1554,10 +1561,14 @@ bool SummonByHashFor(uint32_t hash, int count, uintptr_t teamOverride, bool atMo
                vt, (vt >= base && vt < MOD_END) ? "模块内 ✓" : "模块外 ✗(假对象)", body, bc, c8);
         R3_LOG(0, "[召唤] obj 状态位 390=%08X 394=%08X 3A0=%08X 3AC=%08X (%s)",
                s390, s394, s3a0, s3ac, (s390 | s394 | s3a0 | s3ac) ? "有状态 ✓" : "全 0 ✗");
-        if (body) {
+        // [Thing+0x138] 对单位是 body 指针，对部分对象是浮点（实测伏龙殿 = 0x42700000 = 60.0f）：
+        // 必须按对象校验后再解引用，否则 body+0x418 直接 AV（崩溃 +0x5F2）。
+        if (body && LooksLikeGameObject(body)) {
             SafeRead32(body + 0x33c, hp);
             SafeRead32(body + 0x418, own);
             R3_LOG(0, "[召唤] obj.body.hp=%08X owner=%08X", hp, own);
+        } else if (body) {
+            R3_LOG(0, "[召唤] obj+138=%08X 不是对象指针（跳过 body 读取）", body);
         }
     }
     if (made <= 0) { SetErr("CreateUnit 返回空对象"); return false; }
