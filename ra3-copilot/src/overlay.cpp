@@ -264,6 +264,93 @@ void AddLog(int kind, const char* fmt, ...) {
 // 因为地址为 0 而看不出调用方，靠这个字符串直接定位到阶段。
 const char* volatile g_stage = "idle";
 
+// ---------- 启动探针（文件式二分） ----------
+// 配置：<DLL 目录>\ra3copilot_debug.ini（缺失即默认值）。
+// 面包屑：ra3copilot_boot.txt（仅 boot_trace=1 时写，每次注入截断）；最后一行 = 崩溃/卡死所在步骤。
+struct BootCfg {
+    int trace = 0, diskLog = -1, hookMax = -1, skipHooks = 0, skipOverlay = 0,
+        stop = 0, renderSteps = 5;
+};
+BootCfg g_boot;
+volatile int g_bootStep = 0;
+const char* volatile g_bootName = "start";
+
+const char* BootPath() {
+    static char p[MAX_PATH] = { 0 };
+    if (!p[0]) {
+        HMODULE self = nullptr;
+        GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(&BootPath), &self);
+        GetModuleFileNameA(self, p, MAX_PATH);
+        char* s = strrchr(p, '\\');
+        if (s) *(s + 1) = 0;
+        strncat_s(p, MAX_PATH, "ra3copilot_boot.txt", _TRUNCATE);
+    }
+    return p;
+}
+
+// 打开-追加-关闭：崩溃发生在下一条语句时，上一条已经在盘上。
+void BootWriteV(const char* fmt, va_list ap) {
+    static DWORD t0 = GetTickCount();
+    if (!g_boot.trace) return;
+    char msg[224];
+    _vsnprintf_s(msg, sizeof(msg), _TRUNCATE, fmt, ap);
+    char line[320];
+    int n = _snprintf_s(line, sizeof(line), _TRUNCATE, "[%6u ms tid=%u] %s\r\n",
+                        (unsigned)(GetTickCount() - t0), (unsigned)GetCurrentThreadId(), msg);
+    if (n <= 0) return;
+    HANDLE h = CreateFileA(BootPath(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    DWORD wr = 0;
+    WriteFile(h, line, (DWORD)n, &wr, nullptr);
+    CloseHandle(h);
+}
+
+void BootStep(int n, const char* name) {
+    g_bootStep = n;
+    g_bootName = name;
+    BootLog("== step %d: %s", n, name);
+    if (g_boot.stop > 0 && n >= g_boot.stop) {
+        BootLog("boot_stop=%d 已到达，挂起（诊断模式；取消 ini 的 boot_stop 后重注入）", g_boot.stop);
+        for (;;) Sleep(1000);
+    }
+}
+
+DWORD WINAPI BootWatchdog(LPVOID) {
+    for (int i = 0; i < 60; ++i) {
+        Sleep(1000);
+        BootLog("alive step=%d (%s)", g_bootStep, g_bootName);
+    }
+    return 0;
+}
+
+int CfgInt(const char* ini, const char* key, int def) {
+    return static_cast<int>(GetPrivateProfileIntA("debug", key, def, ini));
+}
+
+void LoadBootCfg() {
+    char ini[MAX_PATH] = { 0 };
+    _snprintf_s(ini, sizeof(ini), _TRUNCATE, "%sra3copilot_debug.ini", DllDir());
+    g_boot.trace       = CfgInt(ini, "boot_trace", 0);
+    g_boot.diskLog     = CfgInt(ini, "disk_log", -1);
+    g_boot.hookMax     = CfgInt(ini, "hook_max", -1);
+    g_boot.skipHooks   = CfgInt(ini, "skip_hooks", 0);
+    g_boot.skipOverlay = CfgInt(ini, "skip_overlay", 0);
+    g_boot.stop        = CfgInt(ini, "boot_stop", 0);
+    g_boot.renderSteps = CfgInt(ini, "render_steps", 5);
+    if (g_boot.diskLog >= 0) g_cfg.diskLog = (g_boot.diskLog != 0);
+    if (g_boot.trace) {
+        HANDLE h = CreateFileA(BootPath(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+    BootLog("boot probe start: disk=%d hook_max=%d skip_hooks=%d skip_overlay=%d stop=%d render_steps=%d",
+            g_cfg.diskLog ? 1 : 0, g_boot.hookMax, g_boot.skipHooks,
+            g_boot.skipOverlay, g_boot.stop, g_boot.renderSteps);
+}
+
 // ---------- 未处理异常捕获（真·崩溃现场） ----------
 // 游戏未处理的异常触发时，把「异常码 / 出错地址 / 所属模块 / 寄存器」写进日志文件 ——
 // 一眼就能看出崩在**我们 DLL / 游戏本体 / d3d9** 哪一边。无视日志开关，强制记录。
@@ -311,21 +398,28 @@ LONG WINAPI Ra3CrashFilter(EXCEPTION_POINTERS* ep) {
                     strncpy_s(modName, b ? b + 1 : modPath, _TRUNCATE);
                 }
             }
+            const DWORD modBase = (DWORD)(uintptr_t)mod;
+            const DWORD rva = modBase ? (DWORD)ctx->Eip - modBase : (DWORD)ctx->Eip;
             char b[512];
             _snprintf_s(b, sizeof(b), _TRUNCATE,
-                        "[崩溃] code=%08X 出错地址=%08X 模块=%s 阶段=%s | "
+                        "[崩溃] code=%08X 出错地址=%08X 模块=%s base=%08X rva=%08X "
+                        "bootStep=%d(%s) stage=%s tid=%u | "
                         "EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X EBP=%08X ESP=%08X",
                         (unsigned)er->ExceptionCode, (unsigned)ctx->Eip, modName,
-                        g_stage ? g_stage : "?",
+                        (unsigned)modBase, (unsigned)rva,
+                        g_bootStep, g_bootName ? g_bootName : "?",
+                        g_stage ? g_stage : "?", (unsigned)GetCurrentThreadId(),
                         (unsigned)ctx->Eax, (unsigned)ctx->Ebx, (unsigned)ctx->Ecx,
                         (unsigned)ctx->Edx, (unsigned)ctx->Esi, (unsigned)ctx->Edi,
                         (unsigned)ctx->Ebp, (unsigned)ctx->Esp);
             WriteDiskLog(LOG_ERR, b);
             // 顺带把出错地址也写进面包屑文件（两张表一起看）
-            char b2[192];
+            char b2[224];
             _snprintf_s(b2, sizeof(b2), _TRUNCATE,
-                        "[崩溃] code=%08X at %08X (%s) stage=%s\r\n",
+                        "[崩溃] code=%08X at %08X (%s) base=%08X rva=%08X bootStep=%d(%s) stage=%s\r\n",
                         (unsigned)er->ExceptionCode, (unsigned)ctx->Eip, modName,
+                        (unsigned)modBase, (unsigned)rva,
+                        g_bootStep, g_bootName ? g_bootName : "?",
                         g_stage ? g_stage : "?");
             CrashLogAppend(b2);
             if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) DumpCrashStack(ctx);
@@ -839,16 +933,30 @@ void InstallLearnHooks() {
 
 void InstallRenderHooks() {
     if (g_mhInited) return;
+    if (g_boot.renderSteps <= 0) { BootLog("render_steps=0 → 跳过渲染 hook（诊断）"); return; }
+
+    BootStep(20, "render: MH_Initialize");
     MH_STATUS mi = MH_Initialize();
     if (mi != MH_OK && mi != MH_ERROR_ALREADY_INITIALIZED) {
+        BootLog("MH_Initialize 失败 %d", mi);
         AddLog(LOG_ERR, "[hook] MH_Initialize 失败 %d", mi);
         return;
     }
+    BootLog("MH_Initialize status=%d", mi);
     g_mhInited = true;
+    if (g_boot.renderSteps < 2) return;
 
+    BootStep(21, "render: d3d9 probe");
     HMODULE h9 = GetModuleHandleA("d3d9.dll");
-    if (!h9) { AddLog(LOG_ERR, "d3d9.dll 未加载"); return; }
+    if (!h9) { BootLog("d3d9.dll 未加载"); AddLog(LOG_ERR, "d3d9.dll 未加载"); return; }
+    {
+        char p9[MAX_PATH] = { 0 };
+        GetModuleFileNameA(h9, p9, MAX_PATH);
+        BootLog("d3d9.dll base=%08X path=%s", (unsigned)(uintptr_t)h9, p9);
+    }
+    if (g_boot.renderSteps < 3) return;
 
+    BootStep(22, "render: dummy window + device");
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc   = DefWindowProcW;
     wc.hInstance     = GetModuleHandleW(nullptr);
@@ -856,6 +964,7 @@ void InstallRenderHooks() {
     RegisterClassExW(&wc);
     HWND wnd = CreateWindowExW(0, wc.lpszClassName, L"", WS_OVERLAPPEDWINDOW,
                                0, 0, 64, 64, nullptr, nullptr, wc.hInstance, nullptr);
+    BootLog("dummy hwnd=%p", (void*)wnd);
     AddLog(LOG_INFO, "d3d9.dll @ %p", (void*)h9);
 
     const DWORD flags[3] = {
@@ -867,13 +976,16 @@ void InstallRenderHooks() {
     C9_t c9 = reinterpret_cast<C9_t>(GetProcAddress(h9, "Direct3DCreate9"));
     if (c9 && wnd) {
         IDirect3D9* d3d = c9(D3D_SDK_VERSION);
+        BootLog("Direct3DCreate9 -> %p", (void*)d3d);
         if (d3d) {
             for (int i = 0; i < 3; ++i) {
                 D3DPRESENT_PARAMETERS pp = {};
                 pp.Windowed = TRUE; pp.SwapEffect = D3DSWAPEFFECT_DISCARD; pp.hDeviceWindow = wnd;
                 IDirect3DDevice9* dev = nullptr;
-                if (SUCCEEDED(d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
-                                                flags[i], &pp, &dev)) && dev) {
+                HRESULT hr = d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
+                                               flags[i], &pp, &dev);
+                BootLog("CreateDevice flag=%02X hr=%08X dev=%p", (unsigned)flags[i], (unsigned)hr, (void*)dev);
+                if (SUCCEEDED(hr) && dev) {
                     HookDeviceVtable(dev); dev->Release();
                 }
             }
@@ -884,12 +996,16 @@ void InstallRenderHooks() {
     CE_t ce = reinterpret_cast<CE_t>(GetProcAddress(h9, "Direct3DCreate9Ex"));
     if (ce && wnd) {
         IDirect3D9Ex* d3dx = nullptr;
-        if (SUCCEEDED(ce(D3D_SDK_VERSION, &d3dx)) && d3dx) {
+        HRESULT hrx = ce(D3D_SDK_VERSION, &d3dx);
+        BootLog("Direct3DCreate9Ex hr=%08X -> %p", (unsigned)hrx, (void*)d3dx);
+        if (SUCCEEDED(hrx) && d3dx) {
             D3DPRESENT_PARAMETERS pp = {};
             pp.Windowed = TRUE; pp.SwapEffect = D3DSWAPEFFECT_DISCARD; pp.hDeviceWindow = wnd;
             IDirect3DDevice9Ex* devx = nullptr;
-            if (SUCCEEDED(d3dx->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
-                    D3DCREATE_SOFTWARE_VERTEXPROCESSING, &pp, nullptr, &devx)) && devx) {
+            HRESULT hrd = d3dx->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
+                    D3DCREATE_SOFTWARE_VERTEXPROCESSING, &pp, nullptr, &devx);
+            BootLog("CreateDeviceEx hr=%08X dev=%p", (unsigned)hrd, (void*)devx);
+            if (SUCCEEDED(hrd) && devx) {
                 HookDeviceVtable(devx); devx->Release();
             }
             d3dx->Release();
@@ -897,8 +1013,16 @@ void InstallRenderHooks() {
     }
     if (wnd) DestroyWindow(wnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    BootLog("hooked d3d9 targets=%d", g_hookedCount);
+    if (g_boot.renderSteps < 4) return;
+
+    BootStep(23, "render: learn hooks");
     InstallLearnHooks();             // 学习 hook（挂 Find，用于定位创建函数）
-    MH_EnableHook(MH_ALL_HOOKS);
+    if (g_boot.renderSteps < 5) return;
+
+    BootStep(24, "render: MH_EnableHook");
+    MH_STATUS me = MH_EnableHook(MH_ALL_HOOKS);
+    BootLog("MH_EnableHook status=%d", me);
     AddLog(LOG_OK, "[hook] 已就绪：%d 个 d3d9 函数，等待首帧", g_hookedCount);
 }
 
@@ -995,6 +1119,8 @@ void DoUnload(IDirect3DDevice9* dev) {
 static HRESULT STDMETHODCALLTYPE HookBeginSceneBody(IDirect3DDevice9* dev) {
     InterlockedIncrement(&g_telemBeginScene);
     InterlockedExchange(&g_telemBeginMs, (LONG)GetTickCount());
+    { static bool s_first = true;
+      if (s_first) { s_first = false; BootLog("首个 BeginScene dev=%p", (void*)dev); } }
 
     // 卸载触发点：/unload 靠「下一个渲染帧」执行，Present 不调时这里就是唯一时机
     if (g_wantUnload && !g_unloading) {
@@ -3024,6 +3150,15 @@ DWORD WINAPI InputThread(LPVOID) {
 
 } // namespace
 
+// 启动探针的对外口子（内部用 BootWriteV，声明见 overlay.h）。
+void BootLog(const char* fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    BootWriteV(fmt, ap);
+    va_end(ap);
+}
+int DebugHookMax() { return g_boot.hookMax; }
+int DebugRenderSteps() { return g_boot.renderSteps; }
+
 // 呼出键的名字（"Ctrl+Insert" 形式）—— 调试接口 /ui 与「面板怎么叫不出来」这类排查用。
 // g_toggleVk 在匿名命名空间里（内部链接），只能通过这个口子对外。
 void OverlayToggleKeyName(char* out, int n) {
@@ -3195,14 +3330,18 @@ HWND GameWindow() {
 void OverlayInit() {
     // 先装崩溃捕获（崩溃现场落盘，无视日志开关）；旧过滤器保存，卸载时还原
     g_oldFilter = SetUnhandledExceptionFilter(Ra3CrashFilter);
+    LoadBootCfg();                                            // 文件式诊断开关（先于一切）
+    if (g_boot.trace) CreateThread(nullptr, 0, BootWatchdog, nullptr, 0, nullptr);
 
     // 构建决议必须先于一切取值：feature 表的双列 RVA、符号解析的兜底地址、
     // 各动作模块的 Pick 都读这个全局值。决议前 GetBuild() 恒为 Unknown，
     // Pick() 落零售列 —— 放到后面就等于把 Steam 版按零售地址装 hook。
+    BootStep(1, "ResolveBuildForSelf");
     wchar_t buildIni[MAX_PATH] = { 0 };
     BuildIniPathW(buildIni, MAX_PATH);
     ra3::BuildProbe bp;
     const ra3::BuildKind bk = ra3::ResolveBuildForSelf(buildIni, &bp);
+    BootLog("build=%s sizeOfImage=%08X", BuildName(bk), (unsigned)bp.sizeOfImage);
     if (bk == ra3::BuildKind::Unknown) {
         AddLog(LOG_WARN, "未能识别的游戏构建（SizeOfImage 0x%X）：按零售地址尝试，"
                          "各 hook 走 AOB 逐条校验，不符即跳过", bp.sizeOfImage);
@@ -3211,22 +3350,44 @@ void OverlayInit() {
                BuildOverridden() ? "，玩家指定" : "，自动判定", bp.sizeOfImage);
     }
 
-    g_hookSt = InstallHooks();
+    BootStep(2, "InstallHooks");
+#ifdef RA3_NO_HOOKS
+    AddLog(LOG_WARN, "RA3_NO_HOOKS: 跳过功能 hook（诊断用）");
+#else
+    if (g_boot.skipHooks) BootLog("skip_hooks=1 → 跳过功能 hook（诊断）");
+    else g_hookSt = InstallHooks();
+#endif
+    BootStep(3, "SymInit");
     SymInit();                          // 符号解析（特征码+结构推导，先于任何动作）
+    BootStep(4, "LoadKeyBinds");
     LoadKeyBinds();                     // 快捷键绑定（读 <DLL 目录>\ra3copilot_keys.ini，缺失则用默认）
     AddLog(LOG_OK, "功能 hook %d/%d 已安装（AOB 通过 %d）",
            g_hookSt.installed, g_hookSt.total, g_hookSt.aobOk);
 
+    BootStep(5, "HttpApiStart");
     HttpApiStart(17832);                // 调试接口先起来（/ping 立刻可用；变更类命令等渲染线程）
 
+    BootStep(6, "wait d3d9.dll");
     for (int i = 0; i < 1800 && !GetModuleHandleA("d3d9.dll"); ++i) Sleep(100);
+    BootLog("d3d9.dll %s", GetModuleHandleA("d3d9.dll") ? "found" : "timeout(180s)");
 
-    g_inputThread = CreateThread(nullptr, 0, InputThread, nullptr, 0, nullptr);   // 句柄留到卸载时 join
-    char tgl[32] = { 0 }; ToggleLabel(tgl, sizeof(tgl));
-    AddLog(LOG_INFO, "输入线程已启动（%s 显示 / 隐藏菜单）", tgl);
+#ifdef RA3_NO_OVERLAY
+    AddLog(LOG_WARN, "RA3_NO_OVERLAY: 跳过 D3D9/ImGui 渲染层（仅功能 hook + HTTP）");
+#else
+    if (g_boot.skipOverlay) {
+        BootLog("skip_overlay=1 → 跳过渲染层（诊断）");
+    } else {
+        BootStep(7, "InputThread");
+        g_inputThread = CreateThread(nullptr, 0, InputThread, nullptr, 0, nullptr);   // 句柄留到卸载时 join
+        char tgl[32] = { 0 }; ToggleLabel(tgl, sizeof(tgl));
+        AddLog(LOG_INFO, "输入线程已启动（%s 显示 / 隐藏菜单）", tgl);
 
-    InstallRenderHooks();
+        BootStep(8, "InstallRenderHooks");
+        InstallRenderHooks();
+    }
+#endif
     g_running = true;
+    BootStep(9, "ready");
 }
 
 } // namespace ra3

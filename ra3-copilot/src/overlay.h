@@ -60,6 +60,13 @@ void GetVtInfo(uint32_t out[8]);
 // 原始 VIEW 矩阵诊断（不过滤）：lastMat/minMat 各 16 float；末次/最小的 _33；调用次数
 void GetRawView(float lastMat[16], float* lastFz, float minMat[16], float* minFz, int* count);
 
+// ---- 启动探针（文件式）----
+// 注入 DLL 读不到注入器进程的环境变量，诊断开关只能走文件：
+//   <DLL 目录>\ra3copilot_debug.ini；每次注入截断并重写 ra3copilot_boot.txt。
+void BootLog(const char* fmt, ...);
+int  DebugHookMax();       // -1=全部功能 hook；N=只装前 N 个站点
+int  DebugRenderSteps();   // 0=跳过渲染 hook；1..5=逐段执行
+
 // 调试接口用：
 int  OverlayLogDump(char* buf, int n, int maxLines);  // 导出输出记录尾部
 void OverlaySetCrate(int idx, int count);              // 设置空投箱类型/数量

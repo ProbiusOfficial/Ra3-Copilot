@@ -3,6 +3,7 @@
 #include "hook.h"
 #include "symres.h"
 #include "cs_pairs.h"
+#include "overlay.h"   // DebugHookMax / BootLog（文件式诊断开关）
 #include <cstring>
 #include <cstdio>
 
@@ -402,11 +403,16 @@ HookStatus InstallHooks() {
     size_t remain = sizeof(st.failed);
 
     int idx = 0;
+    const int hookLimit = DebugHookMax();   // 文件式（ra3copilot_debug.ini）；-1=全部
+    BootLog("InstallHooks begin: base=%08X size=%08X total=%d hookLimit=%d",
+            (unsigned)st.moduleBase, (unsigned)st.moduleSize, st.total, hookLimit);
     for (const auto& h : kHooks) {
+        if (hookLimit >= 0 && idx >= hookLimit) break;
         const uint32_t siteRva = SiteRva(h);
-        if (!siteRva) { ++idx; continue; }   // 该构建无对应站点（如 Steam 版未定位的探针）
+        if (!siteRva) { BootLog("hook[%d] %s: 该构建无站点", idx, h.name); ++idx; continue; }   // 该构建无对应站点（如 Steam 版未定位的探针）
         const uintptr_t site = st.moduleBase + siteRva;
         if (!VerifyBytes(site, AobFor(h), h.aobLen)) {
+            BootLog("hook[%d] %s: AOB fail site=%08X", idx, h.name, (unsigned)site);
             int n = _snprintf_s(fp, remain, _TRUNCATE, "%s ", h.name);
             if (n > 0) { fp += n; remain -= static_cast<size_t>(n); }
             ++idx;
@@ -415,19 +421,27 @@ HookStatus InstallHooks() {
         st.aobOk++;
 
         void* cave = AllocCave(64);
-        if (!cave) { ++idx; continue; }
+        if (!cave) { BootLog("hook[%d] %s: no cave", idx, h.name); ++idx; continue; }
 
         uint8_t tramp[6] = { 0x68, 0, 0, 0, 0, 0xC3 };   // push <stub>; ret
         std::memcpy(tramp + 1, &h.stub, 4);
-        if (!WriteRaw(reinterpret_cast<uintptr_t>(cave), tramp, sizeof(tramp))) { ++idx; continue; }
+        if (!WriteRaw(reinterpret_cast<uintptr_t>(cave), tramp, sizeof(tramp))) {
+            BootLog("hook[%d] %s: stub write FAIL cave=%p", idx, h.name, cave);
+            ++idx;
+            continue;
+        }
 
         *h.retVar = static_cast<uint32_t>(site + h.replayLen);
-        if (PatchJmp(site, cave)) {
+        const bool patched = PatchJmp(site, cave);
+        BootLog("hook[%d] %s: site=%08X cave=%p patch=%s", idx, h.name,
+                (unsigned)site, cave, patched ? "ok" : "FAIL");
+        if (patched) {
             st.installed++;
             if (g_installedCount < 32) g_installedIdx[g_installedCount++] = idx;
         }
         ++idx;
     }
+    BootLog("InstallHooks done: installed=%d aobOk=%d", st.installed, st.aobOk);
     return st;
 }
 
