@@ -29,6 +29,7 @@
 #include "protocol.h"
 #include "units_corona.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "backends/imgui_impl_dx9.h"
 #include "backends/imgui_impl_win32.h"
 #include "MinHook.h"
@@ -623,11 +624,45 @@ static void ApplyUiStyle(float s) {
     ImFontConfig fc;
     fc.OversampleH = 1; fc.OversampleV = 1; fc.PixelSnapH = true;
     const float px = 16.0f * s;   // 16px 是按 1080p / 100% 定下的基准
-    ImFont* f = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msyh.ttc", px, &fc, UiGlyphRanges());
-    if (!f) f = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\simhei.ttf", px, &fc, UiGlyphRanges());
-    if (!f) io.Fonts->AddFontDefault();
+    // 候选按「Proton 前缀里实际存在的文件」排：msyh.ttc/simhei.ttf 在 Wine 前缀里都没有，
+    //   只有 msyh.ttf / simsun.ttc。再留一个 DLL 同目录的自带字体给用户兜底。
+    const char* cands[] = {
+        "C:\\Windows\\Fonts\\msyh.ttc",        // 原生 Windows
+        "C:\\Windows\\Fonts\\msyh.ttf",        // Proton/Wine
+        "C:\\Windows\\Fonts\\simhei.ttf",
+        "C:\\Windows\\Fonts\\simsun.ttc",      // Proton/Wine
+        "C:\\Windows\\Fonts\\sourcehansans.ttc",
+    };
+    char used[MAX_PATH] = { 0 };
+    ImFont* f = nullptr;
+    // 先查文件存在再交给 ImGui：AddFontFromFileTTF 失败会走 IM_ASSERT_USER_ERROR →
+    //   ImGui::ErrorLog → BeginErrorTooltip → ImGui::Begin，而此时还没 NewFrame、g.Font 为
+    //   NULL，Begin 里会除零崩溃（Proton 前缀没有 msyh.ttc 就是这个崩溃）。
+    for (const char* c : cands) {
+        if (GetFileAttributesA(c) == INVALID_FILE_ATTRIBUTES) {
+            BootLog("font skip (missing): %s", c);
+            continue;
+        }
+        BootLog("font try: %s", c);
+        f = io.Fonts->AddFontFromFileTTF(c, px, &fc, UiGlyphRanges());
+        if (f) { strncpy_s(used, c, _TRUNCATE); break; }
+    }
+    char own[MAX_PATH] = { 0 };
+    if (!f) {
+        _snprintf_s(own, sizeof(own), _TRUNCATE, "%sra3copilot_font.ttf", DllDir());
+        if (GetFileAttributesA(own) != INVALID_FILE_ATTRIBUTES) {
+            BootLog("font try: %s", own);
+            f = io.Fonts->AddFontFromFileTTF(own, px, &fc, UiGlyphRanges());
+            if (f) strncpy_s(used, own, _TRUNCATE);
+        }
+    }
+    if (!f) { io.Fonts->AddFontDefault(); strncpy_s(used, "<default>", _TRUNCATE); }
     io.FontGlobalScale = 1.0f;    // 缩放做在字号上：拉伸全局缩放是位图放大，字会糊
     io.Fonts->Build();
+    // 显式指定默认字体：GetDefaultFont() 在 Fonts 为空时会越界取 Fonts[0]
+    if (io.Fonts->Fonts.Size > 0) io.FontDefault = io.Fonts->Fonts[0];
+    BootLog("font: %s (%d font(s), loaded=%d)", used, io.Fonts->Fonts.Size,
+            (f && f->IsLoaded()) ? 1 : 0);
 
     // 从默认样式起步：在旧样式上反复 ScaleAllSizes 会逐次叠加，越调越大
     ImGuiStyle st;
@@ -657,12 +692,20 @@ static void ApplyUiStyle(float s) {
     AddLog(LOG_OK, "[UI] 缩放 %.2fx（字号 %.1fpx）", s, px);
 }
 
+// EnsureImGui 的重入锁：DXVK 下 BeginScene/Present/EndScene 可能来自不同线程，
+//   两个线程同时看到 imguiReady=0 就会各自 CreateContext —— 后一个把 GImGui 换成
+//   没有字体的新上下文，前一个正在 Begin 的线程随即除零崩溃。必须串行化。
+static volatile LONG g_ensureBusy = 0;
+
 void EnsureImGui(IDirect3DDevice9* dev) {
     if (g_unloading) return;   // 卸载中/已卸载：不再重建 UI（否则会把刚释放的资源又装回来）
     if (g_ov.imguiReady || !dev) return;
+    if (InterlockedCompareExchange(&g_ensureBusy, 1, 0) != 0) return;
+    struct EnsureGuard { ~EnsureGuard() { InterlockedExchange(&g_ensureBusy, 0); } } s_guard;
     InterlockedIncrement(&g_telemImguiTry);
     HWND hwnd = GetDeviceWindow(dev);
-    if (!hwnd || !IsWindow(hwnd)) return;
+    if (!hwnd || !IsWindow(hwnd)) { BootLog("EnsureImGui: 无游戏窗口，跳过"); return; }
+    BootLog("EnsureImGui enter hwnd=%p dev=%p", (void*)hwnd, (void*)dev);
 
     if (g_ov.wnd != hwnd) {
         if (g_ov.wnd && g_origWndProc)
@@ -678,14 +721,26 @@ void EnsureImGui(IDirect3DDevice9* dev) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr;
+    // 关掉「可恢复错误」的三条输出：其中 Tooltip 会调用 ImGui::Begin，而帧外的 Begin
+    //   在 g.Font 未就绪时除零崩溃（字体缺失 → ErrorLog 的直接死因）。
+    io.ConfigErrorRecoveryEnableTooltip = false;
+    io.ConfigErrorRecoveryEnableDebugLog = false;
+    io.ConfigErrorRecoveryEnableAssert = false;
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX9_Init(dev);
+    BootLog("imgui ctx + backends inited");
 
     // 字体与样式按「系统 DPI × 用户倍数」一次建好；之后倍率变化在 RenderOverlay 里重建
     ApplyUiStyle(ClampUiScale(DetectDpiScale(hwnd) * g_cfg.scale));
     ImGui_ImplDX9_InvalidateDeviceObjects();
     ImGui_ImplDX9_CreateDeviceObjects();
+    BootLog("device objects created (texID=%p)", io.Fonts->TexID);
 
+    if (io.Fonts->Fonts.Size <= 0) {          // 没有任何字体 → 之后 Begin 必崩，宁可不出面板
+        BootLog("FATAL: 字体表为空，放弃 overlay");
+        AddLog(LOG_ERR, "[渲染] 字体表为空（%s），overlay 已停用", "无可用字体");
+        return;
+    }
     g_ov.imguiReady = true;
     g_telemImguiReady = 1;
     AddLog(LOG_OK, "[渲染] ImGui 就绪  hwnd=%p device=%p", (void*)hwnd, (void*)dev);
@@ -695,8 +750,28 @@ void BuildUI();
 // 每帧逻辑（与菜单是否可见无关）：调试接口、帧计数、快捷键队列、自动空投
 void OverlayTick();
 
+// 渲染重入锁：DXVK 下 Present/EndScene 可能来自不同线程（甚至嵌套），
+// 两个线程同时进 ImGui 会撞上 Begin() 的 g.WithinFrameScope 断言。
+// Windows 上只有游戏线程会进来，这把锁等价于无操作。
+static volatile LONG g_renderBusy = 0;
+
 void RenderOverlay(IDirect3DDevice9* dev) {
+    if (InterlockedCompareExchange(&g_renderBusy, 1, 0) != 0) return;
+    struct BusyGuard { ~BusyGuard() { InterlockedExchange(&g_renderBusy, 0); } } s_busyGuard;
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    if (!ctx) return;
+    { static bool s_first = true;
+      if (s_first) { s_first = false; BootLog("RenderOverlay 首次调用: visible=%d ready=%d dev=%p",
+                                             g_cfg.visible ? 1 : 0, g_ov.imguiReady ? 1 : 0, (void*)dev); } }
+    if (ctx->WithinFrameScope) return;   // 上一帧异常未 Render：跳过，避免 Begin 断言
     ImGuiIO& io = ImGui::GetIO();
+    // 字体表为空就绝不进 NewFrame/Begin（Begin 里 g.Font->FontSize 会除零）。
+    //   注意不能在这里查 ctx->Font：它要等本帧 NewFrame 才会被设置，首帧必然为空。
+    if (io.Fonts->Fonts.Size <= 0) {
+        static bool s_logged = false;
+        if (!s_logged) { s_logged = true; BootLog("RenderOverlay: 字体未就绪（fonts=%d），跳过绘制", io.Fonts->Fonts.Size); }
+        return;
+    }
 
     // 渲染停摆期间（device lost、加载画面、面板隐藏后再打开）积压的输入事件不能带进恢复后
     //   的第一帧：ImGui 按 trickle 逐帧重放历史点击，重放用的是当时的坐标，会落到现在的
@@ -745,6 +820,14 @@ void RenderOverlay(IDirect3DDevice9* dev) {
     ImGui_ImplDX9_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+    // 硬护栏：g.Font 为空时 ImGui::Begin 会在 SetCurrentWindow 里除零（实测崩溃点）。
+    //   宁可丢一帧面板，也不能把游戏带崩。
+    if (!ctx->Font || io.Fonts->Fonts.Size <= 0) {
+        static bool s_logged = false;
+        if (!s_logged) { s_logged = true; BootLog("RenderOverlay: g.Font=NULL，跳过绘制"); }
+        ImGui::EndFrame();
+        return;
+    }
     BuildUI();
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -1162,7 +1245,7 @@ static HRESULT STDMETHODCALLTYPE HookEndSceneBody(IDirect3DDevice9* dev) {
         if (now != s_lastMs && SUCCEEDED(dev->TestCooperativeLevel())) {   // 一帧多个 scene 只画一次
             s_lastMs = now;
             __try { RenderOverlay(dev); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); InterlockedExchange(&g_renderBusy, 0); }
         }
     }
     return hr;
@@ -1218,7 +1301,7 @@ static HRESULT STDMETHODCALLTYPE HookPresentBody(IDirect3DDevice9* dev, const RE
                 OverlayTick();
                 if (g_cfg.visible) RenderOverlay(dev);
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); InterlockedExchange(&g_renderBusy, 0); }
     }
     if (g_origPresent) return g_origPresent(dev, a, b, h, c);
     return D3D_OK;
@@ -1272,7 +1355,7 @@ static HRESULT STDMETHODCALLTYPE HookSwapPresentBody(IDirect3DSwapChain9* sc, co
                 }
                 dev->Release();
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedIncrement(&g_telemDevExcept); InterlockedExchange(&g_renderBusy, 0); }
     }
     if (g_origSwapPresent) return g_origSwapPresent(sc, a, b, h, c, fl);
     return D3D_OK;
