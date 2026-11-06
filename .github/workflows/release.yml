@@ -221,7 +221,7 @@ jobs:
           printf '%s\n' \
             'Ra3-Copilot — Linux / Steam Proton' \
             '' \
-            '把本包直接解压到游戏根目录（与 RA3_1.12.game 同级），得到 Ra3Copilot-win/ 与 ra3copilot.sh。' \
+            '把本包解压到游戏根目录（含 Data/ 的 Red Alert 3 文件夹），得到 Ra3Copilot-win/ 与 ra3copilot.sh。' \
             '' \
             '  ./ra3copilot.sh inject     注入（先启动游戏并进入对局）' \
             '  ./ra3copilot.sh unload     卸载' \
