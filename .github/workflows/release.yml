@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build x86 release
+  build-windows:
+    name: Build x86 Windows release
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -134,6 +134,8 @@ jobs:
             '',
             '**适配基线**：`ra3_1.12.game` v1.12.3444.25830（32 位，日冕 Mod），零售版与 Steam TUC 版均可，构建由启动器判定或手动指定。注入前执行 AOB 字节级校验，不符拒绝挂载。',
             '',
+            '**产物**：Windows 单文件启动器（`-win-x86.exe`）、Windows 完整包（`-win-x86.zip`）、Linux / Steam Proton 包（`-linux-proton.tar.gz`，解压到游戏根目录后用 `ra3copilot.sh inject` 注入）。',
+            '',
             '**使用**：进入对局 → 双击 `Ra3Copilot.exe`（单文件版文件名带版本号，内容相同）→ 「注入」→ 游戏内按呼出键（默认 `INSERT`）呼出面板。功能按资源 / 战斗 / 建造 / 单位 / 召唤 / 协议 / 战场感知分组。呼出键、全部功能热键、J 键预设增援的单位与数量，都在启动器「设置」里改，改完 1 秒内生效、不用重注入。注入即常驻监听 `127.0.0.1:17832`。',
             '',
             '**CI 只验证可构建**：字节级兼容性以本地 `tools/precheck_aob.py` 对真实 exe 的预检为准（零售基线 31 个站点通过，2 个单构建专用站点按设计跳过）。',
@@ -142,42 +144,17 @@ jobs:
           ) -join "`n" | Set-Content RELEASE_NOTES.md -Encoding utf8
           Get-Content RELEASE_NOTES.md | Select-Object -First 12
 
-      - name: Publish release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: Ra3-Copilot ${{ github.ref_name }}
-          files: |
+          name: win-dist
+          path: |
             Ra3Copilot-${{ github.ref_name }}-win-x86.zip
             Ra3Copilot-${{ github.ref_name }}-win-x86.exe
-            SHA256SUMS.txt
-          body_path: RELEASE_NOTES.md
-          generate_release_notes: true
-          # 同一个 tag 重新推送时覆盖已有 Release（产物与说明一起替换）
-          allowUpdates: true
-
-      # 重发同名 tag 时，旧命名的资产不会被 action 覆盖，会一直挂在 Release 上。
-      # 按本次命名规则保留，其余删掉，免得同一版挂着两份 exe。
-      - name: Prune stale assets
-        if: github.ref_type == 'tag'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag  = "${{ github.ref_name }}"
-          $repo = "${{ github.repository }}"
-          $keep = @(
-            "Ra3Copilot-$tag-win-x86.zip",
-            "Ra3Copilot-$tag-win-x86.exe",
-            "SHA256SUMS.txt"
-          )
-          $rel = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
-          foreach ($a in $rel.assets) {
-            if ($keep -notcontains $a.name) {
-              Write-Host "删除旧资产: $($a.name)"
-              gh api -X DELETE "repos/$repo/releases/assets/$($a.id)"
-            }
-          }
+            ra3-copilot/injector.exe
+            ra3-copilot/ra3diag.exe
+            RELEASE_NOTES.md
+          if-no-files-found: ignore
 
       - name: Upload build log on failure
         if: failure()
@@ -188,3 +165,149 @@ jobs:
             ra3-copilot/build_out/*.map
             ra3-copilot/build_log.txt
           if-no-files-found: ignore
+
+  build-linux:
+    name: Build Proton/Linux bundle
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Proton 里跑的仍是 32 位 PE，DLL 用 llvm-mingw 交叉编译；注入器复用 Windows 构建的 x86 版。
+      - name: Install llvm-mingw
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER=20261020
+          ASSET="llvm-mingw-${VER}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+          curl -fsSL -o "$ASSET" \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/${VER}/${ASSET}"
+          mkdir -p "$RUNNER_TEMP/llvm-mingw"
+          tar -xf "$ASSET" -C "$RUNNER_TEMP/llvm-mingw" --strip-components=1
+          "$RUNNER_TEMP/llvm-mingw/bin/i686-w64-mingw32-clang++" --version | head -1
+
+      - name: Build ra3copilot.dll (i686 PE)
+        working-directory: ra3-copilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$RUNNER_TEMP/llvm-mingw" OUT=build_linux bash tools/build_linux.sh
+          test -s build_linux/ra3copilot.dll
+          ls -l build_linux/ra3copilot.dll
+
+      - name: Download Windows injector
+        uses: actions/download-artifact@v4
+        with:
+          name: win-dist
+          path: win-dist
+
+      - name: Package Proton bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF="${{ github.ref_name }}"
+          STAGE=stage-linux
+          mkdir -p "$STAGE/Ra3Copilot-win"
+          cp ra3-copilot/build_linux/ra3copilot.dll "$STAGE/Ra3Copilot-win/"
+          INJ="$(find win-dist -type f -name injector.exe -print -quit)"
+          test -n "$INJ"
+          cp "$INJ" "$STAGE/Ra3Copilot-win/"
+          DIAG="$(find win-dist -type f -name ra3diag.exe -print -quit)"
+          test -n "$DIAG"
+          cp "$DIAG" "$STAGE/Ra3Copilot-win/"
+          cp ra3-copilot/tools/linux/ra3copilot.sh "$STAGE/"
+          chmod +x "$STAGE/ra3copilot.sh"
+          printf '%s\n' \
+            'Ra3-Copilot — Linux / Steam Proton' \
+            '' \
+            '把本包直接解压到游戏根目录（与 RA3_1.12.game 同级），得到 Ra3Copilot-win/ 与 ra3copilot.sh。' \
+            '' \
+            '  ./ra3copilot.sh inject     注入（先启动游戏并进入对局）' \
+            '  ./ra3copilot.sh unload     卸载' \
+            '  ./ra3copilot.sh status     只看游戏进程' \
+            '  ./ra3copilot.sh ping       查 127.0.0.1:17832 接口' \
+            '' \
+            'Steam 启动项可写成：  "/path/to/Red Alert 3/ra3copilot.sh" launch %command%' \
+            '脚本等游戏进程出现后自动注入，日志在 Ra3Copilot-win/inject-launch.log。' \
+            '' \
+            'Ra3Copilot-win/ra3copilot.dll 由 llvm-mingw 交叉编译，配合同目录的 injector.exe' \
+            '在游戏所在的 Proton 前缀里注入；不要换成 Windows 版 DLL。' \
+            '中文面板字体取 Proton 前缀内的 msyh.ttf / simsun.ttc，找不到时可在 DLL 同目录' \
+            '放一份 ra3copilot_font.ttf。' \
+            '' \
+            '排查开关：DLL 同目录 ra3copilot_debug.ini（详见仓库 README「Linux / Steam Proton」）。' \
+            '' \
+            '仅用于单机学习与研究。' \
+            > "$STAGE/LINUX.txt"
+          tar -czf "Ra3Copilot-${REF}-linux-proton.tar.gz" -C "$STAGE" .
+          ls -lh "Ra3Copilot-${REF}-linux-proton.tar.gz"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: Ra3Copilot-${{ github.ref_name }}-linux-proton.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    if: github.ref_type == 'tag'
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-dist'
+          merge-multiple: true
+          path: dist
+
+      - name: Build checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum \
+            "Ra3Copilot-${{ github.ref_name }}-win-x86.zip" \
+            "Ra3Copilot-${{ github.ref_name }}-win-x86.exe" \
+            "Ra3Copilot-${{ github.ref_name }}-linux-proton.tar.gz" \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ra3-Copilot ${{ github.ref_name }}
+          files: |
+            dist/Ra3Copilot-${{ github.ref_name }}-win-x86.zip
+            dist/Ra3Copilot-${{ github.ref_name }}-win-x86.exe
+            dist/Ra3Copilot-${{ github.ref_name }}-linux-proton.tar.gz
+            dist/SHA256SUMS.txt
+          body_path: dist/RELEASE_NOTES.md
+          generate_release_notes: true
+          # 同一个 tag 重新推送时覆盖已有 Release（产物与说明一起替换）
+          allowUpdates: true
+
+      # 重发同名 tag 时，旧命名的资产不会被 action 覆盖，会一直挂在 Release 上。
+      # 按本次命名规则保留，其余删掉，免得同一版挂着多份产物。
+      - name: Prune stale assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          repo="${{ github.repository }}"
+          keep=$(printf '%s\n' \
+            "Ra3Copilot-$tag-win-x86.zip" \
+            "Ra3Copilot-$tag-win-x86.exe" \
+            "Ra3Copilot-$tag-linux-proton.tar.gz" \
+            "SHA256SUMS.txt")
+          gh api "repos/$repo/releases/tags/$tag" --jq '.assets[] | [.name, .id] | @tsv' |
+          while IFS=$'\t' read -r name id; do
+            if ! grep -qxF "$name" <<< "$keep"; then
+              echo "删除旧资产: $name"
+              gh api -X DELETE "repos/$repo/releases/assets/$id"
+            fi
+          done

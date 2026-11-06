@@ -97,20 +97,25 @@ render_steps=5    ; 1..5 逐段执行 InstallRenderHooks
 
 ## 发版
 
-打 tag 即由 GitHub Actions（`windows-latest`，vcvars x86 工具链）构建并发布：
+打 tag 即由 GitHub Actions 构建并发布；Windows 侧用 `windows-latest` + vcvars x86，Linux 侧用 `ubuntu-latest` + llvm-mingw 交叉编译：
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-产物（资产名都带版本号）：`Ra3Copilot-<tag>-win-x86.zip`（启动器 + DLL + 注入器 + 诊断器 + 说明）、
-单文件 `Ra3Copilot-<tag>-win-x86.exe`、`SHA256SUMS.txt`（覆盖上面两个）。
+产物（资产名都带版本号）：
+
+- `Ra3Copilot-<tag>-win-x86.zip`：Windows 完整包（启动器 + DLL + 注入器 + 诊断器 + 说明）
+- `Ra3Copilot-<tag>-win-x86.exe`：Windows 单文件启动器
+- `Ra3Copilot-<tag>-linux-proton.tar.gz`：Linux / Steam Proton 包（`Ra3Copilot-win/` + `ra3copilot.sh`，解压到游戏根目录）
+- `SHA256SUMS.txt`：覆盖上面三个
 
 - 版本号取自 `ra3-copilot/res/launcher.rc` 的 `FILEVERSION`；与 tag 不符时 CI 只告警，exe 属性里的版本会对不上
 - `workflow_dispatch` 手动触发只构建、不发布
 - CI **不跑 AOB 字节级校验**（游戏 exe 不入库），兼容性以本地 `tools/precheck_aob.py` 的 30/30 为准
-- CI 工具链跟随 runner（当前 MSVC 14.51），本机 `build.bat` 固定在 14.44 ⇒ **两侧产出的二进制不是同一个**（节数、体积都不同）。代码同源，但 CI 产物不等于本地实测过的那一份，对外前建议本地抽验一次
+- Windows 侧 CI 工具链跟随 runner（当前 MSVC 14.51），本机 `build.bat` 固定在 14.44 ⇒ **两侧产出的二进制不是同一个**（节数、体积都不同）。代码同源，但 CI 产物不等于本地实测过的那一份，对外前建议本地抽验一次
+- Linux 侧 CI 固定用 llvm-mingw 20261020 交叉编译出 `ra3copilot.dll`，注入器复用 Windows 侧的 x86 `injector.exe`；本地构建方式见「Linux / Steam Proton」
 
 ## 使用
 
