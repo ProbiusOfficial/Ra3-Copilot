@@ -6,7 +6,7 @@
 namespace ra3 {
 
 struct OverlayConfig {
-    bool  visible   = false;   // UI 显隐（INSERT 切换）
+    bool  visible   = false;   // UI 显隐（呼出键切换）
     float scale     = 1.0f;    // 用户附加缩放：实际 = 系统 DPI × 此值（4K/高 DPI 屏靠它放大）
     float alpha     = 0.95f;   // 窗口不透明度
     int   addAmount = 10000;   // 「加钱」每次金额
@@ -34,7 +34,7 @@ extern HMODULE g_hSelf;   // DLL 自身句柄（dllmain 保存；热重载自卸
 // 热重载：受理卸载请求（/unload 调用）—— 渲染线程在下一个 Present 内拆卸并自卸载
 void RequestUnload();
 
-// 呼出键名（"Ctrl+Insert" 形式）。热重载后面板回到隐藏态，排查「按什么键能叫出来」用。
+// 呼出键名（"Ctrl+F12" 形式）。热重载后面板回到隐藏态，排查「按什么键能叫出来」用。
 void OverlayToggleKeyName(char* out, int n);
 
 // 渲染/输入遥测（/render）：Present 命中数、ImGui 是否就绪、呼出键边沿、前台判定都在这。

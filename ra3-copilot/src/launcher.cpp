@@ -24,6 +24,7 @@
 #include <algorithm>
 #include "injectcore.h"
 #include "buildinfo.h"
+#include "campaign_patch.h"
 #include "resource.h"
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
@@ -46,7 +47,7 @@ namespace {
 
 const wchar_t* const kWindowClass = L"Ra3CopilotLauncher";
 const wchar_t* const kAppName = L"Ra3-Copilot";
-const wchar_t* const kVersion = L"1.3.5";
+const wchar_t* const kVersion = L"1.4.0";
 
 enum { WM_APP_WORK_DONE = WM_APP + 1 };
 enum { LOG_INFO = 0, LOG_OK, LOG_WARN, LOG_ERR };
@@ -89,8 +90,8 @@ int g_buildMode = 0;
 ra3::BuildKind g_buildDetected = ra3::BuildKind::Unknown;   // 从游戏 exe 的 PE 头读出
 
 // 呼出菜单的键（与局内修改器共用 ra3copilot_keys.ini 的 toggle= 行）。
-// 75 配列等没有 INSERT 键的键盘靠这里改 —— 局内面板打不开时，这是唯一入口。
-int  g_toggleVk = VK_INSERT;
+// 局内面板打不开时，这里是改呼出键的唯一入口。
+int  g_toggleVk = VK_F12;
 bool g_toggleCtrl = false;
 int  g_captureTarget = 0;       // 正在等哪个键：0=没有，-1=呼出键，>0=功能热键 id
 ULONGLONG g_captureSince = 0;   // 捕获起始时刻：没有超时的话，点了按钮又不按，之后随便一个键就改掉呼出键
@@ -107,6 +108,13 @@ bool g_minimizeAfter = true;
 bool g_autoOnce = false;
 bool g_chainReload = false;
 bool g_relaunching = false;
+
+// 战役扩展与全科技模式：勾选 = 启用数据包等长补丁，取消 = 按备份还原。
+// 首次运行时配置缺失，启动时按磁盘现状初始化，避免把已有状态无声改掉。
+bool g_campaignUnlock = false;
+bool g_campaignFirstRun = false;
+std::wstring g_campaignPack;          // 手工指定的数据包路径（可选）
+cup::Info g_cuInfo;
 
 std::vector<LogEntry> g_logs;
 bool g_logDirty = false;
@@ -502,7 +510,7 @@ bool UnitHit(const ra3::SupportUnit& u, const char* q) {
 }
 
 void LoadKeyTable() {
-    g_toggleVk = VK_INSERT;
+    g_toggleVk = VK_F12;
     g_toggleCtrl = false;
     g_hkEnabled = true;
     g_keyRows.clear();
@@ -595,11 +603,17 @@ void LoadConfig() {
     g_autoInject = ReadConfig(L"auto_inject", L"0") == L"1";
     g_minimizeAfter = ReadConfig(L"minimize_after", L"1") == L"1";
     g_launcherPath = ReadConfig(L"game_launcher", L"");
+    const std::wstring cu = ReadConfig(L"campaign_unlock", L"");
+    g_campaignFirstRun = cu.empty();
+    g_campaignUnlock = (cu == L"1");
+    g_campaignPack = ReadConfig(L"campaign_pack", L"");
 }
 
 void SaveConfig() {
     WriteConfig(L"auto_inject", g_autoInject ? L"1" : L"0");
     WriteConfig(L"minimize_after", g_minimizeAfter ? L"1" : L"0");
+    WriteConfig(L"campaign_unlock", g_campaignUnlock ? L"1" : L"0");
+    if (!g_campaignPack.empty()) WriteConfig(L"campaign_pack", g_campaignPack);
     if (!g_launcherPath.empty()) WriteConfig(L"game_launcher", g_launcherPath);
 }
 
@@ -737,6 +751,93 @@ bool BrowseLauncher(std::wstring* out) {
     return true;
 }
 
+// ===== 战役扩展与全科技模式 =====
+// 数据包只在游戏没运行时写：文件被占用时 CreateFile 独占打开会直接失败，
+// 此时只保存配置，等下次点「启动」前再同步。
+std::wstring CuGameDir() {
+    const std::wstring lp = FindLauncherPath();
+    if (lp.empty()) return L"";
+    const size_t k = lp.find_last_of(L"\\/");
+    return (k == std::wstring::npos) ? L"" : lp.substr(0, k);
+}
+
+void CuRefresh() {
+    g_cuInfo = cup::Probe(CuGameDir(), g_runtimeDir, g_campaignPack);
+}
+
+bool BrowsePack(std::wstring* out) {
+    wchar_t path[MAX_PATH * 2] = { 0 };
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g_wnd;
+    ofn.lpstrFilter = L"游戏数据包 (*.lyi)\0*.lyi\0所有文件 (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH * 2;
+    ofn.lpstrTitle = L"选择游戏主数据包";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameW(&ofn)) return false;
+    *out = path;
+    return true;
+}
+
+void CuSync(bool allowWrite) {
+    CuRefresh();
+    if (g_campaignFirstRun) {
+        // 第一次运行不替用户做决定：磁盘上是什么状态就记成什么配置
+        g_campaignFirstRun = false;
+        if (g_cuInfo.state == cup::kEnabled) g_campaignUnlock = true;
+        else if (g_cuInfo.state == cup::kOriginal) g_campaignUnlock = false;
+        SaveConfig();
+    }
+    if (!allowWrite) return;
+    if (g_cuInfo.state == cup::kNotFound || g_cuInfo.state == cup::kError ||
+        g_cuInfo.state == cup::kMismatch) {
+        if (g_campaignUnlock)
+            AppendLog(L"战役扩展：数据包不可用，本次未应用（" + g_cuInfo.detail + L"）", LOG_WARN);
+        return;
+    }
+    // kOutdated = 打过旧版片段：虽然算「已启用」，但必须重应用一次换成当前版本。
+    const bool now = (g_cuInfo.state == cup::kEnabled || g_cuInfo.state == cup::kOutdated);
+    if (now == g_campaignUnlock && g_cuInfo.state != cup::kOutdated) return;
+    std::wstring msg;
+    if (cup::SetEnabled(g_campaignUnlock, &msg)) {
+        AppendLog(msg, LOG_OK);
+        CuRefresh();
+    } else {
+        AppendLog(L"战役扩展应用失败：" + msg, LOG_ERR);
+    }
+}
+
+void OnCampaignToggle() {
+    if (g_pid) {
+        SaveConfig();
+        AppendLog(L"设置已记录；游戏正在运行，将在下次启动游戏前生效", LOG_WARN);
+        return;
+    }
+    std::wstring msg;
+    if (!cup::SetEnabled(g_campaignUnlock, &msg)) {
+        g_campaignUnlock = !g_campaignUnlock;         // 失败就把勾选退回原值
+        AppendLog(L"战役扩展：" + msg, LOG_ERR);
+        MessageBoxW(g_wnd, (std::wstring(L"无法应用战役扩展：\n\n") + msg).c_str(),
+                    kAppName, MB_ICONWARNING);
+    } else {
+        SaveConfig();
+        AppendLog(msg, LOG_OK);
+    }
+    CuRefresh();
+}
+
+void OnBrowsePack() {
+    std::wstring p;
+    if (!BrowsePack(&p)) return;
+    g_campaignPack = p;
+    SaveConfig();
+    CuRefresh();
+    AppendLog(L"已指定数据包：" + p, LOG_INFO);
+    AppendLog(L"战役扩展状态：" + g_cuInfo.detail,
+              g_cuInfo.state == cup::kEnabled ? LOG_OK : LOG_INFO);
+}
+
 void ShowGameWindow() {
     if (!g_pid) return;
     struct Ctx { DWORD pid; HWND found; } ctx{ g_pid, nullptr };
@@ -757,6 +858,7 @@ void ShowGameWindow() {
 }
 
 void LaunchGame() {
+    CuSync(true);                       // 启动前把数据包状态对齐到当前勾选
     std::wstring p = FindLauncherPath();
     if (p.empty()) {
         if (!BrowseLauncher(&p)) return;
@@ -1107,6 +1209,36 @@ void DrawMainPage() {
     if (ImGui::Checkbox("注入后最小化", &g_minimizeAfter)) SaveConfig();
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("注入完成后把启动器最小化，不挡游戏");
+
+    ImGui::Separator();
+    {
+        ImGui::TextColored(kAccent, "战役扩展与全科技");
+        ImGui::SameLine(0, 10 * s);
+        if (ImGui::SmallButton("指定数据包…")) OnBrowsePack();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("自动找不到游戏主数据包时，在这里手动指定");
+
+        const bool usable = (g_cuInfo.state == cup::kOriginal ||
+                             g_cuInfo.state == cup::kEnabled ||
+                             g_cuInfo.state == cup::kOutdated);
+        if (!usable) ImGui::BeginDisabled(true);
+        if (ImGui::Checkbox("启用战役扩展和全科技模式", &g_campaignUnlock)) OnCampaignToggle();
+        if (!usable) ImGui::EndDisabled();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("打通战役里的全科技、协议点与日冕协议栏；默认只给单抽 / 十连。\n"
+                              "其它协议技能在局内 F12「协议技能」面板里自己勾选授予。\n"
+                              "取消勾选可还原；写入前会在运行目录自动备份。\n"
+                              "请在没有运行游戏时切换。");
+
+        ImVec4 c = kDim;
+        if (g_cuInfo.state == cup::kEnabled) c = ImVec4(0.45f, 0.90f, 0.65f, 1.f);
+        else if (g_cuInfo.state == cup::kNotFound || g_cuInfo.state == cup::kOutdated) c = kWarn;
+        else if (g_cuInfo.state == cup::kMismatch || g_cuInfo.state == cup::kError)
+            c = ImVec4(0.95f, 0.45f, 0.45f, 1.f);
+        ImGui::TextColored(c, "  %s", ToUtf8(g_cuInfo.detail).c_str());
+        ImGui::TextDisabled("  等长改写脚本条目：容器结构与文件总长不变");
+        ImGui::TextDisabled("  局内按 F12 →「协议技能」自由挑选要用的技能");
+    }
 
     ImGui::Separator();
     {
@@ -1625,9 +1757,32 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
     const bool extractOnly = cmdLine && wcsstr(cmdLine, L"--extract-only");
     const bool autoInject = cmdLine && wcsstr(cmdLine, L"--auto-inject");
     const bool elevated = cmdLine && wcsstr(cmdLine, L"--elevated");
+    const wchar_t* cuCmd = (cmdLine && wcsstr(cmdLine, L"--cu-")) ? cmdLine : nullptr;
 
     EnsureRuntime();
     if (autoInject) g_autoOnce = true;
+
+    if (cuCmd) {
+        const bool doApply = wcsstr(cuCmd, L"--cu-apply") != nullptr;
+        const bool doRestore = wcsstr(cuCmd, L"--cu-restore") != nullptr;
+        std::wstring report;
+        CuRefresh();
+        if (doApply || doRestore) {
+            std::wstring msg;
+            const bool ok = cup::SetEnabled(doApply, &msg);
+            report += (ok ? L"OK: " : L"FAIL: ") + msg + L"\r\n";
+            CuRefresh();
+        }
+        report += L"state=" + std::to_wstring(g_cuInfo.state) + L"\r\n";
+        report += L"detail=" + g_cuInfo.detail + L"\r\n";
+        report += L"pack=" + g_cuInfo.path + L"\r\n";
+        report += L"base=0x" + [&] { wchar_t b[32]; _snwprintf_s(b, _TRUNCATE, L"%llX",
+                        static_cast<unsigned long long>(g_cuInfo.base)); return std::wstring(b); }() + L"\r\n";
+        report += L"size=" + std::to_wstring(g_cuInfo.size) + L"\r\n";
+        report += L"diag=" + cup::Diag() + L"\r\n";
+        WriteTextFile(Join(g_runtimeDir, L"cu_report.txt"), report);
+        return 0;
+    }
 
     if (extractOnly) {
         std::wstring report;
@@ -1715,6 +1870,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmdLine, int show) {
     AppendLog(std::wstring(L"Ra3-Copilot ") + kVersion + L" 已启动", LOG_OK);
     AppendLog(L"运行目录：" + g_runtimeDir, LOG_INFO);
     if (elevated) AppendLog(L"已获得管理员权限", LOG_INFO);
+    CuSync(!g_pid);        // 游戏运行中只读探测，不碰数据包
     if (g_autoOnce && g_pid && !g_loaded) StartInject();
 
     DWORD lastStatus = GetTickCount();

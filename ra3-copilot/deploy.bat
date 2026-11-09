@@ -44,7 +44,7 @@ echo ================ RESULT ================
 type "%~dp0tools\inject_probe_result.txt" 2>nul
 echo ========================================
 echo.
-echo Back in game: press INSERT to show/hide the overlay menu.
+echo Back in game: press F12 to show/hide the overlay menu.
 echo (the menu is drawn INSIDE the game frame via MinHook inline hooks on d3d9
 echo  Present/EndScene - it is not a separate window and does not take focus.)
 echo.

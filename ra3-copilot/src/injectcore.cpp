@@ -225,7 +225,7 @@ bool Inject(DWORD pid, const wchar_t* dllPath, std::wstring& message) {
 
     wchar_t b[320];
     _snwprintf_s(b, _TRUNCATE,
-                 L"注入成功。模块表：%ls；接口：%ls。回游戏按 INSERT 打开菜单。",
+                 L"注入成功。模块表：%ls；接口：%ls。回游戏按 F12 打开菜单。",
                  up ? L"已出现" : L"未确认", alive ? L"已应答" : L"未应答");
     message = b;
     return true;

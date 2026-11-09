@@ -84,7 +84,7 @@ if errorlevel 1 (
     exit /b 1
 )
 cl /nologo /O2 /MT /EHsc /W3 /utf-8 /DUNICODE /D_UNICODE ^
-    /Fe:build_out\Ra3Copilot.exe src\launcher.cpp src\injectcore.cpp src\buildinfo.cpp build_out\launcher.res ^
+    /Fe:build_out\Ra3Copilot.exe src\launcher.cpp src\campaign_patch.cpp src\injectcore.cpp src\buildinfo.cpp build_out\launcher.res ^
     imgui\imgui.cpp imgui\imgui_draw.cpp imgui\imgui_tables.cpp imgui\imgui_widgets.cpp ^
     imgui\backends\imgui_impl_dx9.cpp imgui\backends\imgui_impl_win32.cpp ^
     /I src /I res /I imgui /I imgui\backends ^

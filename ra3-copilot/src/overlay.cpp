@@ -726,6 +726,10 @@ void EnsureImGui(IDirect3DDevice9* dev) {
     io.ConfigErrorRecoveryEnableTooltip = false;
     io.ConfigErrorRecoveryEnableDebugLog = false;
     io.ConfigErrorRecoveryEnableAssert = false;
+    // NewFrame 的 sanity check 不允许三条通道同时关闭：否则每帧弹 CRT assert。
+    //   第四条出口只写自己的日志，不碰 ImGui 状态，帧外调用也安全。
+    ImGui::GetCurrentContext()->ErrorCallback =
+        +[](ImGuiContext*, void*, const char* msg) { AddLog(LOG_ERR, "[imgui] %s", msg); };
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX9_Init(dev);
     BootLog("imgui ctx + backends inited");
@@ -1420,10 +1424,9 @@ constexpr int kHKCount = (int)(sizeof(kHKDefault) / sizeof(kHKDefault[0]));
 
 HKDef kHK[kHKCount];                 // 运行期绑定（LoadKeyBinds 初始化）
 
-// 呼出 / 隐藏菜单的键。默认 INSERT —— 75 配列等没有该键的键盘会因此打不开面板，
-// 所以它单独可改：局内面板能改，启动器也能改（打不开面板时的唯一入口）。
+// 呼出 / 隐藏菜单的键。默认 F12；键位可改：局内面板能改，启动器也能改。
 // 不受「启用功能快捷键」总开关管，与功能热键是两套。
-int      g_toggleVk     = VK_INSERT;
+int      g_toggleVk     = VK_F12;
 bool     g_toggleCtrl   = false;
 volatile LONG g_toggleRebind = 0;    // 1 = 正在等待捕获新的呼出键
 
@@ -1518,7 +1521,7 @@ void SaveKeyBinds();
 void LoadKeyBinds() {
     HKResetDefaults();
     g_hkEnabled = 1;
-    g_toggleVk = VK_INSERT;
+    g_toggleVk = VK_F12;
     g_toggleCtrl = false;
     char path[MAX_PATH] = { 0 }; HKFilePath(path, sizeof(path));
     FILE* f = nullptr;
@@ -2791,7 +2794,7 @@ void TabSettings() {
         }
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("呼出 / 隐藏本菜单（无 Insert 键的键盘请在启动器里改）");
+    ImGui::TextDisabled("呼出 / 隐藏本菜单（可在启动器或此处改键）");
     {
         bool en = g_hkEnabled != 0;
         if (ImGui::Checkbox("启用功能快捷键", &en)) {
@@ -2864,6 +2867,49 @@ void TabSettings() {
         }                                                                    \
     } while (0)
 
+// ===== 战役扩展：进局自动补齐 =====
+// 启动器勾选「启用战役扩展和全科技模式」只负责打通底座：全科技、协议点 99、
+// 免基地前置、日冕协议栏；.lyi 脚本默认只授予单抽 / 十连两个抽卡技能，
+// 其余协议技能由玩家在 F12「协议技能」面板里自选授予。
+// 部分战役（尤其原版阵营战役）里日冕的 ex* 扩展函数没注册，
+// 协议点数 / 全科技许可 / 技能解锁这三项会缺。这里在 DLL 侧每局补一次，
+// 不依赖 Lua 脚本，取消勾选后自动停止。
+static bool CampaignUnlockEnabled() {
+    static DWORD s_last = 0;
+    static bool s_on = false;
+    const DWORD now = GetTickCount();
+    if (s_last && now - s_last < 3000) return s_on;
+    s_last = now;
+    wchar_t dir[MAX_PATH] = { 0 };
+    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", dir, MAX_PATH)) { s_on = false; return false; }
+    wchar_t path[MAX_PATH] = { 0 };
+    _snwprintf_s(path, MAX_PATH, _TRUNCATE, L"%s\\Ra3Copilot\\launcher.ini", dir);
+    wchar_t v[8] = { 0 };
+    GetPrivateProfileStringW(L"launcher", L"campaign_unlock", L"0", v, 8, path);
+    s_on = (v[0] == L'1');
+    return s_on;
+}
+
+static void CampaignUnlockPump(DWORD now) {
+    static bool  s_prevReady = false;
+    static DWORD s_pending = 0, s_lastRun = 0;
+    const bool on = CampaignUnlockEnabled();
+    const bool ready = LocalPlayerReady();
+    if (ready && !s_prevReady) s_pending = now;
+    s_prevReady = ready;
+    if (!on) { s_pending = 0; s_lastRun = 0; return; }
+    bool fire = false, first = false;
+    if (s_pending && now - s_pending >= 2500) { s_pending = 0; fire = true; first = true; }
+    else if (ready && (!s_lastRun || now - s_lastRun >= 45000)) fire = true;
+    if (!fire || !ready) return;
+    s_lastRun = now;
+    char out[384] = { 0 };
+    ProtocolSetPoints(99);
+    ProtoGrantAllClearance(out, sizeof(out));
+    SetProtoUnlock(true);
+    if (first) AddLog(LOG_OK, "[战役扩展] 进局已自动补齐协议点数 / 全科技 / 技能解锁");
+}
+
 void OverlayTick() {
     static DWORD s_lastMs = 0;
     const DWORD now = GetTickCount();
@@ -2875,6 +2921,7 @@ void OverlayTick() {
     STAGE_GUARD("pump:http",  HttpApiPump());     // 调试接口投递过来的命令（本线程=游戏主线程）
     STAGE_GUARD("pump:burst", BurstPump());       // 箱子即爆：到期的延迟引爆（delay>0 时才用）
     STAGE_GUARD("pump:post",  PostProcPump());    // 到期补跑"创建后处理"（登记召唤物进玩家体系）
+    STAGE_GUARD("campaign",   CampaignUnlockPump(now)); // 战役扩展：每局自动补齐点数/全科技/解锁
     STAGE_GUARD("hkmsg",      HKMsgTick());       // 改键结果 → 输出记录
     ++g_tickNow;                      // 帧计数（选中单位新鲜度判断用）
     g_logClock += dt;
@@ -2936,7 +2983,7 @@ static void MarkPanelRect() {
 void BuildUI() {
     ImGui::GetStyle().Colors[ImGuiCol_WindowBg].w = g_cfg.alpha;
     g_rectFill = 0;
-    if (!g_cfg.visible) { DrainColorStack(); g_panelRectN = 0; return; }   // INSERT 总开关：关掉时一个面板都不画
+    if (!g_cfg.visible) { DrainColorStack(); g_panelRectN = 0; return; }   // 呼出键总开关：关掉时一个面板都不画
 
     // 默认布局按缩放折算：4K 上 2 倍时若仍按 1 倍排，各窗口会挤在左上角叠成一团。
     //   缩放刚变的那一帧用 Always 强制重排一次（否则 FirstUseEver 会沿用旧倍率下的
@@ -2972,7 +3019,7 @@ void BuildUI() {
         ImGui::SameLine();
         if (ImGui::Button("全部展开")) { g_pRes = g_pUnit = g_pSummon = g_pMisc = g_pSet = g_pLog = g_pAi = g_pProto = true; }
         ImGui::Separator();
-        if (ImGui::Button("隐藏全部 (INSERT)")) g_cfg.visible = false;
+        if (ImGui::Button("隐藏全部 (F12)")) g_cfg.visible = false;
     }
     ImGui::End();
 
@@ -3242,7 +3289,7 @@ void BootLog(const char* fmt, ...) {
 int DebugHookMax() { return g_boot.hookMax; }
 int DebugRenderSteps() { return g_boot.renderSteps; }
 
-// 呼出键的名字（"Ctrl+Insert" 形式）—— 调试接口 /ui 与「面板怎么叫不出来」这类排查用。
+// 呼出键的名字（"Ctrl+F12" 形式）—— 调试接口 /ui 与「面板怎么叫不出来」这类排查用。
 // g_toggleVk 在匿名命名空间里（内部链接），只能通过这个口子对外。
 void OverlayToggleKeyName(char* out, int n) {
     char key[32] = { 0 };

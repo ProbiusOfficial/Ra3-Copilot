@@ -6,3 +6,4 @@
 #define IDR_PAYLOAD_DLL       101
 #define IDR_PAYLOAD_MCP       102
 #define IDR_PAYLOAD_CATALOG   103
+#define IDR_CAMPAIGN_LUA      104

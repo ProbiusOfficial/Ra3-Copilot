@@ -310,7 +310,7 @@ int wmain(int argc, wchar_t** argv) {
         wprintf(L"[+] 复核：模块表 %ls / HTTP 17832 %ls\n",
                 up ? L"已出现" : L"未出现(?)",
                 alive ? L"已应答" : L"未应答(?)");
-        wprintf(L"[+] 游戏中按 INSERT 显示/隐藏菜单（其余热键见菜单「设置 -> 快捷键」）\n");
+        wprintf(L"[+] 游戏中按 F12 显示/隐藏菜单（其余热键见菜单「设置 -> 快捷键」）\n");
         return 0;
     }
     wprintf(L"[x] 注入失败（LoadLibraryW 返回 0，DLL 可能依赖缺失或崩溃）\n");
